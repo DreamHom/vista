@@ -2,22 +2,105 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
+/*
+ * Design tokens — DreamHomes vista.
+ *
+ * Brand intent: "Making dreams come true, one home at a time."
+ *  - Primary:   deep ocean blue. Trust, depth, calm — the foundation.
+ *  - Accent:    warm amber. Aspiration, optimism, the dream itself.
+ *  - Muted:     warm-neutral surface for secondary content.
+ *
+ * Tokens are HSL component triplets so utility classes can apply alpha via
+ * `bg-primary/50`. Light mode is the default; `.dark` on <html> flips it.
+ */
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: 0 0% 100%;
+    --foreground: 215 30% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 215 30% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 30% 12%;
+
+    /* Deep ocean blue — brand primary */
+    --primary: 202 80% 24%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 30% 96%;
+    --secondary-foreground: 215 30% 12%;
+
+    --muted: 210 25% 96%;
+    --muted-foreground: 215 15% 45%;
+
+    /* Warm amber — accent / CTA highlight */
+    --accent: 35 92% 55%;
+    --accent-foreground: 215 50% 12%;
+
+    --destructive: 0 75% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 145 60% 38%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 35 92% 50%;
+    --warning-foreground: 215 50% 12%;
+
+    --border: 215 20% 90%;
+    --input: 215 20% 90%;
+    --ring: 202 80% 35%;
+
+    --radius: 0.625rem;
+  }
+
+  .dark {
+    --background: 215 35% 7%;
+    --foreground: 210 20% 96%;
+
+    --card: 215 30% 10%;
+    --card-foreground: 210 20% 96%;
+
+    --popover: 215 30% 10%;
+    --popover-foreground: 210 20% 96%;
+
+    --primary: 202 70% 60%;
+    --primary-foreground: 215 50% 8%;
+
+    --secondary: 215 25% 16%;
+    --secondary-foreground: 210 20% 96%;
+
+    --muted: 215 25% 16%;
+    --muted-foreground: 215 15% 65%;
+
+    --accent: 35 90% 60%;
+    --accent-foreground: 215 50% 8%;
+
+    --destructive: 0 70% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 145 55% 50%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 35 90% 55%;
+    --warning-foreground: 215 50% 8%;
+
+    --border: 215 25% 20%;
+    --input: 215 25% 20%;
+    --ring: 202 70% 60%;
   }
 }
 
-body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings:
+      "rlig" 1,
+      "calt" 1;
+  }
 }
 
 @layer utilities {
