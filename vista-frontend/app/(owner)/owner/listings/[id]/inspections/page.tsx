@@ -1,24 +1,29 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { PageHeader } from "@/components/dashboard/dashboard-shell";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Avatar } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { PillTabs } from "@/components/ui/tabs";
 import { Icon } from "@/components/icons";
-import {
-  getApplicant,
-  getInspectionsFor,
-  getLeadsFor,
-  getOffersFor,
-  getListing,
-} from "@/lib/mock-data";
+import { SlotCreateForm } from "@/components/owner/slot-create-form";
+import * as Listings from "@/lib/api/listings";
+import * as Inspections from "@/lib/api/inspections";
+import { BACKEND_CAPABILITIES } from "@/lib/api/capabilities";
+import { HavenError } from "@/lib/api/http";
+import { getToken } from "@/lib/api/session";
+import { listingFromApi } from "@/lib/api/adapters";
 
 export const metadata: Metadata = { title: "Inspections" };
 
-const tone = (s: string) =>
-  s === "booked" ? "success" : s === "completed" ? "muted" : s === "no_show" ? "danger" : s === "cancelled" ? "warn" : "brand";
+const slotTone = (s: string) =>
+  s === "BOOKED"
+    ? "success"
+    : s === "COMPLETED"
+      ? "muted"
+      : s === "CANCELLED"
+        ? "warn"
+        : "brand";
 
 export default async function ListingInspectionsPage({
   params,
@@ -26,76 +31,104 @@ export default async function ListingInspectionsPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const listing = getListing(id);
-  if (!listing) notFound();
+  const token = await getToken();
+  if (!token) redirect(`/login?next=/owner/listings/${id}/inspections`);
 
-  const listingInspections = getInspectionsFor(listing.id);
-  const listingLeads = getLeadsFor(listing.id);
-  const listingOffers = getOffersFor(listing.id);
+  const apiListing = await Listings.getListing(id).catch((err) => {
+    if (err instanceof HavenError && err.status === 404) notFound();
+    throw err;
+  });
+  const photos = await Listings.getListingPhotos(id).catch(() => []);
+  const listing = listingFromApi(apiListing, photos);
+
+  const slots = await Inspections.listListingSlots(id).catch(() => []);
+  const leadSignal = listing.saves;
 
   return (
     <>
       <PageHeader
         title={`Inspections · ${listing.title}`}
-        description="Manage open slots, confirm bookings, log post-inspection notes."
-        actions={<Button leadingIcon={<Icon.Plus size={14} />}>Add slot</Button>}
+        description="Open slots and inspection requests from applicants."
       />
       <div className="px-6 lg:px-8 py-8 space-y-8">
         <PillTabs
           active={`/owner/listings/${listing.id}/inspections`}
           items={[
             { href: `/owner/listings/${listing.id}`, label: "Overview" },
-            { href: `/owner/listings/${listing.id}/leads`, label: "Leads", count: listingLeads.length },
-            { href: `/owner/listings/${listing.id}/inspections`, label: "Inspections", count: listingInspections.length },
-            { href: `/owner/listings/${listing.id}/offers`, label: "Offers", count: listingOffers.length },
+            {
+              href: `/owner/listings/${listing.id}/leads`,
+              label: "Leads",
+              count: leadSignal,
+            },
+            {
+              href: `/owner/listings/${listing.id}/inspections`,
+              label: "Inspections",
+              count: slots.length,
+            },
+            { href: `/owner/listings/${listing.id}/offers`, label: "Offers" },
           ]}
         />
 
         <Card>
-          <CardHeader title="All slots" description="Conflict prevention is on — two applicants can't book the same time." />
+          <CardHeader
+            title="Create a slot"
+            description="Published slots appear on the public listing page immediately."
+          />
+          <CardBody>
+            <SlotCreateForm listingId={listing.id} />
+          </CardBody>
+        </Card>
+
+        <Card>
+          <CardHeader title="Published slots" description="Applicants book from the public listing page." />
           <CardBody className="p-0">
             <ul className="divide-y divide-border">
-              {listingInspections.map((ins) => {
-                const applicant = ins.applicantId ? getApplicant(ins.applicantId) : undefined;
-                return (
-                  <li key={ins.id} className="flex items-center gap-4 p-5">
+              {slots.length === 0 ? (
+                <li className="p-5 text-sm text-fg-muted">No slots yet. Create one from the owner tools when available.</li>
+              ) : (
+                slots.map((s) => (
+                  <li key={s.id} className="flex items-center gap-4 p-5">
                     <div className="flex h-12 w-14 flex-col items-center justify-center rounded-xl bg-bg-sunken text-center">
                       <span className="text-[11px] uppercase tracking-wide text-fg-subtle">
-                        {new Date(ins.date).toLocaleString("en-NG", { month: "short" })}
+                        {new Date(s.startsAt).toLocaleString("en-NG", { month: "short" })}
                       </span>
                       <span className="text-lg font-semibold text-fg">
-                        {new Date(ins.date).getDate()}
+                        {new Date(s.startsAt).getDate()}
                       </span>
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-fg">
-                        {new Date(ins.date).toLocaleString("en-NG", {
+                        {new Date(s.startsAt).toLocaleString("en-NG", {
                           weekday: "long",
                           hour: "numeric",
                           minute: "2-digit",
-                        })}{" "}· {ins.durationMins} mins
+                        })}{" "}
+                        · {s.durationMins} mins
                       </p>
-                      {applicant ? (
-                        <div className="mt-1 flex items-center gap-2 text-xs text-fg-muted">
-                          <Avatar name={applicant.name} src={applicant.avatar} size={20} />
-                          {applicant.name}
-                        </div>
-                      ) : (
-                        <p className="mt-1 text-xs text-fg-muted">Open slot</p>
-                      )}
-                      {ins.notes && (
-                        <p className="mt-2 text-xs italic text-fg-muted">&ldquo;{ins.notes}&rdquo;</p>
-                      )}
+                      <p className="mt-1 text-xs text-fg-muted">Slot ID {s.id}</p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Badge tone={tone(ins.status) as never}>{ins.status.replace("_", " ")}</Badge>
-                      {ins.status === "booked" && <Button size="sm" variant="outline">Reschedule</Button>}
-                      {ins.status === "completed" && <Button size="sm" variant="outline">Edit notes</Button>}
-                    </div>
+                    <Badge tone={slotTone(s.status) as never}>
+                      {s.status.toLowerCase()}
+                    </Badge>
                   </li>
-                );
-              })}
+                ))
+              )}
             </ul>
+          </CardBody>
+        </Card>
+
+        <Card>
+          <CardHeader title="Inspection requests" description="Bookings tied to your slots." />
+          <CardBody className="p-8">
+            <EmptyState
+              title="Inspection requests feed not available yet"
+              description={
+                BACKEND_CAPABILITIES.inspections.listingFeed
+                  ? "Inspection request history will appear here."
+                  : "Applicants can book from the public listing page, but the current backend contract does not expose a listing-level inspection requests endpoint."
+              }
+              icon={<Icon.Calendar size={20} />}
+            />
           </CardBody>
         </Card>
       </div>

@@ -4,17 +4,38 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { Section } from "@/components/ui/section";
 import { Badge, VerifiedBadge } from "@/components/ui/badge";
-import { Button, ButtonLink } from "@/components/ui/button";
+import { ButtonLink } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { Icon } from "@/components/icons";
+import { CommentsSection } from "@/components/listings/comments-section";
+import { ReviewsSection } from "@/components/listings/reviews-section";
+import { SaveButton } from "@/components/listings/save-button";
+import * as Listings from "@/lib/api/listings";
+import * as Inspections from "@/lib/api/inspections";
+import * as Comments from "@/lib/api/comments";
+import * as Reviews from "@/lib/api/reviews";
+import * as Users from "@/lib/api/users";
+import * as Saves from "@/lib/api/saves";
+import { HavenError } from "@/lib/api/http";
+import { getToken } from "@/lib/api/session";
+import { getSessionUser } from "@/lib/api/session-user";
+import { listingFromApi } from "@/lib/api/adapters";
 import {
-  getListing,
-  getOwner,
-  getAgent,
-  getCommentsFor,
-  getInspectionsFor,
-} from "@/lib/mock-data";
-import { formatCurrencyNGN, formatCurrencyNGNFull, formatRelativeTime } from "@/lib/utils";
+  publicProfileAgentVerified,
+  publicProfileDisplayName,
+  publicProfileId,
+} from "@/lib/api/public-profile";
+import {
+  formatCurrencyNGN,
+  formatCurrencyNGNFull,
+} from "@/lib/utils";
+import type {
+  CommentResponse,
+  PhotoResponse,
+  PublicUserProfile,
+  ReviewResponse,
+  SlotResponse,
+} from "@/lib/api/types";
 
 export async function generateMetadata({
   params,
@@ -22,11 +43,15 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const listing = getListing(id);
-  return {
-    title: listing ? listing.title : "Listing",
-    description: listing?.description.slice(0, 150),
-  };
+  try {
+    const api = await Listings.getListing(id);
+    return {
+      title: api.title,
+      description: api.description.slice(0, 150),
+    };
+  } catch {
+    return { title: "Listing" };
+  }
 }
 
 export default async function ListingDetailPage({
@@ -35,13 +60,47 @@ export default async function ListingDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const listing = getListing(id);
-  if (!listing) notFound();
 
-  const owner = getOwner(listing.ownerId);
-  const agent = listing.agentId ? getAgent(listing.agentId) : undefined;
-  const listingComments = getCommentsFor(listing.id);
-  const slots = getInspectionsFor(listing.id).filter((s) => s.status === "open" || s.status === "booked");
+  let photos: PhotoResponse[] = [];
+  let comments: CommentResponse[] = [];
+  let reviews: ReviewResponse[] = [];
+  let slots: SlotResponse[] = [];
+  let ownerProfile: PublicUserProfile | null = null;
+  let agentProfile: PublicUserProfile | null = null;
+
+  const apiListing = await Listings.getListing(id).catch((err) => {
+    if (err instanceof HavenError && err.status === 404) notFound();
+    throw err;
+  });
+
+  [photos, comments, reviews, slots] = await Promise.all([
+    Listings.getListingPhotos(id).catch(() => []),
+    Comments.listListingComments(id).catch(() => []),
+    Reviews.listListingReviews(id).catch(() => []),
+    Inspections.listListingSlots(id).catch(() => []),
+  ]);
+
+  ownerProfile = await Users.getUserProfile(apiListing.ownerId).catch(
+    () => null,
+  );
+  if (apiListing.agentId) {
+    agentProfile = await Users.getUserProfile(apiListing.agentId).catch(
+      () => null,
+    );
+  }
+
+  const listing = listingFromApi(apiListing, photos);
+  const token = await getToken();
+  const me = token ? await getSessionUser() : null;
+  let initiallySaved = false;
+  if (token) {
+    try {
+      const saves = await Saves.listMySaves(token);
+      initiallySaved = saves.content.some((s) => String(s.listingId) === apiListing.id);
+    } catch {
+      // not fatal
+    }
+  }
 
   const fees = listing.fees;
   const allInRent =
@@ -51,20 +110,26 @@ export default async function ListingDetailPage({
     (fees.agencyFee ?? 0) +
     (fees.legalFee ?? 0);
 
+  const openSlots = slots.filter(
+    (s) => s.status === "OPEN" || s.status === "BOOKED",
+  );
+
   return (
     <>
-      {/* breadcrumb */}
       <Section className="pt-6">
         <nav className="text-sm text-fg-subtle">
-          <Link href="/" className="hover:text-fg">Home</Link>
+          <Link href="/" className="hover:text-fg">
+            Home
+          </Link>
           <span className="mx-2">/</span>
-          <Link href="/listings" className="hover:text-fg">Listings</Link>
+          <Link href="/listings" className="hover:text-fg">
+            Listings
+          </Link>
           <span className="mx-2">/</span>
           <span className="text-fg">{listing.title}</span>
         </nav>
       </Section>
 
-      {/* gallery */}
       <Section className="pt-6">
         <div className="grid gap-2 lg:grid-cols-4 lg:grid-rows-2 rounded-3xl overflow-hidden bg-bg-sunken">
           <div className="relative lg:col-span-2 lg:row-span-2 aspect-[4/3] lg:aspect-auto">
@@ -85,7 +150,6 @@ export default async function ListingDetailPage({
         </div>
       </Section>
 
-      {/* main */}
       <Section className="py-10 grid gap-10 lg:grid-cols-[1.6fr_1fr]">
         <div>
           <div className="flex flex-wrap items-center gap-2">
@@ -95,7 +159,9 @@ export default async function ListingDetailPage({
             {listing.ownerVerified && <VerifiedBadge kind="owner" />}
             {listing.documentsVerified && <VerifiedBadge kind="documents" />}
             {!listing.ownerVerified && !listing.documentsVerified && (
-              <Badge tone="warn">Unverified — request docs before booking</Badge>
+              <Badge tone="warn">
+                Unverified — request docs before booking
+              </Badge>
             )}
           </div>
           <h1 className="mt-3 text-3xl md:text-4xl font-semibold tracking-tight text-fg leading-tight">
@@ -107,95 +173,82 @@ export default async function ListingDetailPage({
           </p>
 
           <div className="mt-5 flex flex-wrap gap-4 text-sm text-fg-muted">
-            <Stat icon={<Icon.Bed size={14} />} label={listing.bedrooms === 0 ? "Studio" : `${listing.bedrooms} bedrooms`} />
-            <Stat icon={<Icon.Bath size={14} />} label={`${listing.bathrooms} bathrooms`} />
+            <Stat
+              icon={<Icon.Bed size={14} />}
+              label={
+                listing.bedrooms === 0
+                  ? "Studio"
+                  : `${listing.bedrooms} bedrooms`
+              }
+            />
+            <Stat
+              icon={<Icon.Bath size={14} />}
+              label={`${listing.bathrooms} bathrooms`}
+            />
             <Stat icon={<Icon.Building size={14} />} label={listing.type} />
-            <Stat icon={<Icon.Eye size={14} />} label={`${listing.views.toLocaleString()} views`} />
-            <Stat icon={<Icon.Heart size={14} />} label={`${listing.saves} saves`} />
+            <Stat
+              icon={<Icon.Eye size={14} />}
+              label={`${listing.views.toLocaleString()} views`}
+            />
+            <Stat
+              icon={<Icon.Heart size={14} />}
+              label={`${listing.saves} saves`}
+            />
           </div>
 
           <div className="mt-8 prose-content">
             <h2 className="text-xl font-semibold text-fg">About this place</h2>
-            <p className="mt-3 text-fg-muted leading-relaxed">{listing.description}</p>
+            <p className="mt-3 text-fg-muted leading-relaxed">
+              {listing.description}
+            </p>
           </div>
 
-          <div className="mt-10">
-            <h2 className="text-xl font-semibold text-fg">Highlights</h2>
-            <ul className="mt-4 grid gap-3 sm:grid-cols-2">
-              {listing.highlights.map((h) => (
-                <li
-                  key={h}
-                  className="flex items-start gap-3 rounded-xl border border-border bg-bg-elevated p-4 text-sm text-fg"
-                >
-                  <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-success-soft text-success">
-                    <Icon.Check size={12} />
-                  </span>
-                  {h}
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="mt-10">
-            <h2 className="text-xl font-semibold text-fg">Amenities</h2>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {listing.amenities.map((a) => (
-                <Badge key={a} tone="muted">
-                  {a}
-                </Badge>
-              ))}
+          {listing.highlights.length > 0 ? (
+            <div className="mt-10">
+              <h2 className="text-xl font-semibold text-fg">Highlights</h2>
+              <ul className="mt-4 grid gap-3 sm:grid-cols-2">
+                {listing.highlights.map((h) => (
+                  <li
+                    key={h}
+                    className="flex items-start gap-3 rounded-xl border border-border bg-bg-elevated p-4 text-sm text-fg"
+                  >
+                    <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-success-soft text-success">
+                      <Icon.Check size={12} />
+                    </span>
+                    {h}
+                  </li>
+                ))}
+              </ul>
             </div>
-          </div>
+          ) : null}
 
-          {/* Comments */}
-          <div className="mt-12">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold text-fg">
-                Public questions ({listingComments.length})
-              </h2>
-              <Badge tone="muted">Comments stay public · keeps everyone honest</Badge>
-            </div>
-
-            <div className="mt-6 space-y-4">
-              {listingComments.map((c) => (
-                <div key={c.id} className="rounded-2xl border border-border bg-bg-elevated p-5">
-                  <div className="flex items-start gap-3">
-                    <Avatar name="A" size={36} />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-fg">An applicant</p>
-                      <p className="text-xs text-fg-subtle">{formatRelativeTime(c.createdAt)}</p>
-                      <p className="mt-2 text-sm text-fg leading-relaxed">{c.body}</p>
-                    </div>
-                  </div>
-                  {c.replies.map((r, idx) => (
-                    <div
-                      key={idx}
-                      className="mt-3 ml-12 rounded-xl border border-border bg-bg-sunken/40 p-4"
-                    >
-                      <p className="text-xs font-medium text-fg">
-                        {r.by === "owner" ? "Owner reply" : "Agent reply"} ·{" "}
-                        <span className="text-fg-subtle">{formatRelativeTime(r.at)}</span>
-                      </p>
-                      <p className="mt-1.5 text-sm text-fg-muted leading-relaxed">{r.body}</p>
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-6 rounded-2xl border border-dashed border-border bg-bg-elevated/60 p-5">
-              <p className="text-sm text-fg-muted">
-                Questions stay public so future applicants benefit. Owners and agents can
-                reply — but cannot post comments themselves.
-              </p>
-              <div className="mt-3 flex gap-2">
-                <ButtonLink href="/login" variant="outline" size="sm">Sign in to ask</ButtonLink>
+          {listing.amenities.length > 0 ? (
+            <div className="mt-10">
+              <h2 className="text-xl font-semibold text-fg">Amenities</h2>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {listing.amenities.map((a) => (
+                  <Badge key={a} tone="muted">
+                    {a}
+                  </Badge>
+                ))}
               </div>
             </div>
-          </div>
+          ) : null}
+
+          <CommentsSection
+            listingId={listing.id}
+            comments={comments}
+            canPost={!!token}
+          />
+
+          <ReviewsSection
+            listingId={listing.id}
+            reviews={reviews}
+            currentUserId={me ? String(me.id) : undefined}
+            canPost={!!token}
+          />
         </div>
 
-        {/* sidebar */}
         <aside className="space-y-5">
           <div className="rounded-2xl border border-border bg-bg-elevated p-6 sticky top-20">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-fg-subtle">
@@ -206,7 +259,9 @@ export default async function ListingDetailPage({
                 ? formatCurrencyNGN(fees.rent ?? 0)
                 : formatCurrencyNGN(fees.price ?? 0)}
               {listing.purpose === "rent" && (
-                <span className="text-base font-normal text-fg-subtle">/yr</span>
+                <span className="text-base font-normal text-fg-subtle">
+                  /yr
+                </span>
               )}
             </p>
 
@@ -249,18 +304,20 @@ export default async function ListingDetailPage({
               >
                 Submit offer
               </ButtonLink>
-              <Button variant="ghost" size="md" leadingIcon={<Icon.Heart size={16} />}>
-                Save listing
-              </Button>
+              <SaveButton
+                listingId={listing.id}
+                initialSaved={initiallySaved}
+                authed={!!token}
+              />
             </div>
 
-            {/* moniepoint cross-sell */}
             <div className="mt-5 rounded-xl bg-brand-soft p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.15em] text-brand">
                 Moniepoint financing
               </p>
               <p className="mt-1.5 text-sm text-fg">
-                Apply for a home loan in 3 minutes — pre-approval comes back the same day.
+                Apply for a home loan in 3 minutes — pre-approval comes back the
+                same day.
               </p>
               <Link
                 href="#"
@@ -271,54 +328,65 @@ export default async function ListingDetailPage({
             </div>
           </div>
 
-          {/* host card */}
           <div className="rounded-2xl border border-border bg-bg-elevated p-6">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-fg-subtle">
               Listed by
             </p>
-            {agent ? (
+            {agentProfile ? (
               <Link
-                href={`/agents/${agent.id}`}
+                href={`/agents/${publicProfileId(agentProfile)}`}
                 className="mt-3 flex items-start gap-3 group"
               >
-                <Avatar name={agent.name} src={agent.avatar} size={48} />
+                <Avatar
+                  name={publicProfileDisplayName(agentProfile)}
+                  size={48}
+                />
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-fg group-hover:text-brand">
-                    {agent.name}
+                    {publicProfileDisplayName(agentProfile)}
                   </p>
-                  <p className="text-xs text-fg-muted">Verified agent · {agent.city}</p>
-                  <p className="mt-1 text-xs text-fg-subtle">
-                    Replies in ~{agent.responseTimeMins} min · {agent.responseRate}% response
+                  <p className="text-xs text-fg-muted">
+                    {publicProfileAgentVerified(agentProfile)
+                      ? "Verified agent"
+                      : "Agent"}
+                    {typeof agentProfile.averageRating === "number"
+                      ? ` · ${agentProfile.averageRating.toFixed(1)}★`
+                      : ""}
                   </p>
                 </div>
               </Link>
-            ) : owner ? (
+            ) : ownerProfile ? (
               <div className="mt-3 flex items-start gap-3">
-                <Avatar name={owner.name} src={owner.avatar} size={48} />
+                <Avatar
+                  name={publicProfileDisplayName(ownerProfile)}
+                  size={48}
+                />
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-fg">{owner.name}</p>
+                  <p className="text-sm font-semibold text-fg">
+                    {publicProfileDisplayName(ownerProfile)}
+                  </p>
                   <p className="text-xs text-fg-muted">
-                    Self-managing owner{owner.verified ? " · verified" : ""}
+                    Self-managing owner
+                    {ownerProfile.identityVerifiedAt ? " · verified" : ""}
                   </p>
                 </div>
               </div>
             ) : null}
           </div>
 
-          {/* inspections */}
           <div className="rounded-2xl border border-border bg-bg-elevated p-6">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-fg-subtle">
               Open inspection slots
             </p>
             <ul className="mt-3 space-y-2">
-              {slots.length ? (
-                slots.map((s) => (
+              {openSlots.length ? (
+                openSlots.map((s) => (
                   <li
                     key={s.id}
                     className="flex items-center justify-between rounded-lg border border-border bg-bg-sunken/40 px-3 py-2 text-sm"
                   >
                     <span className="text-fg">
-                      {new Date(s.date).toLocaleString("en-NG", {
+                      {new Date(s.startsAt).toLocaleString("en-NG", {
                         weekday: "short",
                         month: "short",
                         day: "numeric",
@@ -326,8 +394,8 @@ export default async function ListingDetailPage({
                         minute: "2-digit",
                       })}
                     </span>
-                    <Badge tone={s.status === "open" ? "success" : "muted"}>
-                      {s.status === "open" ? "Open" : "Booked"}
+                    <Badge tone={s.status === "OPEN" ? "success" : "muted"}>
+                      {s.status === "OPEN" ? "Open" : "Booked"}
                     </Badge>
                   </li>
                 ))
@@ -344,7 +412,13 @@ export default async function ListingDetailPage({
   );
 }
 
-function Stat({ icon, label }: { icon: React.ReactNode; label: string }) {
+function Stat({
+  icon,
+  label,
+}: {
+  icon: React.ReactNode;
+  label: string;
+}) {
   return (
     <span className="inline-flex items-center gap-1.5">
       {icon}

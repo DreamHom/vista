@@ -1,61 +1,41 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/dashboard/dashboard-shell";
-import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Avatar } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
+import { Card, CardBody } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/icons";
-import { offers, listings, getApplicant } from "@/lib/mock-data";
-import { formatCurrencyNGNFull, formatRelativeTime } from "@/lib/utils";
+import { getSessionUser } from "@/lib/api/session-user";
+import { getToken } from "@/lib/api/session";
+import * as Listings from "@/lib/api/listings";
 
 export const metadata: Metadata = { title: "All offers" };
 
-export default function OwnerOffersPage() {
+export default async function OwnerOffersPage() {
+  const me = await getSessionUser();
+  if (!me) redirect("/login?next=/owner/offers");
+  const token = await getToken();
+  if (!token) redirect("/login?next=/owner/offers");
+
+  const mine = await Listings.listAllOwnedListings(String(me.id), { page: 0, size: 100 }).catch(
+    () => [],
+  );
+
   return (
     <>
-      <PageHeader title="All offers" description="Active negotiations across every listing in your portfolio." />
+      <PageHeader
+        title="All offers"
+        description="Active negotiations across every listing in your portfolio."
+      />
       <div className="px-6 lg:px-8 py-8 space-y-6">
-        {offers.map((o) => {
-          const l = listings.find((li) => li.id === o.listingId)!;
-          const applicant = getApplicant(o.applicantId);
-          const last = o.history[o.history.length - 1];
-          return (
-            <Card key={o.id}>
-              <CardHeader
-                title={
-                  <div className="flex items-center gap-3">
-                    {applicant && <Avatar name={applicant.name} src={applicant.avatar} size={32} />}
-                    <div>
-                      <p className="text-sm font-semibold">{applicant?.name}</p>
-                      <p className="text-xs font-normal text-fg-muted">
-                        on <Link href={`/owner/listings/${l.id}`} className="hover:text-brand">{l.title}</Link>
-                      </p>
-                    </div>
-                  </div>
-                }
-                action={
-                  <Badge tone={o.status === "accepted" ? "success" : o.status === "countered" ? "warn" : o.status === "rejected" ? "danger" : "brand"}>
-                    {o.status}
-                  </Badge>
-                }
-              />
-              <CardBody>
-                <p className="text-2xl font-semibold tracking-tight text-fg">
-                  {formatCurrencyNGNFull(last.amount)}
-                </p>
-                <p className="text-xs text-fg-muted">
-                  Last move {formatRelativeTime(last.at)} · {o.terms}
-                </p>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <Button leadingIcon={<Icon.Check size={14} />}>Accept</Button>
-                  <Button variant="outline" leadingIcon={<Icon.Coin size={14} />}>Counter</Button>
-                  <Button variant="ghost">Reject</Button>
-                </div>
-              </CardBody>
-            </Card>
-          );
-        })}
+        <Card>
+          <CardBody className="p-8">
+            <EmptyState
+              title="Offer inbox is not available from the backend yet"
+              description={`Your portfolio currently has ${mine.length} listing${mine.length === 1 ? "" : "s"}. Offer submission endpoints are live, but the backend contract does not expose an owner-wide offers listing feed.`}
+              icon={<Icon.Coin size={20} />}
+            />
+          </CardBody>
+        </Card>
       </div>
     </>
   );

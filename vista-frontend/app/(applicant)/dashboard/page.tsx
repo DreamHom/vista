@@ -1,25 +1,57 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/dashboard/dashboard-shell";
 import { Stat } from "@/components/ui/stat";
 import { ListingCard } from "@/components/listings/listing-card";
 import { ButtonLink } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Icon } from "@/components/icons";
-import { listings, inspections, offers } from "@/lib/mock-data";
-import { formatRelativeTime } from "@/lib/utils";
+import { firstName, getSessionUser } from "@/lib/api/session-user";
+import { getToken } from "@/lib/api/session";
+import { listingFromApi } from "@/lib/api/adapters";
+import * as Listings from "@/lib/api/listings";
+import * as Saves from "@/lib/api/saves";
+import * as Notifications from "@/lib/api/notifications";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
-const recommended = listings.slice(0, 3);
-const myInspections = inspections.slice(0, 2);
-const myOffers = offers.slice(0, 1);
+export default async function ApplicantDashboardPage() {
+  const user = await getSessionUser();
+  if (!user) redirect("/login?next=/dashboard");
+  const token = await getToken();
+  if (!token) redirect("/login?next=/dashboard");
+  const greet = firstName(user);
 
-export default function ApplicantDashboardPage() {
+  const [savedPage, browse, unread] = await Promise.all([
+    Saves.listMySaves(token, 0, 100).catch(() => ({
+      content: [],
+      page: { size: 0, number: 0, totalElements: 0, totalPages: 0 },
+    })),
+    Listings.listListings({ page: 0, size: 6 }).catch(() => null),
+    Notifications.getUnreadCount(token).catch(() => ({ count: 0 })),
+  ]);
+  const saves = savedPage.content;
+
+  const savedListings = (
+    await Promise.all(
+      saves.slice(0, 3).map(async (saved) => {
+        const api = await Listings.getListing(String(saved.listingId)).catch(() => null);
+        if (!api) return null;
+        const photos = await Listings.getListingPhotos(String(saved.listingId)).catch(() => []);
+        return listingFromApi(api, photos);
+      }),
+    )
+  ).filter(Boolean) as ReturnType<typeof listingFromApi>[];
+
+  const recommended =
+    saves.length > 0
+      ? savedListings
+      : (browse?.content ?? []).slice(0, 3).map((l) => listingFromApi(l));
+
   return (
     <>
       <PageHeader
-        title="Hi Daniel — pick up where you left off."
+        title={`Hi ${greet} — pick up where you left off.`}
         description="Your saved homes, scheduled inspections and live offers in one calm place."
         actions={
           <ButtonLink href="/listings" trailingIcon={<Icon.ArrowRight size={16} />}>
@@ -30,20 +62,48 @@ export default function ApplicantDashboardPage() {
 
       <div className="px-6 lg:px-8 py-8 space-y-8">
         <div className="grid gap-4 md:grid-cols-4">
-          <Stat label="Saved" value="8" delta="+2 this week" tone="positive" icon={<Icon.Bookmark size={14} />} />
-          <Stat label="Inspections" value="2" delta="1 this Thursday" icon={<Icon.Calendar size={14} />} />
-          <Stat label="Open offers" value="1" delta="counter received" tone="positive" icon={<Icon.Coin size={14} />} />
-          <Stat label="Messages" value="3" delta="2 unread" tone="positive" icon={<Icon.Chat size={14} />} />
+          <Stat
+            label="Saved"
+            value={`${saves.length}`}
+            icon={<Icon.Bookmark size={14} />}
+          />
+          <Stat
+            label="Inspections"
+            value="—"
+            icon={<Icon.Calendar size={14} />}
+          />
+          <Stat
+            label="Open offers"
+            value="—"
+            icon={<Icon.Coin size={14} />}
+          />
+          <Stat
+            label="Notifications"
+            value={`${unread.count}`}
+            tone={unread.count > 0 ? "positive" : undefined}
+            icon={<Icon.Chat size={14} />}
+          />
         </div>
 
         <div className="grid gap-6 lg:grid-cols-3">
           <Card className="lg:col-span-2">
-            <CardHeader title="Recommended for you" description="Based on your saves and Dream AI sessions." />
+            <CardHeader
+              title="Recommended for you"
+              description={
+                saves.length > 0
+                  ? "From your saved listings."
+                  : "Fresh on the marketplace — save homes you like to personalize this."
+              }
+            />
             <CardBody>
               <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-                {recommended.map((l) => (
-                  <ListingCard key={l.id} listing={l} />
-                ))}
+                {recommended.length === 0 ? (
+                  <p className="text-sm text-fg-muted col-span-full">
+                    No listings to show yet. Browse and save properties you are interested in.
+                  </p>
+                ) : (
+                  recommended.map((l) => <ListingCard key={l.id} listing={l} />)
+                )}
               </div>
             </CardBody>
           </Card>
@@ -52,44 +112,21 @@ export default function ApplicantDashboardPage() {
             <Card>
               <CardHeader title="Upcoming inspections" />
               <CardBody className="space-y-4">
-                {myInspections.map((ins) => {
-                  const l = listings.find((li) => li.id === ins.listingId);
-                  return (
-                    <div key={ins.id} className="rounded-xl border border-border bg-bg-sunken/40 p-4">
-                      <div className="flex items-center justify-between">
-                        <p className="text-sm font-semibold text-fg">{l?.title}</p>
-                        <Badge tone={ins.status === "booked" ? "success" : "warn"}>{ins.status}</Badge>
-                      </div>
-                      <p className="mt-1 text-xs text-fg-muted">
-                        {new Date(ins.date).toLocaleString("en-NG", {
-                          weekday: "short",
-                          month: "short",
-                          day: "numeric",
-                          hour: "numeric",
-                          minute: "2-digit",
-                        })}
-                      </p>
-                    </div>
-                  );
-                })}
+                <p className="text-sm text-fg-muted">
+                  The backend does not expose a dedicated “my inspections” feed yet. You can
+                  still request an inspection from any listing page and track the response in
+                  notifications.
+                </p>
               </CardBody>
             </Card>
 
             <Card>
               <CardHeader title="Active offers" />
               <CardBody className="space-y-3">
-                {myOffers.map((o) => {
-                  const l = listings.find((li) => li.id === o.listingId);
-                  return (
-                    <div key={o.id} className="rounded-xl border border-border bg-bg-sunken/40 p-4">
-                      <p className="text-sm font-semibold text-fg">{l?.title}</p>
-                      <p className="mt-1 text-xs text-fg-muted">
-                        Status: <span className="font-medium text-fg">{o.status}</span> ·{" "}
-                        {formatRelativeTime(o.history[o.history.length - 1].at)}
-                      </p>
-                    </div>
-                  );
-                })}
+                <p className="text-sm text-fg-muted">
+                  The backend supports submitting and responding to offers, but it does not expose
+                  a “my offers” list endpoint yet. Watch your notifications after submission.
+                </p>
               </CardBody>
             </Card>
           </div>

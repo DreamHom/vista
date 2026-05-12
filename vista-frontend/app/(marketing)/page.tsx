@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { Section, SectionHeading } from "@/components/ui/section";
 import { ButtonLink } from "@/components/ui/button";
@@ -5,12 +6,17 @@ import { Badge } from "@/components/ui/badge";
 import { Icon } from "@/components/icons";
 import { ListingCard } from "@/components/listings/listing-card";
 import { AgentCard } from "@/components/agents/agent-card";
-import { listings, agents } from "@/lib/mock-data";
+import * as Listings from "@/lib/api/listings";
+import { listingFromApi } from "@/lib/api/adapters";
+import type { Agent } from "@/lib/types";
 
-const featuredListings = listings.slice(0, 3);
-const featuredAgents = agents.slice(0, 3);
+export default async function LandingPage() {
+  const featuredRes = await Listings.listListings({ page: 0, size: 3 }).catch(() => null);
+  const featuredListings = featuredRes?.content?.length
+    ? featuredRes.content.map((x) => listingFromApi(x))
+    : [];
+  const featuredAgents: Agent[] = [];
 
-export default function LandingPage() {
   return (
     <>
       {/* ---------------- HERO ---------------- */}
@@ -118,11 +124,17 @@ export default function LandingPage() {
             See all listings <Icon.ArrowRight size={14} />
           </Link>
         </div>
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {featuredListings.map((l) => (
-            <ListingCard key={l.id} listing={l} />
-          ))}
-        </div>
+        {featuredListings.length === 0 ? (
+          <p className="text-sm text-fg-muted">
+            No listings from haven yet — check <code className="rounded bg-bg-sunken px-1">HAVEN_API_URL</code> or widen filters on the browse page.
+          </p>
+        ) : (
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {featuredListings.map((l) => (
+              <ListingCard key={l.id} listing={l} />
+            ))}
+          </div>
+        )}
       </Section>
 
       {/* ---------------- DREAM AI BLOCK ---------------- */}
@@ -264,11 +276,18 @@ export default function LandingPage() {
             Find an agent <Icon.ArrowRight size={14} />
           </Link>
         </div>
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {featuredAgents.map((a) => (
-            <AgentCard key={a.id} agent={a} />
-          ))}
-        </div>
+        {featuredAgents.length === 0 ? (
+          <p className="text-sm text-fg-muted max-w-2xl">
+            Agent directory data comes from haven once a public agent listing endpoint exists.
+            Open any listing to reach the assigned agent&apos;s public profile.
+          </p>
+        ) : (
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {featuredAgents.map((a) => (
+              <AgentCard key={a.id} agent={a} />
+            ))}
+          </div>
+        )}
       </Section>
 
       {/* ---------------- BIG CTA ---------------- */}
@@ -318,7 +337,7 @@ function ChatBubble({
   children,
 }: {
   side: "user" | "ai";
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   if (side === "user") {
     return (

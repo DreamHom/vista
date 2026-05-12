@@ -2,8 +2,10 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/avatar";
-import { Icon, Logo } from "@/components/icons";
+import { Logo } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
+import { NotificationsBell } from "@/components/notifications/notifications-bell";
+import { SignOutLink } from "@/components/auth/sign-out-link";
 
 export interface SidebarLink {
   href: string;
@@ -115,13 +117,7 @@ export function DashboardShell({
           ))}
         </nav>
         <div className="border-t border-border p-4">
-          <Link
-            href="/login"
-            className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-fg-muted hover:text-fg hover:bg-bg-sunken transition"
-          >
-            <Icon.Logout size={16} />
-            Sign out
-          </Link>
+          <SignOutLink />
         </div>
       </aside>
 
@@ -131,14 +127,7 @@ export function DashboardShell({
             <Logo withWordmark={false} />
           </Link>
           <div className="flex-1">{topBarSlot}</div>
-          <button
-            type="button"
-            className="relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-bg-elevated text-fg-muted hover:text-fg"
-            aria-label="Notifications"
-          >
-            <Icon.Bell size={16} />
-            <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-accent border-2 border-bg-elevated" />
-          </button>
+          <NotificationsBell />
           <Avatar name={user.name} src={user.avatar} size={36} />
         </header>
         <main className="flex-1">{children}</main>

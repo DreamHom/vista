@@ -2,21 +2,35 @@ export type Role = "applicant" | "owner" | "agent" | "admin";
 
 export type ListingPurpose = "rent" | "sale";
 
-export type VerificationStatus = "unverified" | "pending" | "verified" | "rejected";
+export type VerificationSubmissionStatus = "PENDING" | "APPROVED" | "REJECTED";
 
-export type ListingStatus =
-  | "draft"
-  | "live"
+/** Frontend-derived account state from PublicUserProfile verification stamps. */
+export type UserVerificationState =
+  | "unverified"
+  | "identity_verified"
+  | "agent_credentials_verified";
+
+export type BackendListingStatus =
+  | "DRAFT"
+  | "LIVE"
+  | "PAUSED"
+  | "UNDER_OFFER"
+  | "CLOSED";
+
+export type ListingLifecycleStatus = "draft" | "live" | "paused" | "closed";
+
+export type ListingMarketStatus =
+  | "available"
   | "under_offer"
   | "rented"
   | "sold"
-  | "taken_down";
+  | "off_market";
 
 export type LeadTemperature = "cold" | "warm" | "hot";
 
 export interface FeeBreakdown {
-  rent?: number; // for rentals, monthly or annual based on `frequency`
-  price?: number; // for sales
+  rent?: number;
+  price?: number;
   caution?: number;
   serviceCharge?: number;
   agencyFee?: number;
@@ -33,19 +47,21 @@ export interface Listing {
   bedrooms: number;
   bathrooms: number;
   toilets?: number;
-  area: string; // neighbourhood
+  area: string;
   city: string;
   state: string;
   description: string;
   highlights: string[];
   amenities: string[];
   fees: FeeBreakdown;
-  photos: string[]; // unsplash URLs
+  photos: string[];
   ownerId: string;
   agentId?: string;
   ownerVerified: boolean;
   documentsVerified: boolean;
-  status: ListingStatus;
+  backendStatus: BackendListingStatus;
+  lifecycleStatus: ListingLifecycleStatus;
+  marketStatus: ListingMarketStatus;
   createdAt: string;
   views: number;
   saves: number;
@@ -68,9 +84,9 @@ export interface Agent {
   rating: number;
   reviews: number;
   dealsClosed: number;
-  responseRate: number; // 0-100
+  responseRate: number;
   responseTimeMins: number;
-  feePercent: number; // typical agency %
+  feePercent: number;
   verified: boolean;
   joinedAt: string;
   languages: string[];
@@ -94,39 +110,64 @@ export interface Applicant {
   budgetMax?: number;
   city?: string;
   intent: ListingPurpose;
-  trustBadge: boolean; // optional applicant verification reward
+  trustBadge: boolean;
   joinedAt: string;
 }
+
+/** Raw slot row from the backend. */
+export type InspectionSlotStatus = "OPEN" | "BOOKED" | "COMPLETED" | "CANCELLED";
 
 export interface InspectionSlot {
   id: string;
   listingId: string;
-  date: string; // ISO
+  startsAt: string;
+  endsAt: string;
   durationMins: number;
-  status: "open" | "booked" | "completed" | "no_show" | "cancelled";
-  applicantId?: string;
-  notes?: string;
+  status: InspectionSlotStatus;
 }
+
+/** Inspection booking row tied to a slot. */
+export type InspectionStatus =
+  | "REQUESTED"
+  | "CONFIRMED"
+  | "COMPLETED"
+  | "NO_SHOW"
+  | "CANCELLED";
+
+export interface Inspection {
+  id: string;
+  listingId: string;
+  slotId: string;
+  applicantId: string;
+  applicantName?: string;
+  status: InspectionStatus;
+  notes?: string | null;
+  createdAt: string;
+}
+
+/** Immutable offer row from the backend negotiation chain. */
+export type OfferStatus = "PENDING" | "ACCEPTED" | "DECLINED" | "AUTO_DECLINED";
+export type Proposer = "applicant" | "owner" | "agent";
 
 export interface Offer {
   id: string;
   listingId: string;
   applicantId: string;
-  amount: number;
-  terms: string;
-  status:
-    | "submitted"
-    | "countered"
-    | "accepted"
-    | "rejected"
-    | "withdrawn";
-  history: Array<{
-    by: "applicant" | "owner" | "agent";
-    amount: number;
-    note?: string;
-    at: string;
-  }>;
+  applicantName?: string;
+  proposedByUserId: number | string;
+  amount: string;
+  message: string | null;
+  status: OfferStatus;
+  parentOfferId?: string | null;
   createdAt: string;
+}
+
+export interface OfferHistoryEntry {
+  by: Proposer;
+  amount: string;
+  note: string | null;
+  at: string;
+  status: OfferStatus;
 }
 
 export interface Lead {
@@ -172,9 +213,9 @@ export interface Message {
 export interface AdminVerificationItem {
   id: string;
   track: "owner" | "agent" | "property" | "applicant";
-  subject: string; // person or listing name
+  subject: string;
   submittedAt: string;
-  status: VerificationStatus;
+  status: VerificationSubmissionStatus;
   documents: string[];
   submittedBy: string;
 }
@@ -186,4 +227,96 @@ export interface AuditLogEntry {
   target: string;
   at: string;
   meta?: string;
+}
+
+export function verificationStateFromProfile(input: {
+  identityVerifiedAt?: string | null;
+  agentCredentialVerifiedAt?: string | null;
+}): UserVerificationState {
+  if (input.agentCredentialVerifiedAt) return "agent_credentials_verified";
+  if (input.identityVerifiedAt) return "identity_verified";
+  return "unverified";
+}
+
+export function buildOfferHistory(
+  chain: Offer[],
+  listingOwnerId: number,
+): OfferHistoryEntry[] {
+  return [...chain]
+    .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))
+    .map((row) => ({
+      by:
+        sameEntityId(row.proposedByUserId, listingOwnerId)
+          ? "owner"
+          : sameEntityId(row.proposedByUserId, row.applicantId)
+            ? "applicant"
+            : "agent",
+      amount: row.amount,
+      note: row.message,
+      at: row.createdAt,
+      status: row.status,
+    }));
+}
+
+export function latestActiveOffer(chain: Offer[]): Offer | null {
+  return (
+    [...chain]
+      .filter((o) => o.status === "PENDING")
+      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0] ??
+    null
+  );
+}
+
+function sameEntityId(a: string | number, b: string | number): boolean {
+  return String(a) === String(b);
+}
+
+export function listingLifecycleStatus(
+  status: BackendListingStatus,
+): ListingLifecycleStatus {
+  switch (status) {
+    case "DRAFT":
+      return "draft";
+    case "LIVE":
+    case "UNDER_OFFER":
+      return "live";
+    case "PAUSED":
+      return "paused";
+    case "CLOSED":
+      return "closed";
+  }
+}
+
+export function listingMarketStatus(
+  status: BackendListingStatus,
+  purpose: ListingPurpose,
+): ListingMarketStatus {
+  switch (status) {
+    case "UNDER_OFFER":
+      return "under_offer";
+    case "CLOSED":
+      return purpose === "rent" ? "rented" : "sold";
+    case "PAUSED":
+      return "off_market";
+    case "DRAFT":
+    case "LIVE":
+    default:
+      return "available";
+  }
+}
+
+export function listingStatusLabel(listing: Pick<Listing, "backendStatus" | "marketStatus">): string {
+  if (listing.backendStatus === "UNDER_OFFER") return "under offer";
+  if (listing.backendStatus === "PAUSED") return "paused";
+  if (listing.backendStatus === "DRAFT") return "draft";
+  if (listing.backendStatus === "CLOSED") {
+    return listing.marketStatus === "sold" ? "sold" : "rented";
+  }
+  return "live";
+}
+
+export function listingStatusTone(listing: Pick<Listing, "backendStatus">): "success" | "muted" {
+  return listing.backendStatus === "LIVE" || listing.backendStatus === "UNDER_OFFER"
+    ? "success"
+    : "muted";
 }
