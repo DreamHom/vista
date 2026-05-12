@@ -76,21 +76,45 @@ vista/
     │   └── dashboard/                    # shell + sidebar
     └── lib/
         ├── constants.ts                  # brand, nav, footer, property types
-        ├── types.ts                      # full domain model
-        ├── mock-data.ts                  # seeded fixtures
-        └── utils.ts                      # cn, currency, dates, initials
+        ├── types.ts                      # legacy view-model types
+        ├── mock-data.ts                  # seeded fixtures (fallback only)
+        ├── utils.ts                      # cn, currency, dates, initials
+        ├── api/                          # haven HTTP client + DTOs + adapters
+        │   ├── README.md                 # integration map + backend gaps
+        │   ├── http.ts, session.ts, types.ts, adapters.ts
+        │   └── auth, listings, users, inspections, offers, comments,
+        │      saves, reviews, agent-assignments, notifications,
+        │      verification, admin, properties
+        └── actions/                      # Server actions for mutations
+            ├── listings.ts, comments.ts, saves.ts, inspections.ts,
+            └── offers.ts, verification.ts, admin.ts
 ```
 
 ## Getting started
 
 ```bash
 cd vista-frontend
+cp .env.example .env.local       # adjust HAVEN_API_URL if your backend is elsewhere
 npm install
 npm run dev
 ```
 
-Open <http://localhost:3000> and start clicking. All pages render with mocked data from
-`lib/mock-data.ts` — wire up to **haven** when you're ready.
+Open <http://localhost:3000> and start clicking. The app fetches live data from
+**haven** (`HAVEN_API_URL`, defaults to `http://localhost:8080`). Pages whose
+backend endpoints aren't implemented yet still render mocked data from
+`lib/mock-data.ts` — see `vista-frontend/lib/api/README.md` for the full
+integration map and outstanding backend gaps (messages, leads roll-up, agent
+directory, audit log).
+
+### Auth wiring
+
+- Login posts to `/api/auth/login` (Next.js route handler) which calls
+  haven and stores the JWT in an httpOnly cookie (`HAVEN_AUTH_COOKIE`,
+  default `dh_session`).
+- Server Components / Server Actions read that cookie via
+  `lib/api/session.ts:getToken()`.
+- Browser code never touches the JWT — it always calls Next.js routes
+  in `app/api/*`.
 
 ### Useful routes
 

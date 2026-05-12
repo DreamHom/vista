@@ -8,7 +8,14 @@ export function cn(
   return classes.filter(Boolean).join(" ");
 }
 
-export function formatCurrencyNGN(value: number): string {
+function asCurrencyNumber(value: number | string): number {
+  if (typeof value === "number") return value;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+export function formatCurrencyNGN(value: number | string): string {
+  value = asCurrencyNumber(value);
   if (value >= 1_000_000) {
     const m = value / 1_000_000;
     return `₦${m.toFixed(m < 10 ? 2 : 1).replace(/\.0+$/, "")}M`;
@@ -19,7 +26,8 @@ export function formatCurrencyNGN(value: number): string {
   return `₦${value.toLocaleString()}`;
 }
 
-export function formatCurrencyNGNFull(value: number): string {
+export function formatCurrencyNGNFull(value: number | string): string {
+  value = asCurrencyNumber(value);
   return new Intl.NumberFormat("en-NG", {
     style: "currency",
     currency: "NGN",

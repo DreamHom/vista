@@ -1,25 +1,56 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/dashboard/dashboard-shell";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Avatar } from "@/components/ui/avatar";
-import { leads, listings, getApplicant } from "@/lib/mock-data";
+import { Icon } from "@/components/icons";
+import { getToken } from "@/lib/api/session";
+import * as Assignments from "@/lib/api/agent-assignments";
+import * as Listings from "@/lib/api/listings";
+import { listingFromApi } from "@/lib/api/adapters";
 import { LEAD_TEMPERATURES } from "@/lib/constants";
-import { formatRelativeTime } from "@/lib/utils";
 
-export const metadata: Metadata = { title: "Agent · leads" };
+export const metadata: Metadata = { title: "Leads" };
 
 const tempTone = (t: string) => (t === "hot" ? "danger" : t === "warm" ? "warn" : "muted");
 
-export default function AgentLeadsPage() {
+export default async function AgentLeadsPage() {
+  const token = await getToken();
+  if (!token) redirect("/login?next=/agent/leads");
+
+  const assignments = await Assignments.listMyAssignments(token).catch(() => []);
+  const accepted = assignments.filter((a) => a.status === "ACCEPTED");
+  const listingIds = [...new Set(accepted.map((a) => a.listingId))];
+
+  const rows = (
+    await Promise.all(
+      listingIds.map(async (id) => {
+        const api = await Listings.getListing(id).catch(() => null);
+        if (!api) return null;
+        const photos = await Listings.getListingPhotos(id).catch(() => []);
+        return listingFromApi(api, photos);
+      }),
+    )
+  ).filter(Boolean) as ReturnType<typeof listingFromApi>[];
+
+  const hot = rows.filter((l) => (l.saves ?? 0) >= 5).length;
+  const warm = rows.filter((l) => {
+    const s = l.saves ?? 0;
+    return s >= 1 && s < 5;
+  }).length;
+  const cold = rows.filter((l) => (l.saves ?? 0) === 0).length;
+
   return (
     <>
-      <PageHeader title="Leads" description="People who saved, inspected or offered on a listing you manage." />
+      <PageHeader
+        title="Leads · assigned listings"
+        description="Engagement on listings you manage for owners."
+      />
       <div className="px-6 lg:px-8 py-8 space-y-8">
         <div className="grid gap-4 md:grid-cols-3">
           {LEAD_TEMPERATURES.map((t) => {
-            const c = leads.filter((l) => l.temperature === t.id).length;
+            const c = t.id === "hot" ? hot : t.id === "warm" ? warm : cold;
             return (
               <div key={t.id} className="rounded-2xl border border-border bg-bg-elevated p-5">
                 <Badge tone={tempTone(t.id) as never}>{t.label}</Badge>
@@ -31,31 +62,44 @@ export default function AgentLeadsPage() {
         </div>
 
         <Card>
-          <CardHeader title="Pipeline" description="Sorted by temperature, then recency." />
+          <CardHeader title="Listings" description="Saves and comments as interest signals." />
           <CardBody className="p-0">
             <ul className="divide-y divide-border">
-              {[...leads]
-                .sort((a, b) => (b.temperature === "hot" ? 1 : 0) - (a.temperature === "hot" ? 1 : 0))
-                .map((l) => {
-                  const applicant = getApplicant(l.applicantId);
-                  const listing = listings.find((li) => li.id === l.listingId);
-                  if (!applicant || !listing) return null;
-                  return (
-                    <li key={l.id} className="flex items-center gap-4 p-5">
-                      <Avatar name={applicant.name} src={applicant.avatar} size={40} />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold text-fg truncate">{applicant.name}</p>
-                        <p className="text-xs text-fg-muted truncate">
-                          On <Link href={`/listings/${listing.id}`} className="hover:text-brand">{listing.title}</Link>
-                        </p>
-                      </div>
-                      <Badge tone={tempTone(l.temperature) as never}>{l.temperature}</Badge>
-                      <span className="text-xs text-fg-subtle whitespace-nowrap">
-                        {formatRelativeTime(l.lastActivityAt)}
-                      </span>
-                    </li>
-                  );
-                })}
+              {rows.length === 0 ? (
+                <li className="p-5 text-sm text-fg-muted">No accepted assignments yet.</li>
+              ) : (
+                rows.map((l) => (
+                  <li key={l.id} className="flex items-center gap-4 p-5">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-fg truncate">
+                        <Link href={`/listings/${l.id}`} className="hover:text-brand">
+                          {l.title}
+                        </Link>
+                      </p>
+                      <p className="text-xs text-fg-muted">
+                        {l.saves} saves · {l.inspections} inspections · {l.comments} comments
+                      </p>
+                    </div>
+                    <Badge
+                      tone={
+                        (l.saves ?? 0) >= 5
+                          ? "danger"
+                          : (l.saves ?? 0) >= 1
+                            ? "warn"
+                            : "muted"
+                      }
+                    >
+                      {(l.saves ?? 0) >= 5 ? "hot" : (l.saves ?? 0) >= 1 ? "warm" : "cold"}
+                    </Badge>
+                    <Link
+                      href={`/listings/${l.id}`}
+                      className="text-xs font-medium text-brand hover:text-brand-hover inline-flex items-center gap-1"
+                    >
+                      View <Icon.ArrowRight size={12} />
+                    </Link>
+                  </li>
+                ))
+              )}
             </ul>
           </CardBody>
         </Card>

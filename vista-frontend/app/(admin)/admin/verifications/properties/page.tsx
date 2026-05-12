@@ -1,21 +1,40 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/dashboard/dashboard-shell";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
 import { PillTabs } from "@/components/ui/tabs";
 import { Icon } from "@/components/icons";
-import { verificationQueue } from "@/lib/mock-data";
-import { formatRelativeTime } from "@/lib/utils";
+import { VerificationDecisionRow } from "@/components/admin/verification-decision-row";
+import * as Verification from "@/lib/api/verification";
+import { HavenError } from "@/lib/api/http";
+import { getToken } from "@/lib/api/session";
 
 export const metadata: Metadata = { title: "Admin · property verifications" };
 
-const items = verificationQueue.filter((v) => v.track === "property");
+export default async function PropertyVerificationsPage() {
+  const token = await getToken();
+  if (!token) redirect("/login?next=/admin/verifications/properties");
 
-export default function PropertyVerificationsPage() {
+  let items: Awaited<ReturnType<typeof Verification.adminListVerifications>> = [];
+  let error: string | null = null;
+  try {
+    items = await Verification.adminListVerifications(token, "PROPERTY_DOCUMENTS");
+  } catch (e) {
+    if (e instanceof HavenError && e.status === 403) redirect("/dashboard");
+    error = e instanceof Error ? e.message : "Could not load.";
+  }
+
+  const pending = items.filter(
+    (v) => v.status === "PENDING" && v.track === "PROPERTY_DOCUMENTS",
+  );
+
   return (
     <>
-      <PageHeader title="Property document verifications" description="C of O, deed of assignment, tenancy paperwork." />
+      <PageHeader
+        title="Property verifications"
+        description="Title documents, proof of ownership and compliance packs."
+      />
       <div className="px-6 lg:px-8 py-8 space-y-8">
         <PillTabs
           active="/admin/verifications/properties"
@@ -23,27 +42,33 @@ export default function PropertyVerificationsPage() {
             { href: "/admin/verifications", label: "All" },
             { href: "/admin/verifications/owners", label: "Owners" },
             { href: "/admin/verifications/agents", label: "Agents" },
-            { href: "/admin/verifications/properties", label: "Properties", count: items.length },
+            {
+              href: "/admin/verifications/properties",
+              label: "Properties",
+              count: pending.length,
+            },
           ]}
         />
         <Card>
-          <CardHeader title={`${items.length} pending`} />
+          <CardHeader title={`${pending.length} pending`} />
           <CardBody className="p-0">
-            <ul className="divide-y divide-border">
-              {items.map((v) => (
-                <li key={v.id} className="flex items-center gap-4 p-5">
-                  <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-fg truncate">{v.subject}</p>
-                    <p className="text-xs text-fg-muted">
-                      {v.documents.join(", ")} · {formatRelativeTime(v.submittedAt)}
-                    </p>
-                  </div>
-                  <Badge tone="warn">pending</Badge>
-                  <Button size="sm" leadingIcon={<Icon.Check size={14} />}>Approve</Button>
-                  <Button size="sm" variant="ghost" leadingIcon={<Icon.X size={14} />}>Reject</Button>
-                </li>
-              ))}
-            </ul>
+            {error ? (
+              <div className="p-6 text-sm text-danger">{error}</div>
+            ) : pending.length === 0 ? (
+              <div className="p-6">
+                <EmptyState
+                  title="Queue clear"
+                  description="No pending property document reviews."
+                  icon={<Icon.ShieldCheck size={20} />}
+                />
+              </div>
+            ) : (
+              <ul className="divide-y divide-border">
+                {pending.map((v) => (
+                  <VerificationDecisionRow key={v.id} item={v} />
+                ))}
+              </ul>
+            )}
           </CardBody>
         </Card>
       </div>
