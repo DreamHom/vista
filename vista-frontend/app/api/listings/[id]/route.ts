@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as Listings from "@/lib/api/listings";
+import type { UpdateListingRequest } from "@/lib/api/types";
 import {
   handleRouteError,
-  problemJson,
+  readJsonBody,
   requireTokenOrResponse,
 } from "@/app/api/_utils/route";
 
@@ -12,14 +13,14 @@ export async function GET(
 ) {
   const { id } = await ctx.params;
   try {
-    const photos = await Listings.getListingPhotos(id);
-    return NextResponse.json(photos);
+    const listing = await Listings.getListing(id);
+    return NextResponse.json(listing);
   } catch (err) {
     return handleRouteError(err);
   }
 }
 
-export async function POST(
+export async function PATCH(
   req: NextRequest,
   ctx: { params: Promise<{ id: string }> },
 ) {
@@ -27,23 +28,10 @@ export async function POST(
   if (token instanceof NextResponse) return token;
 
   const { id } = await ctx.params;
-
-  let form: FormData;
   try {
-    form = await req.formData();
-  } catch {
-    return problemJson(400, "Bad Request", "Expected multipart/form-data.");
-  }
-
-  const file = form.get("file");
-  if (!(file instanceof File)) {
-    return problemJson(400, "Validation failed", "`file` is required.");
-  }
-  const caption = (form.get("caption") as string | null) ?? undefined;
-
-  try {
-    const photo = await Listings.uploadListingPhoto(token, id, file, caption);
-    return NextResponse.json(photo, { status: 201 });
+    const body = await readJsonBody<UpdateListingRequest>(req);
+    const listing = await Listings.updateListing(token, id, body);
+    return NextResponse.json(listing);
   } catch (err) {
     return handleRouteError(err);
   }

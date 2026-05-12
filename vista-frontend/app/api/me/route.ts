@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import * as Auth from "@/lib/api/auth";
 import { getToken } from "@/lib/api/session";
 import { HavenError } from "@/lib/api/http";
+import { handleRouteError, readJsonBody } from "@/app/api/_utils/route";
+import type { UpdateMeRequest } from "@/lib/api/types";
 
 export async function GET() {
   const token = await getToken();
@@ -33,5 +36,23 @@ export async function GET() {
       },
       { status: 500, headers: { "Content-Type": "application/problem+json" } },
     );
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  const token = await getToken();
+  if (!token) {
+    return NextResponse.json(
+      { status: 401, title: "Unauthorized" },
+      { status: 401, headers: { "Content-Type": "application/problem+json" } },
+    );
+  }
+
+  try {
+    const body = await readJsonBody<UpdateMeRequest>(req);
+    const profile = await Auth.updateMe(token, body);
+    return NextResponse.json(profile);
+  } catch (err) {
+    return handleRouteError(err);
   }
 }
