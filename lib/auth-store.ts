@@ -5,14 +5,14 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import type { User } from "./types";
 
 /**
- * Auth state — JWT token + the authenticated user.
+ * Auth state: JWT token + the authenticated user.
  *
  * Persisted to localStorage so a refresh keeps the session alive. The token
  * is read by the API client via {@link setAuthTokenProvider} (wired in
  * {@link components/providers/app-providers}).
  *
  * NOTE: localStorage is acceptable for a capstone. For production we'd want
- * an httpOnly cookie with a CSRF strategy — out of scope here.
+ * an httpOnly cookie with a CSRF strategy: out of scope here.
  */
 export interface AuthState {
   token: string | null;
@@ -51,7 +51,7 @@ export const useAuthStore = create<AuthState>()(
   ),
 );
 
-/** Read the current token without subscribing to changes — for API client use. */
+/** Read the current token without subscribing to changes: for API client use. */
 export function getCurrentToken(): string | null {
   return useAuthStore.getState().token;
 }

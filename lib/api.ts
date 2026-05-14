@@ -10,7 +10,16 @@ import type { ProblemDetail } from "./types";
  *  - Surfaces network failures as {@link NetworkError}.
  */
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080/api";
+const SERVER_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080/api";
+
+function getBaseUrl() {
+  // Browser requests go through Next rewrites so the app and API share one origin.
+  if (typeof window !== "undefined") {
+    return "/api";
+  }
+
+  return SERVER_BASE_URL;
+}
 
 /** Resolve the JWT to attach to outgoing requests. Overridden at runtime by the auth store. */
 let getAuthToken: () => string | null = () => null;
@@ -31,12 +40,12 @@ export class ApiError extends Error {
     this.problem = problem;
   }
 
-  /** True for 401 — caller should clear stored token and bounce to /login. */
+  /** True for 401: caller should clear stored token and bounce to /login. */
   get isUnauthorized(): boolean {
     return this.status === 401;
   }
 
-  /** True for 400/422 — caller should surface field-level errors on the form. */
+  /** True for 400/422: caller should surface field-level errors on the form. */
   get isValidation(): boolean {
     return this.status === 400 || this.status === 422;
   }
@@ -52,7 +61,14 @@ export class NetworkError extends Error {
 }
 
 export interface RequestOptions extends Omit<RequestInit, "body" | "method"> {
-  /** Request body — will be JSON-serialised. Omit for GET/DELETE. */
+  /**
+   * Request body.
+   *
+   * Plain objects are JSON-serialised. `FormData`, `Blob`, `URLSearchParams`,
+   * strings, and other native request bodies pass through untouched so upload
+   * endpoints like haven v1.0.1's `POST /verifications/files` work without a
+   * separate client.
+   */
   body?: unknown;
   /** Skip attaching the bearer token even if one is available. */
   skipAuth?: boolean;
@@ -65,7 +81,11 @@ type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 async function request<T>(method: Method, path: string, options: RequestOptions = {}): Promise<T> {
   const { body, skipAuth, query, headers, ...rest } = options;
 
-  const url = new URL(path.startsWith("http") ? path : `${BASE_URL}${path}`);
+  const rawUrl = path.startsWith("http") ? path : `${getBaseUrl()}${path}`;
+  const url =
+    typeof window !== "undefined" && rawUrl.startsWith("/")
+      ? new URL(rawUrl, window.location.origin)
+      : new URL(rawUrl);
   if (query) {
     for (const [key, value] of Object.entries(query)) {
       if (value !== undefined && value !== null) url.searchParams.set(key, String(value));
@@ -74,7 +94,7 @@ async function request<T>(method: Method, path: string, options: RequestOptions 
 
   const finalHeaders = new Headers(headers);
   finalHeaders.set("Accept", "application/json");
-  if (body !== undefined) finalHeaders.set("Content-Type", "application/json");
+  const bodyToSend = serializeBody(body, finalHeaders);
 
   if (!skipAuth) {
     const token = getAuthToken();
@@ -86,7 +106,7 @@ async function request<T>(method: Method, path: string, options: RequestOptions 
     response = await fetch(url.toString(), {
       method,
       headers: finalHeaders,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body: bodyToSend,
       ...rest,
     });
   } catch (cause) {
@@ -104,6 +124,24 @@ async function request<T>(method: Method, path: string, options: RequestOptions 
   }
 
   return parsed as T;
+}
+
+function serializeBody(body: unknown, headers: Headers): BodyInit | undefined {
+  if (body === undefined) return undefined;
+
+  if (
+    body instanceof FormData ||
+    body instanceof URLSearchParams ||
+    body instanceof Blob ||
+    body instanceof ArrayBuffer ||
+    ArrayBuffer.isView(body) ||
+    typeof body === "string"
+  ) {
+    return body as BodyInit;
+  }
+
+  headers.set("Content-Type", "application/json");
+  return JSON.stringify(body);
 }
 
 function safeParseJson(text: string): unknown {

@@ -2,15 +2,15 @@
  * Curated Unsplash property photos for vista's seed data.
  *
  * Every photo here is verified to load from `images.unsplash.com` (free tier
- * — no premium "plus." photos). Use {@link photoUrl} to compose a fetched URL
- * with the right size + format params; Unsplash's CDN handles resize, webp
- * conversion, and edge caching automatically.
+ *: no premium "plus." photos). Use {@link photoUrl} to compose a fetched URL
+ * with the right size + format params. We request **WebP** explicitly
+ * (`fm=webp`) plus a high `q` so the CDN returns a sharp, lightweight file.
  *
  *   <Image src={photoUrl(p, { w: 800 })} … />
  *
  * SOURCE: Unsplash photographers (license: free for commercial + non-commercial
  * use). Attribution is appreciated but not required by their license. The
- * `slug` field is the photo's page slug at unsplash.com/photos/<slug> — keep
+ * `slug` field is the photo's page slug at unsplash.com/photos/<slug>: keep
  * it so we can credit photographers later if we expand the listing detail
  * page to show "Photo by …".
  */
@@ -26,7 +26,7 @@ export type PhotoCategory =
   ;
 
 export interface SeedPhoto {
-  /** Unsplash long-form ID — `images.unsplash.com/photo-{id}`. */
+  /** Unsplash long-form ID: `images.unsplash.com/photo-{id}`. */
   id: string;
   /** Page slug at `unsplash.com/photos/{slug}`. */
   slug: string;
@@ -74,25 +74,6 @@ export const PHOTOS: readonly SeedPhoto[] = [
     alt: "Modern home with stepped walkway and clean lines",
     category: "exterior-modern",
   },
-  {
-    id: "1580587771525-78b9dba3b914",
-    slug: "_TPTXZd9mOo",
-    alt: "White and brown concrete building under blue sky",
-    category: "exterior-modern",
-  },
-  {
-    id: "1613490493576-7fde63acd811",
-    slug: "hHz4yrvxwlA",
-    alt: "Two-tone white and brown concrete building exterior",
-    category: "exterior-modern",
-  },
-  {
-    id: "1600596542815-ffad4c1539a9",
-    slug: "mR1CIDduGLc",
-    alt: "Tall white concrete building against blue sky",
-    category: "exterior-modern",
-  },
-
   // ── Warmer exteriors (suburban / family / classic) ─────────────────────
   {
     id: "1513584684374-8bab748fbf90",
@@ -115,18 +96,6 @@ export const PHOTOS: readonly SeedPhoto[] = [
     category: "exterior-luxury",
   },
   {
-    id: "1613977257365-aaae5a9817ff",
-    slug: "y3_AHHrxUBY",
-    alt: "White concrete villa with private pool",
-    category: "exterior-luxury",
-  },
-  {
-    id: "1613977257363-707ba9348227",
-    slug: "Id7u0EkTjBE",
-    alt: "Crystal-blue swimming pool against white tile",
-    category: "landscape",
-  },
-  {
     id: "1706808849780-7a04fbac83ef",
     slug: "WaC-JFfF21M",
     alt: "Modern poolside with lounge chairs and cabana",
@@ -145,7 +114,7 @@ export const PHOTOS: readonly SeedPhoto[] = [
     category: "landscape",
   },
 
-  // ── Interior — living rooms ────────────────────────────────────────────
+  // ── Interior: living rooms ────────────────────────────────────────────
   {
     id: "1502672260266-1c1ef2d93688",
     slug: "3wylDrjxH-E",
@@ -177,7 +146,7 @@ export const PHOTOS: readonly SeedPhoto[] = [
     category: "interior-living",
   },
 
-  // ── Interior — kitchen / dining ────────────────────────────────────────
+  // ── Interior: kitchen / dining ────────────────────────────────────────
   {
     id: "1706808886508-e21834b4672c",
     slug: "pGPAinRjNVk",
@@ -191,7 +160,7 @@ export const PHOTOS: readonly SeedPhoto[] = [
     category: "interior-kitchen",
   },
 
-  // ── Interior — bedroom ─────────────────────────────────────────────────
+  // ── Interior: bedroom ─────────────────────────────────────────────────
   {
     id: "1512918728675-ed5a9ecdebfd",
     slug: "FqqiAvJejto",
@@ -203,11 +172,11 @@ export const PHOTOS: readonly SeedPhoto[] = [
 export interface PhotoUrlOptions {
   /** Width in CSS pixels. Unsplash CDN scales server-side. */
   w?: number;
-  /** Quality 1-100. Defaults to 80. */
+  /** Quality 1–100. Defaults to 85 for sharp WebP. */
   q?: number;
-  /** Aspect-ratio crop — `4:3` for cards, `3:2` for hero etc. Optional. */
-  ratio?: "1:1" | "4:3" | "3:2" | "16:9" | "21:9";
-  /** Override format. Defaults to `webp` via `auto=format`. */
+  /** Aspect-ratio crop: `4:3` for cards, `3:2` for hero etc. Optional. */
+  ratio?: "1:1" | "4:5" | "4:3" | "3:2" | "16:9" | "21:9";
+  /** Image format. Defaults to `webp`. */
   fm?: "webp" | "jpg" | "avif";
 }
 
@@ -216,14 +185,38 @@ export interface PhotoUrlOptions {
  * transformation server-side and returns the optimized output.
  */
 export function photoUrl(photo: Pick<SeedPhoto, "id">, options: PhotoUrlOptions = {}): string {
-  const { w = 1200, q = 80, ratio, fm } = options;
+  const { w = 1200, q = 85, ratio, fm = "webp" } = options;
   const params = new URLSearchParams({
     w: String(w),
     q: String(q),
-    auto: "format",
+    fm,
     fit: "crop",
   });
   if (ratio) params.set("ar", ratio);
-  if (fm) params.set("fm", fm);
   return `https://images.unsplash.com/photo-${photo.id}?${params.toString()}`;
+}
+
+function hashKey(value: string) {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+  }
+  return hash;
+}
+
+export function fallbackListingPhoto(
+  key: string,
+  options: PhotoUrlOptions = {},
+  offset = 0,
+): {
+  id: string;
+  url: string;
+  alt: string;
+} {
+  const seed = PHOTOS[(hashKey(key) + offset) % PHOTOS.length] ?? PHOTOS[0];
+  return {
+    id: `fallback-${seed.id}-${offset}`,
+    url: photoUrl(seed, options),
+    alt: seed.alt,
+  };
 }

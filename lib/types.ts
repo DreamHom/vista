@@ -1,5 +1,5 @@
 /**
- * Shared API types — kept in lock-step with haven (Spring Boot backend).
+ * Shared API types: kept in lock-step with haven (Spring Boot backend).
  *
  * When backend DTOs change, update these. Source of truth lives at:
  *   ../haven/modules/feature/<domain>/api/**
@@ -9,18 +9,17 @@
 export const ROLES = ["OWNER", "AGENT", "APPLICANT", "ADMIN"] as const;
 export type Role = (typeof ROLES)[number];
 
-/** Roles a user may self-register with. ADMIN is seeded only — never accepted via /register. */
+/** Roles a user may self-register with. ADMIN is seeded only: never accepted via /register. */
 export const PUBLIC_ROLES = ["OWNER", "AGENT", "APPLICANT"] as const satisfies readonly Role[];
 export type PublicRole = (typeof PUBLIC_ROLES)[number];
 
 /** Mirrors haven's {@code UserResponse}. */
 export interface User {
   id: number;
-  email: string;
   fullName: string;
   role: Role;
-  /** ISO-8601 timestamp string (Java {@code Instant}). */
-  createdAt: string;
+  email?: string;
+  createdAt?: string;
 }
 
 /** Mirrors haven's {@code RegisterRequest}. */
@@ -30,6 +29,14 @@ export interface RegisterRequest {
   fullName: string;
   phone?: string;
   role: PublicRole;
+  licenseNumber?: string;
+}
+
+/** Mirrors haven's {@code RegisterAcceptedResponse}. */
+export interface RegisterAcceptedResponse {
+  status: string;
+  message: string;
+  nextStep: string;
 }
 
 /** Mirrors haven's {@code LoginRequest}. */
@@ -41,10 +48,15 @@ export interface LoginRequest {
 /** Mirrors haven's {@code LoginResponse}. */
 export interface LoginResponse {
   token: string;
+  tokenType: string;
+  expiresInSeconds: number;
+  userId: number;
+  role: Role;
+  fullName: string;
 }
 
 /**
- * RFC 7807 Problem Details — Spring's default response shape, also used by
+ * RFC 7807 Problem Details: Spring's default response shape, also used by
  * haven's GlobalExceptionHandler. Allows arbitrary extension properties.
  *
  * @see https://datatracker.ietf.org/doc/html/rfc7807

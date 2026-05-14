@@ -1,6 +1,6 @@
 /**
- * Seed listings for the public landing page + listings index. Pure mock data
- * — safe to render server-side, safe to use in Storybook-style examples.
+ * Seed listings for the public landing page + listings index. Pure mock data;
+ * safe to render server-side, safe to use in Storybook-style examples.
  *
  * When haven exposes the real `/api/listings` endpoint, this file becomes the
  * shape doc / fallback. The field names mirror what we expect haven to return
@@ -28,7 +28,7 @@ export interface SeedListing {
   description: string;
   /** First photo is the hero / cover. */
   photos: SeedPhoto[];
-  /** Currently a fictional `Verified` flag — we'll wire to real verification later. */
+  /** Currently a fictional `Verified` flag; we'll wire to real verification later. */
   verified: boolean;
 }
 
@@ -50,7 +50,7 @@ export const LISTINGS: readonly SeedListing[] = [
     bathrooms: 6,
     sizeSqm: 520,
     description:
-      "A modern five-bedroom villa designed around its long infinity pool — open plan living, full-height glazing, and a cooks' kitchen. Two service quarters, a private studio, and walled grounds.",
+      "A modern five-bedroom villa designed around its long infinity pool: open plan living, full-height glazing, and a cooks' kitchen. Two service quarters, a private studio, and walled grounds.",
     photos: [
       photoById("1512917774080-9991f1c4c750"),
       photoById("1502672260266-1c1ef2d93688"),
@@ -69,7 +69,7 @@ export const LISTINGS: readonly SeedListing[] = [
     bathrooms: 5,
     sizeSqm: 380,
     description:
-      "Top-floor four-bedroom penthouse with wraparound terrace and harbour views. Concierge, secure parking, gym and pool included. Furnished or unfurnished — your call.",
+      "Top-floor four-bedroom penthouse with wraparound terrace and harbour views. Concierge, secure parking, gym and pool included. Furnished or unfurnished. Your call.",
     photos: [
       photoById("1505843513577-22bb7d21e455"),
       photoById("1665249934445-1de680641f50"),

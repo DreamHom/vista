@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { ApiError, api } from "@/lib/api";
+import { ApplicantShell } from "@/components/dashboard/applicant-shell";
+import { getDefaultDashboardPath } from "@/lib/dashboard-routes";
 import { useAuth } from "@/lib/use-auth";
-import { AppHeader } from "@/components/layout/app-header";
 import { Spinner } from "@/components/ui/spinner";
+import type { Role } from "@/lib/types";
 
 /**
  * Authenticated-routes shell.
@@ -15,7 +18,8 @@ import { Spinner } from "@/components/ui/spinner";
  */
 export default function AuthenticatedLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
-  const { isAuthenticated, hydrated } = useAuth();
+  const { isAuthenticated, hydrated, setUser, clear } = useAuth();
+  const [checkingSession, setCheckingSession] = useState(true);
 
   useEffect(() => {
     if (hydrated && !isAuthenticated) {
@@ -23,18 +27,56 @@ export default function AuthenticatedLayout({ children }: { children: ReactNode 
     }
   }, [hydrated, isAuthenticated, router]);
 
-  if (!hydrated || !isAuthenticated) {
+  useEffect(() => {
+    let cancelled = false;
+
+    async function verifySession() {
+      if (!hydrated || !isAuthenticated) {
+        return;
+      }
+
+      try {
+        const me = await api.get<{ userId: number; email?: string; fullName: string; role: Role }>("/me");
+        if (cancelled) return;
+        if (me.role !== "APPLICANT") {
+          router.replace(getDefaultDashboardPath(me.role));
+          return;
+        }
+        setUser({
+          id: me.userId,
+          email: me.email,
+          fullName: me.fullName,
+          role: me.role,
+        });
+      } catch (error) {
+        if (cancelled) return;
+        if (error instanceof ApiError && error.isUnauthorized) {
+          clear();
+          router.replace("/login");
+          return;
+        }
+      } finally {
+        if (!cancelled) {
+          setCheckingSession(false);
+        }
+      }
+    }
+
+    setCheckingSession(true);
+    void verifySession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrated, isAuthenticated, router, setUser, clear]);
+
+  if (!hydrated || !isAuthenticated || checkingSession) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center font-sans">
         <Spinner className="h-6 w-6 text-muted-foreground" />
       </div>
     );
   }
 
-  return (
-    <div className="flex min-h-screen flex-col bg-background">
-      <AppHeader />
-      <main className="flex-1">{children}</main>
-    </div>
-  );
+  return <ApplicantShell>{children}</ApplicantShell>;
 }
