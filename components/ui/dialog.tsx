@@ -11,7 +11,7 @@ import {
 import { cn } from "@/lib/utils";
 
 /**
- * Modal dialog primitive — wraps Radix's Dialog. Composition pattern:
+ * Modal dialog primitive: wraps Radix's Dialog. Composition pattern:
  *
  * <pre>{@code
  * <Dialog>

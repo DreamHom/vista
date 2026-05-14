@@ -1,7 +1,7 @@
 import { type SVGAttributes } from "react";
 import { cn } from "@/lib/utils";
 
-/** Lightweight spinner — no external icon dep. Inherits the current text color. */
+/** Lightweight spinner: no external icon dep. Inherits the current text color. */
 export function Spinner({ className, ...props }: SVGAttributes<SVGSVGElement>) {
   return (
     <svg

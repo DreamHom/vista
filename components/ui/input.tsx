@@ -25,7 +25,7 @@ const inputVariants = cva(
 
 export interface InputProps
   extends Omit<InputHTMLAttributes<HTMLInputElement>, "size">, VariantProps<typeof inputVariants> {
-  /** Convenience flag — adds the invalid border + ring without extra classes. */
+  /** Convenience flag: adds the invalid border + ring without extra classes. */
   invalid?: boolean;
 }
 

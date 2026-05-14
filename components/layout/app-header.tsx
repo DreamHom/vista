@@ -2,23 +2,15 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LogOut } from "lucide-react";
-import { useAuth } from "@/lib/use-auth";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { WorkspaceAccountMenu } from "@/components/layout/workspace-account-menu";
 import { toast } from "@/components/ui/toast";
-
-const ROLE_BADGE_VARIANT = {
-  OWNER: "default",
-  AGENT: "success",
-  APPLICANT: "secondary",
-  ADMIN: "warning",
-} as const;
+import { ACCOUNT_MENU_GLOBAL_EXTRAS, accountSubtitleForRole, getAccountMenuItemsForRole } from "@/lib/account-menu-by-role";
+import { getDefaultDashboardPath } from "@/lib/dashboard-routes";
+import { useAuth } from "@/lib/use-auth";
 
 /**
- * Top navigation for authenticated routes. Shows the user's name + role badge
- * and a logout button. Logout clears the auth store (which trips the route
- * guard's useEffect and redirects to /login).
+ * Top navigation for authenticated routes (legacy / optional shell).
+ * Prefer role shells; this header mirrors the account dropdown pattern.
  */
 export function AppHeader() {
   const router = useRouter();
@@ -30,28 +22,28 @@ export function AppHeader() {
     router.replace("/login");
   }
 
+  const homeHref = role ? getDefaultDashboardPath(role) : "/dashboard";
+
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur">
       <div className="container flex h-16 items-center justify-between gap-4">
-        <Link
-          href="/dashboard"
-          className="flex items-center gap-2 text-lg font-semibold tracking-tight"
-        >
+        <Link href={homeHref} className="flex items-center gap-2 text-lg font-semibold tracking-tight">
           DreamHomes
         </Link>
 
         <nav className="flex items-center gap-3">
-          {user && role && (
-            <div className="hidden flex-col items-end leading-tight sm:flex">
-              <span className="text-sm font-medium text-foreground">{user.fullName}</span>
-              <Badge variant={ROLE_BADGE_VARIANT[role]} className="text-[10px]">
-                {role}
-              </Badge>
-            </div>
-          )}
-          <Button variant="ghost" size="icon" onClick={handleLogout} aria-label="Sign out">
-            <LogOut className="h-4 w-4" />
-          </Button>
+          {user && role ? (
+            <WorkspaceAccountMenu
+              fullName={user.fullName}
+              email={user.email}
+              accountSubtitle={accountSubtitleForRole(role)}
+              menuItems={getAccountMenuItemsForRole(role)}
+              extraLinks={ACCOUNT_MENU_GLOBAL_EXTRAS}
+              onSignOut={handleLogout}
+              triggerVariant="desktop"
+              avatarVariant="initials"
+            />
+          ) : null}
         </nav>
       </div>
     </header>

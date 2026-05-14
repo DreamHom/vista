@@ -8,9 +8,9 @@ import { ApiError } from "@/lib/api";
 /**
  * TanStack Query provider with sensible defaults for DreamHomes.
  *
- *  - Don't retry on 4xx (the request was bad — retrying won't help).
+ *  - Don't retry on 4xx (the request was bad: retrying won't help).
  *  - One retry on 5xx / network errors.
- *  - Stale time of 30s — cuts noisy refetches without hiding real updates.
+ *  - Stale time of 30s: cuts noisy refetches without hiding real updates.
  */
 export function QueryProvider({ children }: { children: ReactNode }) {
   const [client] = useState(
