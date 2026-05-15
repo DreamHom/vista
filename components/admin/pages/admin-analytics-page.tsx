@@ -84,7 +84,7 @@ export function AdminAnalyticsPage() {
 
         <SectionCard title="Property hotspots" description="Aggregates from the same live listing sample used for discovery (grouped by address tail).">
           {hotspots.length === 0 ? (
-            <EmptyPanel title="No hotspot data" body="The listing index returned no rows — check Haven connectivity or inventory." />
+            <EmptyPanel title="No hotspot data" body="The listing index returned no rows; check Haven connectivity or inventory." />
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
               {hotspots.map((spot) => (

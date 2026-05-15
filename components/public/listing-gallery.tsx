@@ -371,7 +371,7 @@ export function ListingGallery({
                   role="presentation"
                 >
                   <p id={dialogLabelId} className="sr-only">
-                    {title} — photo {index + 1} of {n}
+                    {title}, photo {index + 1} of {n}
                   </p>
 
                   <div className="relative flex min-h-0 w-full max-w-4xl flex-1 touch-manipulation select-none flex-col justify-center">
@@ -413,7 +413,7 @@ export function ListingGallery({
                         >
                           <PhotoWithStatus
                             photo={photo}
-                            alt={photo.alt || `${title} — photo ${i + 1} of ${n}`}
+                            alt={photo.alt || `${title}, photo ${i + 1} of ${n}`}
                             className="relative flex max-h-full max-w-full items-center justify-center bg-transparent"
                             imgClassName="h-auto w-auto max-h-full max-w-full object-contain object-center"
                             sizes="(max-width: 768px) 100vw, 1024px"
@@ -581,7 +581,7 @@ export function ListingGallery({
                 >
                   <PhotoWithStatus
                     photo={photo}
-                    alt={photo.alt ? `${photo.alt} (preview)` : `${title} — preview ${photoIdx + 1}`}
+                    alt={photo.alt ? `${photo.alt} (preview)` : `${title}, preview ${photoIdx + 1}`}
                     variant="thumb"
                     className="h-full w-full"
                     imgClassName="h-full w-full object-cover"

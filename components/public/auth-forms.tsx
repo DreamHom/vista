@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { motion } from "motion/react";
 import { ApiError, api } from "@/lib/api";
+import { apiErrorMessage } from "@/lib/api-error-message";
 import { loadSessionUserWithAvatar } from "@/lib/auth-hydrate-user";
 import { useAuthStore } from "@/lib/auth-store";
 import type {
@@ -230,11 +231,9 @@ export function SignupForm({
       setSuccess(response);
       toast.success("Welcome to DreamHomes!");
     } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError("We could not submit your registration right now.");
-      }
+      const message = apiErrorMessage(err, "We could not submit your registration right now.");
+      setError(message);
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }
@@ -492,11 +491,9 @@ export function LoginForm({ next }: { next?: string }) {
       toast.success("Signed in successfully.");
       router.push(next ?? getDefaultDashboardPath(response.role));
     } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError("We could not log you in right now.");
-      }
+      const message = apiErrorMessage(err, "We could not log you in right now.");
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -597,11 +594,9 @@ export function ForgotPasswordForm() {
       }
       setSent(true);
     } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError("We could not start a reset right now. Try again shortly.");
-      }
+      const message = apiErrorMessage(err, "We could not start a reset right now. Try again shortly.");
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -671,11 +666,9 @@ export function ResetPasswordForm() {
       toast.success("Password updated. You can sign in with the new password.");
       setSubmitted(true);
     } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError("We could not reset your password. The link may have expired.");
-      }
+      const message = apiErrorMessage(err, "We could not reset your password. The link may have expired.");
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }

@@ -1,7 +1,6 @@
 "use client";
 
 import Image from "next/image";
-import { ClipboardList, Receipt, ShieldCheck } from "lucide-react";
 import { LISTINGS } from "@/lib/seed/listings";
 import { photoUrl } from "@/lib/seed/photos";
 import { useTranslations } from "@/lib/i18n/provider";
@@ -9,11 +8,6 @@ import { NumberedStep } from "./numbered-step";
 
 const NUMBERS = ["01", "02", "03"] as const;
 
-const SERVICE_VISUALS = [
-  <ShieldCheck key="svc-1" aria-hidden />,
-  <Receipt key="svc-2" aria-hidden />,
-  <ClipboardList key="svc-3" aria-hidden />,
-] as const;
 // Keep the left strip tight and editorial: 3 stacked frames that share the
 // same composed height as the main image beside them.
 const COLLAGE_LISTINGS = [LISTINGS[2], LISTINGS[3], LISTINGS[4]];
@@ -84,17 +78,18 @@ export function Services() {
             <h3 className="text-lg font-medium tracking-tight text-foreground">
               {t.services.servicesLabel}
             </h3>
-            <div className="flex flex-col gap-10">
+            <ul className="flex flex-col divide-y divide-border">
               {items.map((service, i) => (
-                <NumberedStep
-                  key={NUMBERS[i]}
-                  number={NUMBERS[i]}
-                  title={service.title}
-                  body={service.body}
-                  visual={SERVICE_VISUALS[i]}
-                />
+                <li key={NUMBERS[i]} className="py-8 first:pt-0 last:pb-0">
+                  <NumberedStep
+                    number={NUMBERS[i]}
+                    title={service.title}
+                    body={service.body}
+                    density="list"
+                  />
+                </li>
               ))}
-            </div>
+            </ul>
           </div>
         </div>
       </div>

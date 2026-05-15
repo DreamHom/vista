@@ -4,7 +4,8 @@ import type { FormEvent } from "react";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, IdCard, Lock, Mail, Phone, Sparkles, User } from "lucide-react";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorMessage } from "@/lib/api-error-message";
 import type { PublicRole, RegisterAcceptedResponse, RegisterRequest } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -71,11 +72,9 @@ export function SignupForm({
       setSuccess(response);
       toast.success("Welcome to DreamHomes!");
     } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError("We could not submit your registration right now.");
-      }
+      const message = apiErrorMessage(err, "We could not submit your registration right now.");
+      setError(message);
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }

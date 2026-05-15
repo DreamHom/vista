@@ -123,7 +123,7 @@ function renderObjectEntries(data: Record<string, unknown>, depth: number): Reac
           if (!refStr) {
             return (
               <div key={key} className="rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">
-                <span className="font-mono text-xs">{key}</span> — missing <code className="text-xs">ref</code>
+                <span className="font-mono text-xs">{key}</span>: missing <code className="text-xs">ref</code>
               </div>
             );
           }

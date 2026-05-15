@@ -108,7 +108,7 @@ export function ListingsPreview({
         <div className="mt-8">
           <PublicApiNotice>
             We couldn&apos;t reach the listings service right now, so this section is empty. Try again shortly or open
-            the full directory — your filters still work from there.
+            the full directory; your filters still work from there.
           </PublicApiNotice>
         </div>
       ) : null}
@@ -120,7 +120,7 @@ export function ListingsPreview({
           ))}
         </div>
       ) : !backendUnavailable ? (
-        <p className="mt-12 text-sm text-muted-foreground">No published listings yet — check back soon.</p>
+        <p className="mt-12 text-sm text-muted-foreground">No published listings yet; check back soon.</p>
       ) : null}
     </section>
   );

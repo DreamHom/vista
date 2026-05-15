@@ -93,7 +93,7 @@ async function request<T>(method: Method, path: string, options: RequestOptions 
   }
 
   const finalHeaders = new Headers(headers);
-  finalHeaders.set("Accept", "application/json");
+  finalHeaders.set("Accept", "application/json, application/problem+json");
   // Server-side fetches: undici sends no default User-Agent when only Accept
   // is set, which Cloudflare's bot-fight in front of haven treats as a bot
   // and returns 403 (error 1010). Force a stable, identifiable UA so haven
