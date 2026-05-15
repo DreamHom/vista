@@ -16,10 +16,10 @@ import {
 import {
   CompactListingTile,
   PersonAvatar,
-  PrimaryCtaRow,
   RatingRow,
   VerificationBadge,
 } from "@/components/public/public-components";
+import { AgentProfileEngagementAside } from "@/components/public/agent-profile-engagement-aside";
 import { buttonVariants } from "@/components/ui/button";
 import { formatNaira } from "@/lib/format";
 import {
@@ -30,6 +30,7 @@ import {
   summarizeAgentListings,
 } from "@/lib/seed/public-data";
 import type { PublicAgent, PublicReview } from "@/lib/seed/public-data";
+import { truncateMetaDescription } from "@/lib/seo-metadata";
 import { cn } from "@/lib/utils";
 
 export async function generateMetadata({
@@ -39,11 +40,29 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { id } = await params;
   const agent = await getAgentById(id);
-  if (!agent) return {};
+  if (!agent) {
+    return { title: "Agent", robots: { index: false, follow: true } };
+  }
+
+  const description = truncateMetaDescription(
+    `DreamHomes profile for ${agent.name}: reviews, active listings, and how to get in touch.`,
+  );
 
   return {
     title: agent.name,
-    description: `DreamHomes profile for ${agent.name}: reviews, active listings, and how to get in touch.`,
+    description,
+    alternates: { canonical: `/agents/${id}` },
+    openGraph: {
+      title: agent.name,
+      description,
+      url: `/agents/${id}`,
+      type: "website",
+    },
+    twitter: {
+      card: "summary",
+      title: agent.name,
+      description,
+    },
   };
 }
 
@@ -182,7 +201,7 @@ export default async function AgentProfilePage({
             )}
           </section>
 
-          <section className="border border-border bg-card p-6">
+          <section id="agent-represented-listings" className="scroll-mt-24 border border-border bg-card p-6">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <h2 className="text-xl font-semibold tracking-tight text-foreground">Homes they represent</h2>
               <p className="text-sm text-muted-foreground">{listings.length} active on DreamHomes</p>
@@ -202,19 +221,7 @@ export default async function AgentProfilePage({
         </div>
 
         <aside className="min-w-0 space-y-6">
-          <section className="border border-border bg-card p-6">
-            <p className="text-xs font-medium uppercase tracking-eyebrow text-muted-foreground">Work with this agent</p>
-            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-              Create a free account to book a viewing, send a message, or make an offer. Everything stays in one place for you and the agent.
-            </p>
-            <div className="mt-6 min-w-0">
-              <PrimaryCtaRow
-                layout="stack"
-                scheduleHref={`/signup?next=/agents/${agent.id}`}
-                contactHref={`/signup?next=/agents/${agent.id}`}
-              />
-            </div>
-          </section>
+          <AgentProfileEngagementAside agentId={agent.id} agentName={agent.name} />
         </aside>
       </div>
     </div>

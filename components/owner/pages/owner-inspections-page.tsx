@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  CalendarPlus,
   FileUp,
   ImagePlus,
   MapPin,
@@ -49,6 +50,9 @@ import {
   removeListingComment,
   replyToListingComment,
   revokeAgentAssignment,
+  ownerApproveInspectionRequest,
+  ownerDeclineInspectionRequest,
+  ownerMarkInspectionNoShow,
   saveInspectionNote,
   saveInspectionStatus,
   saveOwnerNotificationPreferences,
@@ -88,13 +92,11 @@ import {
 } from "@/components/dashboard/utils";
 import {
   Dialog,
-  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -103,11 +105,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 
-import { NativeSelect, PrototypeNotice, FilterPills } from "./owner-page-primitives";
+import { NativeSelect, PrototypeNotice, FilterPills, FieldLabel } from "./owner-page-primitives";
 
 export function OwnerInspectionsPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const [slotDialogOpen, setSlotDialogOpen] = useState(false);
   const [tab, setTab] = useState("pending");
   const [listingId, setListingId] = useState("");
   const [startsAt, setStartsAt] = useState("");
@@ -136,8 +139,9 @@ export function OwnerInspectionsPage() {
     mutationFn: async () => createInspectionSlot(Number(listingId), { startsAt, endsAt }),
     onSuccess: async () => {
       toast.success("Inspection slot added.");
-      setStartsAt("");
-      setEndsAt("");
+      setSlotDialogOpen(false);
+      await queryClient.invalidateQueries({ queryKey: ["owner-inspections"] });
+      await queryClient.invalidateQueries({ queryKey: ["owner-listings"] });
       await queryClient.invalidateQueries({ queryKey: ["owner-property"] });
     },
     onError: () => toast.error("We couldn't create that inspection slot."),
@@ -152,9 +156,70 @@ export function OwnerInspectionsPage() {
 
   const items = inspectionsQuery.data!.filter((item) => item.localStatus === tab);
   const listings = listingsQuery.data!.items;
+  const slotWindowInvalid =
+    Boolean(startsAt && endsAt && new Date(endsAt).getTime() <= new Date(startsAt).getTime());
 
   return (
     <div className="space-y-6">
+      <Dialog
+        open={slotDialogOpen}
+        onOpenChange={(open) => {
+          setSlotDialogOpen(open);
+          if (!open) {
+            setListingId("");
+            setStartsAt("");
+            setEndsAt("");
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create inspection slot</DialogTitle>
+            <DialogDescription>
+              Pick one of your listings and the time window you want open for applicants. The slot appears on the public listing in upload order with your other slots.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="space-y-2">
+              <FieldLabel>Listing</FieldLabel>
+              <NativeSelect value={listingId} onChange={(event) => setListingId(event.target.value)}>
+                <option value="">Select a listing</option>
+                {listings.map((item) => (
+                  <option key={item.listing.id} value={String(item.listing.id)}>
+                    {item.listing.title ?? `Listing #${item.listing.id}`}
+                  </option>
+                ))}
+              </NativeSelect>
+            </div>
+            <div className="space-y-2">
+              <FieldLabel>Starts</FieldLabel>
+              <Input type="datetime-local" value={startsAt} onChange={(event) => setStartsAt(event.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <FieldLabel>Ends</FieldLabel>
+              <Input type="datetime-local" value={endsAt} onChange={(event) => setEndsAt(event.target.value)} />
+            </div>
+            {slotWindowInvalid ? (
+              <p className="text-sm text-destructive">End time must be after the start time.</p>
+            ) : null}
+          </div>
+          <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
+            <Button type="button" variant="outline" onClick={() => setSlotDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => slotMutation.mutate()}
+              disabled={
+                slotMutation.isPending || !listingId || !startsAt || !endsAt || slotWindowInvalid
+              }
+            >
+              {slotMutation.isPending ? "Creating…" : "Create slot"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <DashboardPageIntro
         eyebrow="Inspection operations"
         title="Inspections"
@@ -162,26 +227,24 @@ export function OwnerInspectionsPage() {
       />
 
       <PrototypeNotice
-        title="Owner-side inspection response actions are still prototype-only."
-        body="Haven v1.0.1 exposes slot creation and inspection-request notifications, but not dedicated owner approve/decline or no-show endpoints yet. Status changes and notes on this page are stored locally for now."
+        title="Inspection actions"
+        body="When Haven includes an inspection id on the request notification, Approve, Decline, and Mark no‑show call the server first, then mirror status here for your notes. Without that id, actions stay on-device until notifications carry the richer payload."
       />
 
-      <SectionCard title="Set available slots" description="Create new windows applicants can claim on a live listing.">
-        <div className="grid gap-4 md:grid-cols-4">
-          <NativeSelect value={listingId} onChange={(event) => setListingId(event.target.value)}>
-            <option value="">Select listing</option>
-            {listings.map((item) => (
-              <option key={item.listing.id} value={item.listing.id}>
-                {item.listing.title ?? `Listing #${item.listing.id}`}
-              </option>
-            ))}
-          </NativeSelect>
-          <Input type="datetime-local" value={startsAt} onChange={(event) => setStartsAt(event.target.value)} />
-          <Input type="datetime-local" value={endsAt} onChange={(event) => setEndsAt(event.target.value)} />
-          <Button onClick={() => slotMutation.mutate()} disabled={slotMutation.isPending || !listingId || !startsAt || !endsAt}>
-            {slotMutation.isPending ? "Saving..." : "Create slot"}
+      <SectionCard
+        title="Inspection slots"
+        description="Open bookable windows on your listings so applicants can request a visit without endless back-and-forth."
+        action={
+          <Button type="button" onClick={() => setSlotDialogOpen(true)} className="shrink-0 gap-2">
+            <CalendarPlus className="h-4 w-4" aria-hidden />
+            Create slot
           </Button>
-        </div>
+        }
+      >
+        <p className="text-sm text-muted-foreground">
+          Slots are created on Haven against the listing you choose. Use <span className="font-medium text-foreground">Create slot</span>{" "}
+          to open the form in a dialog.
+        </p>
       </SectionCard>
 
       <FilterPills
@@ -226,8 +289,17 @@ export function OwnerInspectionsPage() {
                 <div className="flex flex-wrap gap-3">
                   <Button
                     variant="outline"
-                    onClick={() => {
+                    onClick={async () => {
                       if (!user) return;
+                      if (item.inspectionId) {
+                        try {
+                          await ownerApproveInspectionRequest(item.inspectionId);
+                          toast.success("Inspection approved on Haven.");
+                        } catch {
+                          toast.error("Could not approve on the server.");
+                          return;
+                        }
+                      }
                       saveInspectionStatus(user.id, item.notification.id, "Confirmed");
                       void queryClient.invalidateQueries({ queryKey: ["owner-inspections", user.id] });
                     }}
@@ -236,8 +308,17 @@ export function OwnerInspectionsPage() {
                   </Button>
                   <Button
                     variant="outline"
-                    onClick={() => {
+                    onClick={async () => {
                       if (!user) return;
+                      if (item.inspectionId) {
+                        try {
+                          await ownerDeclineInspectionRequest(item.inspectionId);
+                          toast.success("Inspection declined on Haven.");
+                        } catch {
+                          toast.error("Could not decline on the server.");
+                          return;
+                        }
+                      }
                       saveInspectionStatus(user.id, item.notification.id, "Cancelled");
                       void queryClient.invalidateQueries({ queryKey: ["owner-inspections", user.id] });
                     }}
@@ -256,8 +337,17 @@ export function OwnerInspectionsPage() {
                   </Button>
                   <Button
                     variant="outline"
-                    onClick={() => {
+                    onClick={async () => {
                       if (!user) return;
+                      if (item.inspectionId) {
+                        try {
+                          await ownerMarkInspectionNoShow(item.inspectionId);
+                          toast.success("Marked as no-show on Haven.");
+                        } catch {
+                          toast.error("Could not record no-show on the server.");
+                          return;
+                        }
+                      }
                       saveInspectionStatus(user.id, item.notification.id, "Cancelled");
                       void queryClient.invalidateQueries({ queryKey: ["owner-inspections", user.id] });
                     }}
@@ -270,12 +360,18 @@ export function OwnerInspectionsPage() {
           ))}
         </div>
       ) : (
-        <EmptyPanel
-          title="No inspection activity in this tab"
-          body="As Haven emits inspection-request notifications, they'll land here together with your locally-tracked owner actions."
-          ctaLabel="Create a slot"
-          ctaHref="/owner/inspections"
-        />
+        <div className="space-y-6">
+          <EmptyPanel
+            title="No inspection activity in this tab"
+            body="As Haven emits inspection-request notifications, they'll land here together with your locally-tracked owner actions."
+          />
+          <div className="flex justify-center">
+            <Button type="button" onClick={() => setSlotDialogOpen(true)} className="gap-2">
+              <CalendarPlus className="h-4 w-4" aria-hidden />
+              Create inspection slot
+            </Button>
+          </div>
+        </div>
       )}
     </div>
   );

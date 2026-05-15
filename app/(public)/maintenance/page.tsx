@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "Maintenance",
   description: "DreamHomes maintenance status page.",
+  robots: { index: false, follow: false },
 };
 
 export default function MaintenancePage() {

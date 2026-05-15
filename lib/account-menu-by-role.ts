@@ -28,6 +28,22 @@ import {
 import type { AccountMenuItem } from "@/components/layout/workspace-account-menu";
 import type { Role } from "@/lib/types";
 
+/** In-app notifications hub per role; admin has no dedicated notifications route in this UI. */
+export function notificationHubHref(role: Role): string | null {
+  switch (role) {
+    case "APPLICANT":
+      return "/dashboard/notifications";
+    case "OWNER":
+      return "/owner/notifications";
+    case "AGENT":
+      return "/agent/notifications";
+    case "ADMIN":
+      return null;
+    default:
+      return null;
+  }
+}
+
 /** Shown under role routes in account dropdowns (browse + Dream AI). */
 export const ACCOUNT_MENU_GLOBAL_EXTRAS: AccountMenuItem[] = [
   { href: "/listings", label: "Browse listings", icon: ShieldCheck },

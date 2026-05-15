@@ -16,6 +16,12 @@ import { getCompareListings, getSuggestedCompareListings, type PublicListing } f
 export const metadata: Metadata = {
   title: "Compare Listings",
   description: "Compare up to three DreamHomes listings side by side before you decide which inspection to book.",
+  alternates: { canonical: "/compare" },
+  openGraph: {
+    title: "Compare listings · DreamHomes",
+    description: "Compare up to three DreamHomes listings side by side before you decide which inspection to book.",
+    url: "/compare",
+  },
 };
 
 interface CompareSearchParams {

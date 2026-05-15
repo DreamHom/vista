@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 import { nameAvatarPastelClassName } from "@/lib/name-avatar-seed";
 import { cn } from "@/lib/utils";
 
@@ -8,13 +9,29 @@ function initials(name: string) {
 
 export function PersonAvatar({
   name,
+  photoUrl,
   size = 56,
   className,
 }: {
   name: string;
+  /** Optional public profile image URL from the API. */
+  photoUrl?: string | null;
   size?: number;
   className?: string;
 }) {
+  const src = photoUrl?.trim();
+
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt=""
+        className={cn("rounded-full object-cover", className)}
+        style={{ height: size, width: size }}
+      />
+    );
+  }
+
   return (
     <div
       className={cn(

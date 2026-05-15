@@ -1,9 +1,18 @@
 "use client";
 
+import { BadgeCheck, CalendarDays, MessagesSquare, Search } from "lucide-react";
 import { useTranslations } from "@/lib/i18n/provider";
 import { NumberedStep } from "./numbered-step";
 
 const NUMBERS = ["01", "02", "03", "04"] as const;
+
+/** One icon per step; rendered inside the shared square frame in {@link NumberedStep}. */
+const STEP_VISUALS = [
+  <Search key="vp-1" aria-hidden />,
+  <MessagesSquare key="vp-2" aria-hidden />,
+  <CalendarDays key="vp-3" aria-hidden />,
+  <BadgeCheck key="vp-4" aria-hidden />,
+] as const;
 
 /**
  * Section 03: Four-step value proposition.
@@ -31,19 +40,19 @@ export function ValueProposition() {
       <div className="mx-2 grid grid-cols-1 border border-border sm:grid-cols-2 sm:grid-flow-col sm:grid-rows-2">
         {/* 01: top-left */}
         <div className="border-b border-border px-6 py-10 sm:border-r sm:px-10 sm:py-14 lg:px-14 lg:py-16">
-          <NumberedStep number={NUMBERS[0]} title={s1.title} body={s1.body} />
+          <NumberedStep number={NUMBERS[0]} title={s1.title} body={s1.body} visual={STEP_VISUALS[0]} />
         </div>
         {/* 02: bottom-left */}
         <div className="border-b border-border px-6 py-10 sm:border-b-0 sm:border-r sm:px-10 sm:py-14 lg:px-14 lg:py-16">
-          <NumberedStep number={NUMBERS[1]} title={s2.title} body={s2.body} />
+          <NumberedStep number={NUMBERS[1]} title={s2.title} body={s2.body} visual={STEP_VISUALS[1]} />
         </div>
         {/* 03: top-right */}
         <div className="border-b border-border px-6 py-10 sm:px-10 sm:py-14 lg:px-14 lg:py-16">
-          <NumberedStep number={NUMBERS[2]} title={s3.title} body={s3.body} />
+          <NumberedStep number={NUMBERS[2]} title={s3.title} body={s3.body} visual={STEP_VISUALS[2]} />
         </div>
         {/* 04: bottom-right (no borders, the outer container closes the grid) */}
         <div className="px-6 py-10 sm:px-10 sm:py-14 lg:px-14 lg:py-16">
-          <NumberedStep number={NUMBERS[3]} title={s4.title} body={s4.body} />
+          <NumberedStep number={NUMBERS[3]} title={s4.title} body={s4.body} visual={STEP_VISUALS[3]} />
         </div>
       </div>
     </section>

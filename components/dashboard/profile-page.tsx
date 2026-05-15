@@ -14,10 +14,9 @@ import {
 } from "@/components/dashboard/applicant-ui";
 import {
   getApplicantProfileData,
-  readApplicantProfileDraft,
-  saveApplicantProfileDraft,
   submitApplicantVerification,
   updateMyProfileBasics,
+  uploadMyAvatar,
 } from "@/lib/applicant-dashboard";
 import { useAuth } from "@/lib/use-auth";
 import { Button } from "@/components/ui/button";
@@ -26,7 +25,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { nameAvatarPastelClassName } from "@/lib/name-avatar-seed";
 import { cn } from "@/lib/utils";
-import { formatDate, firstName } from "@/components/dashboard/utils";
+import { formatDate, formatDateTime, firstName } from "@/components/dashboard/utils";
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).slice(0, 2);
@@ -39,7 +38,6 @@ export function ApplicantProfilePage() {
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [bio, setBio] = useState("");
-  const [profilePhotoDataUrl, setProfilePhotoDataUrl] = useState<string | null>(null);
   const [verificationFile, setVerificationFile] = useState<File | null>(null);
   const [initialized, setInitialized] = useState(false);
 
@@ -54,11 +52,10 @@ export function ApplicantProfilePage() {
       return;
     }
 
-    const localDraft = readApplicantProfileDraft(user.id);
-    setFullName(profileQuery.data.privateProfile.fullName);
-    setPhone(profileQuery.data.privateProfile.phone ?? "");
-    setBio(localDraft.bio);
-    setProfilePhotoDataUrl(localDraft.profilePhotoDataUrl);
+    const { privateProfile } = profileQuery.data;
+    setFullName(privateProfile.fullName);
+    setPhone(privateProfile.phone ?? "");
+    setBio(privateProfile.publicBio ?? "");
     setInitialized(true);
   }, [initialized, profileQuery.data, user?.id]);
 
@@ -68,21 +65,39 @@ export function ApplicantProfilePage() {
         fullName,
         phone,
         displayName: firstName(fullName),
+        publicBio: bio,
       }),
     onSuccess: (result) => {
       if (!user?.id) return;
-      saveApplicantProfileDraft(user.id, { bio, profilePhotoDataUrl });
       setUser({
         id: result.userId,
         email: result.email ?? user.email,
         fullName: result.fullName,
         role: result.role,
       });
-      toast.success("Profile details updated.");
+      toast.success("Profile updated.");
       void queryClient.invalidateQueries({ queryKey: ["applicant-profile", user.id] });
     },
     onError: (error) => {
       toast.error(error instanceof Error ? error.message : "We couldn't update your profile.");
+    },
+  });
+
+  const avatarMutation = useMutation({
+    mutationFn: (file: File) => uploadMyAvatar(file),
+    onSuccess: (result) => {
+      if (!user?.id) return;
+      setUser({
+        id: result.userId,
+        email: result.email ?? user?.email,
+        fullName: result.fullName,
+        role: result.role,
+      });
+      toast.success("Profile photo updated.");
+      void queryClient.invalidateQueries({ queryKey: ["applicant-profile", user.id] });
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "We couldn't upload that photo.");
     },
   });
 
@@ -108,12 +123,8 @@ export function ApplicantProfilePage() {
   function handlePhotoUpload(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      setProfilePhotoDataUrl(typeof reader.result === "string" ? reader.result : null);
-    };
-    reader.readAsDataURL(file);
+    avatarMutation.mutate(file);
+    event.target.value = "";
   }
 
   if (profileQuery.isLoading) {
@@ -139,6 +150,13 @@ export function ApplicantProfilePage() {
     ? "approved"
     : data.latestIdentityVerification?.status.toLowerCase() ?? "not-submitted";
 
+  const identityVerificationPending = verificationStatus === "pending";
+
+  const photoUrl =
+    data.privateProfile.profileImageUrl?.trim() ||
+    data.publicProfile.profileImageUrl?.trim() ||
+    null;
+
   return (
     <div className="space-y-6">
       <DashboardPageIntro
@@ -151,12 +169,8 @@ export function ApplicantProfilePage() {
         <SectionCard title="Public profile preview" description="How your account appears to owners and agents today.">
           <div className="space-y-5">
             <div className="flex items-center gap-4">
-              {profilePhotoDataUrl ? (
-                <img
-                  src={profilePhotoDataUrl}
-                  alt={fullName || "Applicant profile"}
-                  className="h-20 w-20 rounded-full object-cover"
-                />
+              {photoUrl ? (
+                <img src={photoUrl} alt={fullName || "Applicant profile"} className="h-20 w-20 rounded-full object-cover" />
               ) : (
                 <div
                   className={cn(
@@ -212,7 +226,7 @@ export function ApplicantProfilePage() {
           </div>
         </SectionCard>
 
-        <SectionCard title="Edit profile" description="Update your visible details and local prototype-only extras.">
+        <SectionCard title="Edit profile" description="Name, phone, bio, and photo are saved to your DreamHomes account.">
           <form
             className="space-y-4"
             onSubmit={(event) => {
@@ -241,19 +255,25 @@ export function ApplicantProfilePage() {
               />
             </label>
 
-            <label className="space-y-2 text-sm text-muted-foreground">
-              Profile photo
+            <div className="space-y-2 text-sm text-muted-foreground">
+              <span>Profile photo</span>
               <div className="flex flex-col gap-3 rounded-2xl border border-border px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-sm leading-7 text-muted-foreground">
-                  Haven doesn’t expose applicant photo fields yet, so this image is stored locally on this device for the prototype.
+                <p className="text-sm leading-relaxed text-muted-foreground">
+                  JPG or PNG recommended. Upload replaces your current public headshot.
                 </p>
-                <label className="inline-flex cursor-pointer items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">
                   <Camera className="h-4 w-4" aria-hidden />
-                  Upload photo
-                  <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
+                  {avatarMutation.isPending ? "Uploading…" : "Upload photo"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    disabled={avatarMutation.isPending}
+                    onChange={handlePhotoUpload}
+                  />
                 </label>
               </div>
-            </label>
+            </div>
 
             <Button type="submit" disabled={saveProfileMutation.isPending}>
               Save profile changes
@@ -263,7 +283,14 @@ export function ApplicantProfilePage() {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
-        <SectionCard title="Verification" description="Track your badge state and submit ID when you’re ready.">
+        <SectionCard
+          title="Verification"
+          description={
+            identityVerificationPending
+              ? "Your ID submission is being reviewed by trust operations."
+              : "Track your badge state and submit ID when you're ready."
+          }
+        >
           <div className="space-y-4">
             <div className="rounded-2xl border border-border px-4 py-4">
               <div className="flex items-center justify-between gap-4">
@@ -286,22 +313,36 @@ export function ApplicantProfilePage() {
               </div>
             </div>
 
-            <label className="space-y-2 text-sm text-muted-foreground">
-              Upload ID
-              <Input
-                type="file"
-                accept=".jpg,.jpeg,.png,.pdf"
-                onChange={(event) => setVerificationFile(event.target.files?.[0] ?? null)}
-              />
-            </label>
+            {identityVerificationPending && data.latestIdentityVerification ? (
+              <div className="rounded-2xl border border-amber-500/25 bg-amber-500/5 p-4">
+                <p className="text-sm font-semibold text-foreground">Under review</p>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  Review usually takes up to three business days. When there is a decision, your status will update here and you will get a response through your notifications.
+                </p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Submitted {formatDateTime(data.latestIdentityVerification.submittedAt)}.
+                </p>
+              </div>
+            ) : (
+              <>
+                <label className="space-y-2 text-sm text-muted-foreground">
+                  Upload ID
+                  <Input
+                    type="file"
+                    accept=".jpg,.jpeg,.png,.pdf"
+                    onChange={(event) => setVerificationFile(event.target.files?.[0] ?? null)}
+                  />
+                </label>
 
-            <Button
-              onClick={() => verificationMutation.mutate()}
-              disabled={verificationMutation.isPending || verificationStatus === "approved"}
-            >
-              <ShieldCheck className="h-4 w-4" aria-hidden />
-              Submit ID for verification
-            </Button>
+                <Button
+                  onClick={() => verificationMutation.mutate()}
+                  disabled={verificationMutation.isPending || verificationStatus === "approved"}
+                >
+                  <ShieldCheck className="h-4 w-4" aria-hidden />
+                  Submit ID for verification
+                </Button>
+              </>
+            )}
 
             {data.latestIdentityVerification?.decidedAt ? (
               <p className="text-sm text-muted-foreground">

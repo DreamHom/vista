@@ -1,56 +1,20 @@
 "use client";
 
-/* eslint-disable @next/next/no-img-element */
-
-import Link from "next/link";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, ExternalLink, Flag, Sparkles } from "lucide-react";
 import {
-  appendAgentOwnerMessage,
-  acceptAgentAssignment,
   changeAgentPassword,
-  declineAgentAssignment,
   DEFAULT_AGENT_NOTIFICATION_PREFERENCES,
-  DEFAULT_AGENT_PROFILE_DRAFT,
-  getAgentDashboardOverview,
-  getAgentListingWorkspace,
   getAgentProfileWorkspace,
-  listAgentInspections,
-  listAgentLeads,
-  listAgentManagedListings,
-  listAgentNotifications,
-  listAgentOffers,
-  listAgentOwnerRelationships,
   readAgentNotificationPreferences,
-  readAgentProfileDraft,
-  readAgentPromotions,
-  saveAgentInspectionDecision,
-  saveAgentLeadState,
   saveAgentNotificationPreferences,
-  saveAgentOfferState,
-  saveAgentProfileDraft,
-  saveAgentPromotions,
   updateAgentProfile,
-  type AgentInspectionDecision,
-  type AgentNotificationFilter,
-  type AgentPromotionRecord,
-  type PipelineStage,
+  type AgentNotificationPreferences,
 } from "@/lib/agent-dashboard";
-import { markAllNotificationsRead, markNotificationRead } from "@/lib/applicant-dashboard";
+import { deleteMyAccount, updateMyProfileBasics } from "@/lib/applicant-dashboard";
 import { useAuth } from "@/lib/use-auth";
-import { formatNaira } from "@/lib/format";
-import {
-  DashboardPageIntro,
-  EmptyPanel,
-  ErrorPanel,
-  LoadingPanel,
-  MetricCard,
-  SectionCard,
-  SettingsToggle,
-  StatusBadge,
-} from "@/components/dashboard/applicant-ui";
-import { firstName, formatDate, formatDateTime, getGreeting } from "@/components/dashboard/utils";
+import { DashboardPageIntro, ErrorPanel, LoadingPanel, SectionCard, SettingsToggle } from "@/components/dashboard/applicant-ui";
 import {
   Dialog,
   DialogClose,
@@ -62,28 +26,59 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
-import { cn } from "@/lib/utils";
 
 import { FieldLabel } from "./agent-page-primitives";
 
 export function AgentSettingsPage() {
   const { user, clear, setUser } = useAuth();
-  const userId = user?.id ?? 0;
+  const router = useRouter();
   const queryClient = useQueryClient();
+  const userId = user?.id ?? 0;
+
   const profileQuery = useQuery({
     queryKey: ["agent-profile-workspace", userId],
     queryFn: () => getAgentProfileWorkspace(userId),
     enabled: userId > 0,
   });
-  const [preferences, setPreferences] = useState(() => readAgentNotificationPreferences(userId) ?? DEFAULT_AGENT_NOTIFICATION_PREFERENCES);
+
+  const [preferences, setPreferences] = useState<AgentNotificationPreferences>(DEFAULT_AGENT_NOTIFICATION_PREFERENCES);
+  const [prefsReady, setPrefsReady] = useState(false);
   const [email, setEmail] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+
+  useEffect(() => {
+    if (profileQuery.data) {
+      setEmail(profileQuery.data.privateProfile.email ?? "");
+    }
+  }, [profileQuery.data]);
+
+  useEffect(() => {
+    if (!userId || !profileQuery.data || prefsReady) return;
+    const raw = profileQuery.data.privateProfile.notificationPreferences;
+    if (typeof raw === "string" && raw.trim()) {
+      try {
+        const parsed = JSON.parse(raw) as Partial<AgentNotificationPreferences>;
+        setPreferences({ ...DEFAULT_AGENT_NOTIFICATION_PREFERENCES, ...parsed });
+      } catch {
+        setPreferences(readAgentNotificationPreferences(userId));
+      }
+    } else {
+      setPreferences(readAgentNotificationPreferences(userId));
+    }
+    setPrefsReady(true);
+  }, [prefsReady, profileQuery.data, userId]);
+
+  const prefsMutation = useMutation({
+    mutationFn: (next: AgentNotificationPreferences) =>
+      updateMyProfileBasics({ notificationPreferences: JSON.stringify(next) }),
+    onError: () => {
+      toast.error("Could not sync preferences to the server. They are still saved in this browser.");
+    },
+  });
 
   const emailMutation = useMutation({
     mutationFn: (nextEmail: string) => updateAgentProfile({ email: nextEmail }),
@@ -109,6 +104,18 @@ export function AgentSettingsPage() {
       setConfirmPassword("");
     },
     onError: () => toast.error("We couldn't update your password."),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteMyAccount(),
+    onSuccess: async () => {
+      toast.success("Account closed.");
+      clear();
+      router.replace("/login");
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "We could not close your account.");
+    },
   });
 
   if (profileQuery.isLoading) return <LoadingPanel label="Loading settings..." />;
@@ -137,7 +144,7 @@ export function AgentSettingsPage() {
               {emailMutation.isPending ? "Updating..." : "Change email"}
             </Button>
 
-            <div className="grid gap-4 pt-4">
+            <div className="grid gap-4 border-t border-border pt-4">
               <div className="space-y-2">
                 <FieldLabel>Current password</FieldLabel>
                 <Input type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} />
@@ -167,87 +174,111 @@ export function AgentSettingsPage() {
           </div>
         </SectionCard>
 
-        <SectionCard title="Notification preferences" description="Stored locally until Haven exposes per-agent notification controls.">
+        <SectionCard
+          title="Notification preferences"
+          description="Saved to your DreamHomes account. We also keep a copy in this browser if the network request fails."
+        >
           <div className="divide-y divide-border overflow-hidden rounded-md border border-border bg-muted/15 px-4 py-1 sm:px-5 sm:py-1.5">
             <SettingsToggle
               title="Inspection requests"
               description="Get nudged when new inspection activity lands on your managed listings."
               checked={preferences.inspectionRequests}
-              onCheckedChange={(next) => setPreferences((current) => ({ ...current, inspectionRequests: next }))}
+              onCheckedChange={(next) => {
+                const updated = { ...preferences, inspectionRequests: next };
+                setPreferences(updated);
+                if (userId) saveAgentNotificationPreferences(userId, updated);
+                prefsMutation.mutate(updated);
+              }}
             />
             <SettingsToggle
               title="Offer activity"
               description="Receive alerts when offer threads move."
               checked={preferences.offerActivity}
-              onCheckedChange={(next) => setPreferences((current) => ({ ...current, offerActivity: next }))}
+              onCheckedChange={(next) => {
+                const updated = { ...preferences, offerActivity: next };
+                setPreferences(updated);
+                if (userId) saveAgentNotificationPreferences(userId, updated);
+                prefsMutation.mutate(updated);
+              }}
             />
             <SettingsToggle
               title="Owner activity"
               description="Track assignment handshakes and owner-related workflow updates."
               checked={preferences.ownerActivity}
-              onCheckedChange={(next) => setPreferences((current) => ({ ...current, ownerActivity: next }))}
+              onCheckedChange={(next) => {
+                const updated = { ...preferences, ownerActivity: next };
+                setPreferences(updated);
+                if (userId) saveAgentNotificationPreferences(userId, updated);
+                prefsMutation.mutate(updated);
+              }}
             />
             <SettingsToggle
               title="Verification updates"
               description="Keep credential approval and request outcomes visible."
               checked={preferences.verificationUpdates}
-              onCheckedChange={(next) => setPreferences((current) => ({ ...current, verificationUpdates: next }))}
+              onCheckedChange={(next) => {
+                const updated = { ...preferences, verificationUpdates: next };
+                setPreferences(updated);
+                if (userId) saveAgentNotificationPreferences(userId, updated);
+                prefsMutation.mutate(updated);
+              }}
             />
             <SettingsToggle
               title="Email notifications"
-              description="Stage email delivery preferences."
+              description="Mirror important events to your inbox when enabled."
               checked={preferences.email}
-              onCheckedChange={(next) => setPreferences((current) => ({ ...current, email: next }))}
+              onCheckedChange={(next) => {
+                const updated = { ...preferences, email: next };
+                setPreferences(updated);
+                if (userId) saveAgentNotificationPreferences(userId, updated);
+                prefsMutation.mutate(updated);
+              }}
             />
             <SettingsToggle
               title="In-app notifications"
               description="Keep in-product alerts active."
               checked={preferences.inApp}
-              onCheckedChange={(next) => setPreferences((current) => ({ ...current, inApp: next }))}
+              onCheckedChange={(next) => {
+                const updated = { ...preferences, inApp: next };
+                setPreferences(updated);
+                if (userId) saveAgentNotificationPreferences(userId, updated);
+                prefsMutation.mutate(updated);
+              }}
             />
           </div>
-          <div className="mt-3 flex justify-end">
-              <Button
-                onClick={() => {
-                  saveAgentNotificationPreferences(userId, preferences);
-                  toast.success("Notification preferences saved locally.");
-                }}
-              >
-                Save preferences
-              </Button>
-            </div>
         </SectionCard>
       </div>
 
-      <SectionCard title="Delete account" description="This is a destructive action and requires confirmation.">
-        <Dialog>
-          <DialogTrigger asChild>
-            <Button variant="outline">Delete account</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Delete this agent account?</DialogTitle>
-              <DialogDescription>
-                Account deletion is not exposed in Haven yet. This confirmation keeps the destructive flow visible for the final product.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <DialogClose asChild>
-                <Button variant="outline">Cancel</Button>
-              </DialogClose>
-              <DialogClose asChild>
-                <Button
-                  onClick={() => {
-                    toast.error("Delete account is waiting on backend support.");
-                    clear();
-                  }}
-                >
-                  Confirm delete
+      <SectionCard
+        title="Delete account"
+        description="Soft-delete on DreamHomes: your session ends immediately and your email can be reused after anonymisation."
+      >
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="max-w-2xl text-sm leading-7 text-muted-foreground">
+            This closes your agent account on the server. You will be signed out immediately after it succeeds.
+          </p>
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="destructive">Delete account</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Delete your DreamHomes account?</DialogTitle>
+                <DialogDescription>
+                  This uses the account closure API. You will be signed out immediately after it succeeds.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <DialogClose asChild>
+                  <Button variant="outline">Keep account</Button>
+                </DialogClose>
+                <Button variant="destructive" disabled={deleteMutation.isPending} onClick={() => deleteMutation.mutate()}>
+                  {deleteMutation.isPending ? "Closing…" : "Confirm delete"}
                 </Button>
-              </DialogClose>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </SectionCard>
     </div>
   );

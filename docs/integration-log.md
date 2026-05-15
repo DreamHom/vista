@@ -11,7 +11,7 @@ Each Haven change that Vista should consume gets a **changelog** row and an upda
 | --- | --- | --- |
 | **Runtime OpenAPI** | `GET /v3/api-docs` on the Haven deployment | springdoc; paths in the document are **relative to `/api`** (see `OpenApiConfig` — server URL includes `/api`). |
 | **Interactive docs** | `GET /scalar.html` | Same contract as `/v3/api-docs`. |
-| **Bundled YAML in Vista** | `vista/docs/haven-api-docs-1.0.1.yaml` (per Vista doc) | Regenerate or hand-merge from `/v3/api-docs` when Haven ships; bump bundle version when Vista wants a frozen export. |
+| **Bundled YAML in Vista** | `vista/docs/haven-api-docs-1.0.2.yaml` | Regenerate or hand-merge from `/v3/api-docs` when Haven ships; bump bundle version when Vista wants a frozen export. See [`openapi-diff-1.0.1-to-1.0.2.md`](./openapi-diff-1.0.1-to-1.0.2.md). |
 
 **Rule for Haven contributors:** Any new or changed route must include **springdoc** annotations (`@Operation`, `@ApiResponses`, `@Schema` on DTOs as needed) so `/v3/api-docs` stays the single source of truth Vista can diff.
 
@@ -89,6 +89,7 @@ Each Haven change that Vista should consume gets a **changelog** row and an upda
 ## Cross-links
 
 - Haven architecture: [`../TRADEOFFS.md`](../TRADEOFFS.md), [`../STATE-OF-THE-SYSTEM.md`](../STATE-OF-THE-SYSTEM.md)
+- **OpenAPI bundle drift (1.0.1 → 1.0.2):** [`openapi-diff-1.0.1-to-1.0.2.md`](./openapi-diff-1.0.1-to-1.0.2.md)
 
 ## Remaining vs Vista gap inventory
 

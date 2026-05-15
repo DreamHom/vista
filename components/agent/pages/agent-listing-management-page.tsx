@@ -3,7 +3,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, ExternalLink, Flag, Sparkles } from "lucide-react";
 import {
@@ -63,6 +63,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { CommaIntegerInput } from "@/components/ui/comma-number-input";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
@@ -84,8 +85,12 @@ export function AgentListingManagementPage({ listingId }: { listingId: number })
     title: "",
     headline: "",
     description: "",
-    askingPrice: "",
+    askingPriceNgn: null as number | null,
   });
+
+  useEffect(() => {
+    setLocalEdit({ title: "", headline: "", description: "", askingPriceNgn: null });
+  }, [listingId]);
 
   const messageMutation = useMutation({
     mutationFn: async () => {
@@ -168,10 +173,10 @@ export function AgentListingManagementPage({ listingId }: { listingId: number })
             </div>
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <FieldLabel>Asking price</FieldLabel>
-                <Input
-                  value={localEdit.askingPrice || String(listing?.priceNgn ?? "")}
-                  onChange={(event) => setLocalEdit((current) => ({ ...current, askingPrice: event.target.value }))}
+                <FieldLabel>Asking price (₦)</FieldLabel>
+                <CommaIntegerInput
+                  value={localEdit.askingPriceNgn ?? listing?.priceNgn ?? 0}
+                  onChange={(n) => setLocalEdit((current) => ({ ...current, askingPriceNgn: n }))}
                 />
               </div>
               <div className="space-y-2">

@@ -4,10 +4,10 @@ import {
   CompactListingTile,
   EmptyHint,
   OwnerIdentity,
-  PublicApiNotice,
   VerificationBadge,
 } from "@/components/public/public-components";
 import { getListingsForOwner, getOwnerById } from "@/lib/seed/public-data";
+import { truncateMetaDescription } from "@/lib/seo-metadata";
 
 export async function generateMetadata({
   params,
@@ -16,11 +16,27 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { id } = await params;
   const owner = await getOwnerById(id);
-  if (!owner) return {};
+  if (!owner) {
+    return { title: "Owner", robots: { index: false, follow: true } };
+  }
+
+  const description = truncateMetaDescription(`Public owner profile for ${owner.name} on DreamHomes.`);
 
   return {
     title: owner.name,
-    description: `Public owner profile for ${owner.name} on DreamHomes.`,
+    description,
+    alternates: { canonical: `/owners/${id}` },
+    openGraph: {
+      title: owner.name,
+      description,
+      url: `/owners/${id}`,
+      type: "website",
+    },
+    twitter: {
+      card: "summary",
+      title: owner.name,
+      description,
+    },
   };
 }
 
@@ -53,10 +69,6 @@ export default async function OwnerProfilePage({
       </section>
 
       <section className="mt-8 space-y-6">
-        <PublicApiNotice>
-          Haven does not currently expose a richer public owner bio, so this screen is built from real profile trust data plus listings discovered through the public browse endpoint.
-        </PublicApiNotice>
-
         <section className="border border-border bg-card p-6">
           <div className="flex items-center justify-between gap-4">
             <h2 className="text-xl font-semibold tracking-tight">Listed properties</h2>

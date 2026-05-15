@@ -1,29 +1,17 @@
 "use client";
 
 /**
- * Dream AI chat shell.
- *
- * Conversation flow:
- *  - Empty state: oversize headline + curated suggestion chips + input
- *  - Conversation state: Thread scrolls messages; input sticks at bottom
- *
- * The "AI" is local: `lib/dream-ai/match.ts` parses the prompt and ranks
- * listings out of `LISTINGS`. Streaming is faked by chunking the composed
- * reply word-by-word so the typing feels real. When haven exposes a real
- * `/api/dream-ai` endpoint we'll swap the `runAssistant` function for a
- * fetch + `useChat`-style transport and the UI doesn't have to move.
+ * Dream AI chat shell — Haven v1.0.3 contract when signed in (SSE + JSON fallback),
+ * local heuristics when logged out. See `haven/docs/dream-ai-capabilities.md` and
+ * `docs/dream-ai-ui.md`.
  */
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowLeft, ArrowUp, Sparkles, Plus } from "lucide-react";
+import { ArrowLeft, ArrowUp, ChevronDown, History, Plus, Sparkles, WifiOff } from "lucide-react";
 
 import { LogoMark } from "@/components/logo";
-import {
-  Thread,
-  ThreadContent,
-  ThreadScrollToBottom,
-} from "@/components/nexus-ui/thread";
+import { Thread, ThreadContent, ThreadScrollToBottom } from "@/components/nexus-ui/thread";
 import {
   Message,
   MessageStack,
@@ -38,31 +26,47 @@ import {
   PromptInputActionGroup,
   PromptInputAction,
 } from "@/components/nexus-ui/prompt-input";
-import {
-  Suggestions,
-  SuggestionList,
-  Suggestion,
-} from "@/components/nexus-ui/suggestions";
+import { Suggestions, SuggestionList, Suggestion } from "@/components/nexus-ui/suggestions";
 import { TextShimmer } from "@/components/nexus-ui/text-shimmer";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useAuthStore } from "@/lib/auth-store";
+import type { AssistantTurnV1, ChipOption, DreamAiRunTurnRequest } from "@/lib/dream-ai/contracts";
+import { getDreamAiChat, listDreamAiChats, postDreamAiTurn } from "@/lib/dream-ai/haven-api";
+import { composeReply, parseQuery, rankMatches, type ScoredMatch } from "@/lib/dream-ai/match";
+import { DreamAiStreamAbortedError, streamDreamAiTurn } from "@/lib/dream-ai/stream-turn";
+import { ApiError } from "@/lib/api";
+import type { ProblemDetail } from "@/lib/types";
+import type { PublicListing } from "@/lib/seed/public-data";
 import { cn } from "@/lib/utils";
 
+import { AssistantTurnPanel } from "./assistant-turn-panel";
 import { InlineListing } from "./inline-listing";
-import {
-  composeReply,
-  parseQuery,
-  rankMatches,
-  type ScoredMatch,
-} from "@/lib/dream-ai/match";
-import type { PublicListing } from "@/lib/seed/public-data";
 
 type ChatMessage =
   | { id: string; role: "user"; content: string }
   | {
       id: string;
       role: "assistant";
+      source: "guest";
       content: string;
       matches: ScoredMatch[];
+      streaming: boolean;
+    }
+  | {
+      id: string;
+      role: "assistant";
+      source: "haven";
+      turn: AssistantTurnV1;
+      streamingMarkdown: string;
       streaming: boolean;
     };
 
@@ -77,16 +81,44 @@ function makeId() {
   return Math.random().toString(36).slice(2, 10);
 }
 
-/**
- * Streams the reply word-by-word so the AI feels alive. Chunk size and
- * cadence are intentionally human-paced (≈30 chars/s).
- */
 async function* streamReply(text: string) {
-  const tokens = text.split(/(\s+)/); // keep whitespace as separate tokens
+  const tokens = text.split(/(\s+)/);
   for (const tok of tokens) {
     await new Promise((r) => setTimeout(r, 14 + Math.random() * 28));
     yield tok;
   }
+}
+
+function emptyTurn(): AssistantTurnV1 {
+  return { kind: "reply", markdown: "", blocks: [], meta: {} };
+}
+
+function mapHistoryMessages(
+  messages: import("@/lib/dream-ai/contracts").DreamAiChatMessageResponse[],
+): ChatMessage[] {
+  const out: ChatMessage[] = [];
+  for (const msg of messages) {
+    if (msg.role === "USER" && msg.userText) {
+      out.push({ id: `u-${msg.id}`, role: "user", content: msg.userText });
+    }
+    if (msg.role === "ASSISTANT" && msg.assistantTurn) {
+      out.push({
+        id: `a-${msg.id}`,
+        role: "assistant",
+        source: "haven",
+        turn: msg.assistantTurn,
+        streamingMarkdown: "",
+        streaming: false,
+      });
+    }
+  }
+  return out;
+}
+
+function problemBanner(problem: ProblemDetail): { title: string; detail: string } {
+  const title = problem.title ?? "Something went wrong";
+  const detail = problem.detail ?? (typeof problem.status === "number" ? `HTTP ${problem.status}` : "Please try again.");
+  return { title, detail };
 }
 
 export function DreamAiChat({
@@ -97,51 +129,188 @@ export function DreamAiChat({
 }: {
   embedded?: boolean;
   listings: PublicListing[];
-  /** When true, stretch to fill a flex parent (immersive layout on /dream-ai). */
   occupyFullHeight?: boolean;
-  /** Fires when the thread becomes non-empty or returns to empty (new chat). */
   onConversationChange?: (active: boolean) => void;
 }) {
+  const hydrated = useAuthStore((s) => s.hydrated);
+  const token = useAuthStore((s) => s.token);
+  const signedIn = hydrated && !!token;
+
   const [input, setInput] = React.useState("");
   const [messages, setMessages] = React.useState<ChatMessage[]>([]);
+  const [chatId, setChatId] = React.useState<number | null>(null);
   const [busy, setBusy] = React.useState(false);
+  const [providerIssue, setProviderIssue] = React.useState(false);
+  const [threadProblem, setThreadProblem] = React.useState<ProblemDetail | null>(null);
+  const [chatsLoading, setChatsLoading] = React.useState(false);
+  const [chatSummaries, setChatSummaries] = React.useState<{ id: number; preview?: string }[]>([]);
+
+  const assistantSlotRef = React.useRef<string | null>(null);
   const hasConversation = messages.length > 0;
-  const userMessageCount = messages.filter((message) => message.role === "user").length;
+  const userMessageCount = messages.filter((m) => m.role === "user").length;
 
   React.useEffect(() => {
     onConversationChange?.(hasConversation);
   }, [hasConversation, onConversationChange]);
 
-  const runAssistant = React.useCallback(async (userText: string) => {
-    const parsed = parseQuery(userText);
-    const matches = rankMatches(parsed, listings, 3);
-    const full = composeReply(parsed, matches);
-
-    const id = makeId();
-    setMessages((prev) => [
-      ...prev,
-      { id, role: "assistant", content: "", matches, streaming: true },
-    ]);
-
-    // Pull at least a short pause first so the "thinking…" beat reads.
-    await new Promise((r) => setTimeout(r, 350));
-
-    let buffer = "";
-    for await (const chunk of streamReply(full)) {
-      buffer += chunk;
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === id && m.role === "assistant" ? { ...m, content: buffer } : m,
-        ),
-      );
+  const loadChatList = React.useCallback(async () => {
+    if (!signedIn) return;
+    setChatsLoading(true);
+    try {
+      const page = await listDreamAiChats(0, 20);
+      setChatSummaries(page.content.map((c) => ({ id: c.id, preview: c.preview })));
+    } catch {
+      setChatSummaries([]);
+    } finally {
+      setChatsLoading(false);
     }
+  }, [signedIn]);
+
+  const openChat = React.useCallback(
+    async (id: number) => {
+      if (!signedIn) return;
+      setBusy(true);
+      setThreadProblem(null);
+      try {
+        const detail = await getDreamAiChat(id);
+        setChatId(detail.chat.id);
+        setMessages(mapHistoryMessages(detail.messages));
+      } catch (e) {
+        const p =
+          e instanceof ApiError && e.problem
+            ? e.problem
+            : ({ title: "Could not load chat", detail: String(e) } satisfies ProblemDetail);
+        setThreadProblem(p);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [signedIn],
+  );
+
+  const applyFinal = React.useCallback((slotId: string, res: import("@/lib/dream-ai/contracts").DreamAiRunTurnResponse) => {
+    setChatId(res.chatId);
     setMessages((prev) =>
       prev.map((m) =>
-        m.id === id && m.role === "assistant" ? { ...m, streaming: false } : m,
+        m.id === slotId && m.role === "assistant" && m.source === "haven"
+          ? { ...m, turn: res.turn, streaming: false, streamingMarkdown: "" }
+          : m,
       ),
     );
-    setBusy(false);
-  }, [listings]);
+    assistantSlotRef.current = null;
+  }, []);
+
+  const handleProblem = React.useCallback((slotId: string | null, problem: ProblemDetail) => {
+    if (slotId) {
+      setMessages((prev) => prev.filter((m) => m.id !== slotId));
+    }
+    assistantSlotRef.current = null;
+    setThreadProblem(problem);
+    const st = problem.status;
+    const t = String(problem.type ?? "").toLowerCase();
+    if (st === 502 || st === 503 || st === 504 || t.includes("upstream")) {
+      setProviderIssue(true);
+    }
+  }, []);
+
+  const runGuestAssistant = React.useCallback(
+    async (userText: string) => {
+      const parsed = parseQuery(userText);
+      const ranked = rankMatches(parsed, listings, 12);
+      const matches = ranked.slice(0, 3);
+      const full = composeReply(parsed, matches);
+      const id = makeId();
+      setMessages((prev) => [...prev, { id, role: "assistant", source: "guest", content: "", matches, streaming: true }]);
+      await new Promise((r) => setTimeout(r, 200));
+      let buffer = "";
+      for await (const chunk of streamReply(full)) {
+        buffer += chunk;
+        setMessages((prev) =>
+          prev.map((m) => (m.id === id && m.role === "assistant" && m.source === "guest" ? { ...m, content: buffer } : m)),
+        );
+      }
+      setMessages((prev) =>
+        prev.map((m) => (m.id === id && m.role === "assistant" && m.source === "guest" ? { ...m, streaming: false } : m)),
+      );
+    },
+    [listings],
+  );
+
+  const runHavenTurn = React.useCallback(
+    async (body: Omit<DreamAiRunTurnRequest, "chatId" | "clientMessageId">) => {
+      const clientMessageId = globalThis.crypto?.randomUUID?.() ?? makeId() + makeId();
+      const fullBody: DreamAiRunTurnRequest = {
+        ...body,
+        chatId: chatId ?? undefined,
+        clientMessageId,
+      };
+
+      const slotId = makeId();
+      assistantSlotRef.current = slotId;
+      setThreadProblem(null);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: slotId,
+          role: "assistant",
+          source: "haven",
+          turn: emptyTurn(),
+          streamingMarkdown: "",
+          streaming: true,
+        },
+      ]);
+
+      const handlers = {
+        onDelta: (fragment: string) => {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === slotId && m.role === "assistant" && m.source === "haven"
+                ? { ...m, streamingMarkdown: m.streamingMarkdown + fragment }
+                : m,
+            ),
+          );
+        },
+        onFinal: (res: import("@/lib/dream-ai/contracts").DreamAiRunTurnResponse) => {
+          applyFinal(slotId, res);
+        },
+        onProblem: (problem: ProblemDetail) => {
+          handleProblem(slotId, problem);
+        },
+      };
+
+      try {
+        await streamDreamAiTurn(fullBody, handlers);
+      } catch (err) {
+        if (err instanceof DreamAiStreamAbortedError) {
+          handleProblem(slotId, { title: "Session", detail: err.message });
+          return;
+        }
+        try {
+          const res = await postDreamAiTurn(fullBody);
+          applyFinal(slotId, res);
+        } catch (e2) {
+          if (e2 instanceof ApiError) {
+            handleProblem(slotId, e2.problem ?? { title: e2.message, status: e2.status });
+          } else {
+            handleProblem(slotId, { title: "Network error", detail: String(e2) });
+          }
+        }
+      }
+    },
+    [chatId, applyFinal, handleProblem],
+  );
+
+  const runAssistant = React.useCallback(
+    async (userText: string) => {
+      if (signedIn) {
+        await runHavenTurn({ prompt: userText });
+      } else {
+        setProviderIssue(false);
+        await runGuestAssistant(userText);
+      }
+    },
+    [signedIn, runHavenTurn, runGuestAssistant],
+  );
 
   const submit = React.useCallback(
     (text: string) => {
@@ -149,67 +318,157 @@ export function DreamAiChat({
       if (!trimmed || busy) return;
       setInput("");
       setBusy(true);
-      setMessages((prev) => [
-        ...prev,
-        { id: makeId(), role: "user", content: trimmed },
-      ]);
-      void runAssistant(trimmed);
+      setMessages((prev) => [...prev, { id: makeId(), role: "user", content: trimmed }]);
+      void runAssistant(trimmed).finally(() => setBusy(false));
     },
     [busy, runAssistant],
+  );
+
+  const submitChip = React.useCallback(
+    (chip: ChipOption) => {
+      if (busy || !signedIn) return;
+      setBusy(true);
+      setMessages((prev) => [...prev, { id: makeId(), role: "user", content: chip.sendText }]);
+      void runHavenTurn({
+        prompt: null,
+        userChoice: { chipId: chip.id, sendText: chip.sendText },
+      }).finally(() => setBusy(false));
+    },
+    [busy, signedIn, runHavenTurn],
   );
 
   const reset = () => {
     setMessages([]);
     setInput("");
+    setProviderIssue(false);
+    setThreadProblem(null);
+    setChatId(null);
+    assistantSlotRef.current = null;
   };
+
+  const problemStrip = threadProblem ? problemBanner(threadProblem) : null;
+  const ext = threadProblem ? (threadProblem as Record<string, unknown>) : null;
+  const retrySec =
+    ext && typeof ext.retryAfterSeconds === "number" && !Number.isNaN(ext.retryAfterSeconds)
+      ? ext.retryAfterSeconds
+      : NaN;
+
+  const headerActions = signedIn ? (
+    <div className="flex items-center gap-1">
+      <DropdownMenu onOpenChange={(o) => o && void loadChatList()}>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="sm" className="gap-1 pr-2" disabled={chatsLoading}>
+            <History className="h-4 w-4" aria-hidden />
+            <span className="hidden sm:inline">Chats</span>
+            <ChevronDown className="h-3.5 w-3.5 opacity-60" aria-hidden />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="max-h-72 w-72 overflow-y-auto">
+          <DropdownMenuLabel>Past conversations</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {chatSummaries.length === 0 ? (
+            <DropdownMenuItem disabled>No saved threads yet</DropdownMenuItem>
+          ) : (
+            chatSummaries.map((c) => (
+              <DropdownMenuItem key={c.id} onSelect={() => void openChat(c.id)}>
+                <span className="line-clamp-2 text-left">{c.preview || `Chat #${c.id}`}</span>
+              </DropdownMenuItem>
+            ))
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {hasConversation ? (
+        <Button variant="ghost" size="sm" onClick={reset}>
+          <Plus className="h-4 w-4" aria-hidden />
+          New chat
+        </Button>
+      ) : null}
+    </div>
+  ) : hasConversation ? (
+    <Button variant="ghost" size="sm" onClick={reset}>
+      <Plus className="h-4 w-4" aria-hidden />
+      New chat
+    </Button>
+  ) : null;
 
   return (
     <div
       className={cn(
         "flex flex-col bg-background text-foreground",
-        occupyFullHeight ? "min-h-0 flex-1" : "min-h-full",
+        occupyFullHeight ? "h-full min-h-0 flex-1 overflow-hidden" : embedded ? "min-h-0 flex-1" : "min-h-full",
       )}
     >
-      {/* Top bar */}
       {!embedded ? (
         <header className="flex items-center justify-between border-b border-border px-4 py-3 md:px-6">
-          <div className="flex items-center gap-4">
+          <div className="flex min-w-0 items-center gap-4">
             <Link
               href="/"
-              className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+              className="inline-flex shrink-0 items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
             >
               <ArrowLeft className="h-4 w-4" aria-hidden />
               <span className="hidden sm:inline">Back to site</span>
             </Link>
-            <span className="h-4 w-px bg-border" aria-hidden />
+            <span className="h-4 w-px shrink-0 bg-border" aria-hidden />
             <LogoMark size="sm" />
-            <span className="text-xs uppercase tracking-eyebrow text-muted-foreground">
-              Dream AI
-            </span>
+            <span className="truncate text-xs uppercase tracking-eyebrow text-muted-foreground">Dream AI</span>
           </div>
-          {hasConversation ? (
-            <Button variant="ghost" size="sm" onClick={reset}>
-              <Plus className="h-4 w-4" aria-hidden />
-              New chat
-            </Button>
-          ) : null}
+          {headerActions}
         </header>
       ) : null}
 
-      {embedded && hasConversation ? (
-        <div className="flex shrink-0 items-center justify-between border-b border-border bg-card px-4 py-2.5 md:px-5">
+      {embedded ? (
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-card px-4 py-2.5 md:px-5">
           <span className="text-xs uppercase tracking-eyebrow text-muted-foreground">Dream AI</span>
-          <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-muted-foreground" onClick={reset}>
-            <Plus className="h-4 w-4" aria-hidden />
-            New chat
-          </Button>
+          {headerActions}
         </div>
       ) : null}
 
-      {/* Body: empty state OR conversation */}
+      {providerIssue ? (
+        <div className="shrink-0 border-b border-amber-200/90 bg-amber-50/95 px-4 py-3 dark:border-amber-900/60 dark:bg-amber-950/50 md:px-6">
+          <Alert variant="warning" className="relative border-0 bg-transparent p-0 shadow-none">
+            <WifiOff className="h-4 w-4 shrink-0 text-amber-800 dark:text-amber-200" aria-hidden />
+            <div>
+              <AlertTitle className="text-amber-950 dark:text-amber-50">Live matcher unavailable</AlertTitle>
+              <AlertDescription className="mt-1.5 text-amber-900/90 dark:text-amber-100/90">
+                The last action hit a degraded or unreachable Haven path. Try again shortly; guests still see local hints
+                only.
+              </AlertDescription>
+              <button
+                type="button"
+                className="mt-3 text-sm font-medium text-amber-950 underline underline-offset-2 hover:text-amber-800 dark:text-amber-50 dark:hover:text-amber-200"
+                onClick={() => setProviderIssue(false)}
+              >
+                Dismiss
+              </button>
+            </div>
+          </Alert>
+        </div>
+      ) : null}
+
+      {problemStrip ? (
+        <div className="shrink-0 border-b border-destructive/25 bg-destructive/5 px-4 py-3 md:px-6">
+          <Alert variant="destructive" className="border-0 bg-transparent p-0 shadow-none">
+            <AlertTitle>{problemStrip.title}</AlertTitle>
+            <AlertDescription className="mt-1">
+              {problemStrip.detail}
+              {!Number.isNaN(retrySec) && retrySec > 0 ? (
+                <span className="mt-2 block text-xs">Try again in about {retrySec}s.</span>
+              ) : null}
+            </AlertDescription>
+            <button
+              type="button"
+              className="mt-3 text-sm font-medium underline underline-offset-2"
+              onClick={() => setThreadProblem(null)}
+            >
+              Dismiss
+            </button>
+          </Alert>
+        </div>
+      ) : null}
+
       {hasConversation ? (
-        <main className="relative flex min-h-0 flex-1 flex-col">
-          <Thread className="min-h-0 flex-1">
+        <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+          <Thread className="min-h-0 flex-1 overflow-hidden">
             <ThreadContent className="mx-auto w-full max-w-3xl">
               {messages.map((m) =>
                 m.role === "user" ? (
@@ -218,20 +477,15 @@ export function DreamAiChat({
                       <MessageContent>{m.content}</MessageContent>
                     </MessageStack>
                   </Message>
-                ) : (
+                ) : m.source === "guest" ? (
                   <Message key={m.id} from="assistant">
-                    <MessageAvatar
-                      fallback={<Sparkles className="h-4 w-4" aria-hidden />}
-                    />
+                    <MessageAvatar fallback={<Sparkles className="h-4 w-4" aria-hidden />} />
                     <MessageStack>
                       <MessageContent>
                         {m.content ? (
                           <MessageMarkdown>{m.content}</MessageMarkdown>
                         ) : (
-                          <TextShimmer
-                            duration={1.4}
-                            className="text-sm text-muted-foreground"
-                          >
+                          <TextShimmer duration={1.4} className="text-sm text-muted-foreground">
                             Reading your brief…
                           </TextShimmer>
                         )}
@@ -239,13 +493,25 @@ export function DreamAiChat({
                       {!m.streaming && m.matches.length > 0 ? (
                         <div className="flex w-full flex-col gap-2">
                           {m.matches.map((match) => (
-                            <InlineListing
-                              key={match.listing.id}
-                              listing={match.listing}
-                            />
+                            <InlineListing key={match.listing.id} listing={match.listing} />
                           ))}
                         </div>
                       ) : null}
+                    </MessageStack>
+                  </Message>
+                ) : (
+                  <Message key={m.id} from="assistant">
+                    <MessageAvatar fallback={<Sparkles className="h-4 w-4" aria-hidden />} />
+                    <MessageStack>
+                      <MessageContent>
+                        <AssistantTurnPanel
+                          turn={m.turn}
+                          listings={listings}
+                          streamingMarkdown={m.streamingMarkdown}
+                          streaming={m.streaming}
+                          onChip={signedIn ? submitChip : undefined}
+                        />
+                      </MessageContent>
                     </MessageStack>
                   </Message>
                 ),
@@ -256,33 +522,33 @@ export function DreamAiChat({
 
           <div className="sticky bottom-0 border-t border-border bg-background/95 backdrop-blur">
             <div className="mx-auto w-full max-w-3xl px-4 py-4 md:px-6">
-              {userMessageCount >= 3 ? (
+              {userMessageCount >= 3 && !signedIn ? (
                 <div className="mb-4 border border-accent/20 bg-accent/5 p-4">
-                  <p className="text-sm font-medium text-foreground">Create an account to save your preferences.</p>
+                  <p className="text-sm font-medium text-foreground">Sign in for live Dream AI threads</p>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Sign up to keep your shortlist, inspection ideas, and Dream AI guidance in one place.
+                    Create an account to save chats, clarify with chips, and sync with Haven&apos;s matcher.
                   </p>
                   <div className="mt-3">
+                    <Link href="/login?next=/dream-ai" className="text-sm font-medium text-accent hover:text-accent/80">
+                      Log in
+                    </Link>
+                    <span className="mx-2 text-muted-foreground">·</span>
                     <Link href="/signup?next=/dream-ai" className="text-sm font-medium text-accent hover:text-accent/80">
-                      Sign up now
+                      Sign up
                     </Link>
                   </div>
                 </div>
               ) : null}
-              <ChatPromptInput
-                input={input}
-                setInput={setInput}
-                onSubmit={submit}
-                busy={busy}
-              />
+              <ChatPromptInput input={input} setInput={setInput} onSubmit={submit} busy={busy} />
               <p className="mt-2 text-center text-[11px] text-muted-foreground">
-                Dream AI matches against our curated Lagos & Abuja inventory. Verify all details with the lister before signing.
+                Dream AI ranks over a curated Lagos &amp; Abuja slice—suggestions, not exhaustive search. Verify with the
+                lister before signing.
               </p>
             </div>
           </div>
         </main>
       ) : (
-        <main className="flex min-h-0 flex-1 items-center">
+        <main className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto">
           <div className="mx-auto flex w-full max-w-3xl flex-col items-center gap-10 px-4 py-16 md:px-6">
             <div className="flex flex-col items-center gap-4 text-center">
               <span className="inline-flex items-center gap-1.5 border border-border px-3 py-1 text-[11px] uppercase tracking-eyebrow text-muted-foreground">
@@ -297,19 +563,12 @@ export function DreamAiChat({
                 .
               </h1>
               <p className="max-w-xl text-balance text-base text-muted-foreground md:text-lg">
-                Describe the home you want: the place, the price, the rooms,
-                the feel. We&apos;ll match against verified Lagos and Abuja
-                listings.
+                Describe the home you want. {signedIn ? "We&apos;ll stream picks from Haven&apos;s live matcher." : "We&apos;ll match locally—sign in for saved threads and the live engine."}
               </p>
             </div>
 
             <div className="w-full">
-              <ChatPromptInput
-                input={input}
-                setInput={setInput}
-                onSubmit={submit}
-                busy={busy}
-              />
+              <ChatPromptInput input={input} setInput={setInput} onSubmit={submit} busy={busy} />
             </div>
 
             <Suggestions onSelect={(value) => submit(value)}>

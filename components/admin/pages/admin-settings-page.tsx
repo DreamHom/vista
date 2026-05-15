@@ -1,75 +1,64 @@
 "use client";
 
-import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, ExternalLink, ShieldAlert } from "lucide-react";
 import {
-  approveListing,
-  approveVerification,
-  clearAdminCommentFlag,
-  DEFAULT_ADMIN_ADS_STATE,
   DEFAULT_ADMIN_PLATFORM_SETTINGS,
-  deleteComment,
-  dismissListingReport,
-  getAdminAnalyticsWorkspace,
-  getAdminDashboardOverview,
-  listAdminAuditLogs,
-  listAdminListings,
-  listAdminModerationComments,
-  listAdminReports,
+  fetchAdminPlatformSettings,
   listAdminUsers,
-  listAdminVerifications,
-  readAdminAdsState,
-  readAdminPlatformSettings,
-  reactivateUser,
-  rejectVerification,
-  resolveListingReport,
-  saveAdminAdsState,
-  saveAdminPlatformSettings,
-  suspendUser,
-  takeDownListing,
-  type VerificationQueueType,
+  patchAdminPlatformSettings,
+  type AdminPlatformSettings,
 } from "@/lib/admin-dashboard";
-import { DashboardPageIntro, EmptyPanel, ErrorPanel, LoadingPanel, MetricCard, SectionCard, SettingsToggle, StatusBadge } from "@/components/dashboard/applicant-ui";
-import { formatDate, formatDateTime } from "@/components/dashboard/utils";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { DashboardPageIntro, EmptyPanel, ErrorPanel, LoadingPanel, SectionCard, SettingsToggle } from "@/components/dashboard/applicant-ui";
+import { formatDate } from "@/components/dashboard/utils";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { CommaDecimalInput, CommaIntegerInput } from "@/components/ui/comma-number-input";
 import { toast } from "@/components/ui/toast";
-import { cn } from "@/lib/utils";
-import { FieldLabel, PrototypeNotice } from "./admin-page-primitives";
+import { FieldLabel } from "./admin-page-primitives";
 
 export function AdminSettingsPage() {
-  const [settings, setSettings] = useState(() => readAdminPlatformSettings() ?? DEFAULT_ADMIN_PLATFORM_SETTINGS);
+  const queryClient = useQueryClient();
+  const settingsQuery = useQuery({
+    queryKey: ["admin-platform-settings"],
+    queryFn: fetchAdminPlatformSettings,
+  });
+  const [settings, setSettings] = useState<AdminPlatformSettings>(DEFAULT_ADMIN_PLATFORM_SETTINGS);
+
+  useEffect(() => {
+    if (settingsQuery.data) setSettings(settingsQuery.data.settings);
+  }, [settingsQuery.data]);
+
+  const saveMutation = useMutation({
+    mutationFn: patchAdminPlatformSettings,
+    onSuccess: async (data) => {
+      setSettings(data.settings);
+      await queryClient.invalidateQueries({ queryKey: ["admin-platform-settings"] });
+      toast.success("Platform settings saved.");
+    },
+    onError: () => toast.error("We couldn't save platform settings."),
+  });
+
   const adminsQuery = useQuery({
     queryKey: ["admin-accounts"],
     queryFn: () => listAdminUsers({ role: "ADMIN", size: 50 }),
   });
+
+  if (settingsQuery.isLoading) return <LoadingPanel label="Loading platform settings..." />;
+  if (settingsQuery.isError || !settingsQuery.data) {
+    return <ErrorPanel body="We couldn’t load platform settings right now." onRetry={() => void settingsQuery.refetch()} />;
+  }
 
   return (
     <div className="space-y-6">
       <DashboardPageIntro
         eyebrow="Admin console"
         title="Platform settings"
-        description="Control operational defaults, trust requirements, and read-only seeded admin account visibility."
+        description="Trust requirements and operational defaults from Haven platform configuration."
       />
 
-      <PrototypeNotice
-        title="Platform settings are currently staged locally"
-        body="Haven doesn’t yet expose a configuration endpoint for commissions, SLAs, or verification requirements. These controls keep the final admin experience reviewable now."
-      />
+      {settingsQuery.data.updatedAt ? (
+        <p className="text-sm text-muted-foreground">Last updated {formatDate(settingsQuery.data.updatedAt)}</p>
+      ) : null}
 
       <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
         <SectionCard title="Verification requirements" description="Control which trust checks remain mandatory.">
@@ -99,34 +88,27 @@ export function AdminSettingsPage() {
           <div className="grid gap-4">
             <div className="space-y-2">
               <FieldLabel>Commission rate (%)</FieldLabel>
-              <Input
-                value={String(settings.defaultCommissionRate)}
-                onChange={(event) => setSettings((current) => ({ ...current, defaultCommissionRate: Number(event.target.value || 0) }))}
+              <CommaDecimalInput
+                value={settings.defaultCommissionRate}
+                onChange={(next) => setSettings((current) => ({ ...current, defaultCommissionRate: next }))}
               />
             </div>
             <div className="space-y-2">
               <FieldLabel>Owner response SLA (hours)</FieldLabel>
-              <Input
-                value={String(settings.ownerResponseSlaHours)}
-                onChange={(event) => setSettings((current) => ({ ...current, ownerResponseSlaHours: Number(event.target.value || 0) }))}
+              <CommaIntegerInput
+                value={settings.ownerResponseSlaHours}
+                onChange={(next) => setSettings((current) => ({ ...current, ownerResponseSlaHours: next }))}
               />
             </div>
             <div className="space-y-2">
               <FieldLabel>Inspection conflict buffer (minutes)</FieldLabel>
-              <Input
-                value={String(settings.inspectionConflictBufferMinutes)}
-                onChange={(event) =>
-                  setSettings((current) => ({ ...current, inspectionConflictBufferMinutes: Number(event.target.value || 0) }))
-                }
+              <CommaIntegerInput
+                value={settings.inspectionConflictBufferMinutes}
+                onChange={(next) => setSettings((current) => ({ ...current, inspectionConflictBufferMinutes: next }))}
               />
             </div>
-            <Button
-              onClick={() => {
-                saveAdminPlatformSettings(settings);
-                toast.success("Platform settings saved locally.");
-              }}
-            >
-              Save settings
+            <Button onClick={() => saveMutation.mutate(settings)} disabled={saveMutation.isPending}>
+              {saveMutation.isPending ? "Saving…" : "Save settings"}
             </Button>
           </div>
         </SectionCard>

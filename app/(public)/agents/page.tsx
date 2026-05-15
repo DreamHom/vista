@@ -7,6 +7,12 @@ import { searchAgents, type AgentSearchInput } from "@/lib/seed/public-data";
 export const metadata: Metadata = {
   title: "Find an Agent",
   description: "Compare DreamHomes agents by reviews, experience, and how they show up for clients.",
+  alternates: { canonical: "/agents" },
+  openGraph: {
+    title: "Find an agent · DreamHomes",
+    description: "Compare DreamHomes agents by reviews, experience, and how they show up for clients.",
+    url: "/agents",
+  },
 };
 
 const SORT_OPTIONS = [

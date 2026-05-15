@@ -1,14 +1,14 @@
 "use client";
 
 import type { FormEvent } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 import {
   Briefcase,
   Building2,
-  CalendarClock,
+  Check,
   CheckCircle2,
   Eye,
   EyeOff,
@@ -16,12 +16,16 @@ import {
   IdCard,
   Lock,
   Mail,
+  Phone,
   Sparkles,
   User,
 } from "lucide-react";
+import { motion } from "motion/react";
 import { ApiError, api } from "@/lib/api";
+import { loadSessionUserWithAvatar } from "@/lib/auth-hydrate-user";
 import { useAuthStore } from "@/lib/auth-store";
 import type {
+  ForgotPasswordResponse,
   LoginResponse,
   PublicRole,
   RegisterAcceptedResponse,
@@ -90,6 +94,85 @@ function strengthLabel(password: string) {
 
 const inputChrome = "rounded-none";
 
+const SIGNUP_SUCCESS_STEPS = [
+  "Your account details are saved",
+  "Your role and DreamHomes workspace are ready for you",
+  "Sign in once to open your dashboard",
+] as const;
+
+function SignupSuccessPanel({ next }: { next?: string }) {
+  const loginHref = next ? `/login?next=${encodeURIComponent(next)}` : "/login";
+
+  return (
+    <div className="space-y-8">
+      <div className="space-y-3 text-center sm:text-left">
+        <motion.h2
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+          className="text-2xl font-semibold tracking-tight text-foreground md:text-3xl"
+        >
+          You&apos;re in.
+        </motion.h2>
+        <motion.p
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, delay: 0.06, ease: [0.22, 1, 0.36, 1] }}
+          className="text-sm leading-relaxed text-muted-foreground md:text-base"
+        >
+          Welcome to DreamHomes. Use the email and password you just chose to sign in and pick up in your dashboard.
+        </motion.p>
+      </div>
+
+      <ul className="space-y-4" aria-label="What is ready">
+        {SIGNUP_SUCCESS_STEPS.map((line, index) => (
+          <motion.li
+            key={line}
+            initial={{ opacity: 0, x: -16 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{
+              delay: 0.12 + index * 0.1,
+              duration: 0.4,
+              ease: [0.22, 1, 0.36, 1],
+            }}
+            className="flex items-start gap-3 text-sm leading-snug text-foreground md:text-[0.9375rem]"
+          >
+            <motion.span
+              initial={{ scale: 0, rotate: -35 }}
+              animate={{ scale: 1, rotate: 0 }}
+              transition={{
+                delay: 0.18 + index * 0.1,
+                type: "spring",
+                stiffness: 520,
+                damping: 22,
+              }}
+              className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-primary/35 bg-primary/10 text-primary shadow-sm"
+              aria-hidden
+            >
+              <Check className="h-[1.125rem] w-[1.125rem] stroke-[2.5]" strokeLinecap="round" strokeLinejoin="round" />
+            </motion.span>
+            <span className="pt-1.5">{line}</span>
+          </motion.li>
+        ))}
+      </ul>
+
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.45, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+        className="flex flex-wrap gap-3"
+      >
+        <Link href={loginHref} className={cn(buttonVariants({ variant: "primary", size: "lg" }), "rounded-none")}>
+          Sign in to DreamHomes
+        </Link>
+        <Link href="/listings" className={cn(buttonVariants({ variant: "outline", size: "lg" }), "rounded-none")}>
+          Browse listings
+        </Link>
+      </motion.div>
+    </div>
+  );
+}
+
 export function SignupForm({
   initialRole,
   next,
@@ -145,7 +228,7 @@ export function SignupForm({
       });
 
       setSuccess(response);
-      toast.success("Account request accepted.");
+      toast.success("Welcome to DreamHomes!");
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message);
@@ -158,32 +241,7 @@ export function SignupForm({
   }
 
   if (success) {
-    return (
-      <div className="space-y-6">
-        <div className="border border-primary/25 bg-primary/[0.06] p-6 text-sm text-foreground">
-          <div className="flex items-start gap-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center border border-primary/30 bg-primary/10 text-primary">
-              <CheckCircle2 className="h-5 w-5" aria-hidden />
-            </span>
-            <div>
-              <p className="font-semibold tracking-tight">{success.message}</p>
-              <p className="mt-2 leading-relaxed text-muted-foreground">{success.nextStep}</p>
-            </div>
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-3">
-          <Link
-            href={next ? `/login?next=${encodeURIComponent(next)}` : "/login"}
-            className={cn(buttonVariants({ variant: "primary", size: "lg" }), "rounded-none")}
-          >
-            Continue to sign in
-          </Link>
-          <Link href="/listings" className={cn(buttonVariants({ variant: "outline", size: "lg" }), "rounded-none")}>
-            Browse listings
-          </Link>
-        </div>
-      </div>
-    );
+    return <SignupSuccessPanel next={next} />;
   }
 
   return (
@@ -278,11 +336,13 @@ export function SignupForm({
           </label>
           <label className="flex flex-col gap-2">
             <span className="flex items-center gap-2 text-sm font-medium text-foreground">
-              <CalendarClock className="h-4 w-4 text-primary" aria-hidden />
+              <Phone className="h-4 w-4 text-primary" aria-hidden />
               Phone
             </span>
             <Input
               type="tel"
+              inputMode="tel"
+              autoComplete="tel"
               value={phone}
               onChange={(event) => setPhone(event.target.value)}
               size="lg"
@@ -380,11 +440,37 @@ export function SignupForm({
 export function LoginForm({ next }: { next?: string }) {
   const router = useRouter();
   const setSession = useAuthStore((state) => state.setSession);
+  const hydrated = useAuthStore((state) => state.hydrated);
+  const storedToken = useAuthStore((state) => state.token);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!hydrated || !storedToken) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const me = await loadSessionUserWithAvatar();
+        if (cancelled) return;
+        setSession(storedToken, {
+          id: me.id,
+          fullName: me.fullName,
+          role: me.role,
+          email: me.email,
+          profileImageUrl: me.profileImageUrl,
+        });
+        router.replace(next ?? getDefaultDashboardPath(me.role));
+      } catch {
+        /* stale token — stay on login */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrated, storedToken, next, router, setSession]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -479,12 +565,15 @@ export function LoginForm({ next }: { next?: string }) {
 export function ForgotPasswordForm() {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   if (sent) {
     return (
       <div className="space-y-5">
         <div className="border border-primary/25 bg-primary/[0.06] p-5 text-sm text-foreground">
-          Check your email for a reset link.
+          If an account exists for that email, password reset instructions will follow. Check your inbox (and spam)
+          once email delivery is enabled on the server.
         </div>
         <Link href="/login" className={cn(buttonVariants({ variant: "outline", size: "lg" }), "rounded-none")}>
           Back to sign in
@@ -493,14 +582,33 @@ export function ForgotPasswordForm() {
     );
   }
 
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await api.post<ForgotPasswordResponse>(
+        "/auth/forgot-password",
+        { email: email.trim() },
+        { skipAuth: true },
+      );
+      if (res?.debugResetToken) {
+        toast.message("Development reset token", { description: res.debugResetToken });
+      }
+      setSent(true);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else {
+        setError("We could not start a reset right now. Try again shortly.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
-    <form
-      onSubmit={(event) => {
-        event.preventDefault();
-        setSent(true);
-      }}
-      className="space-y-5"
-    >
+    <form onSubmit={handleSubmit} className="space-y-5">
       <label className="flex flex-col gap-2">
         <span className="flex items-center gap-2 text-sm font-medium text-foreground">
           <Mail className="h-4 w-4 text-primary" aria-hidden />
@@ -509,19 +617,31 @@ export function ForgotPasswordForm() {
         <Input type="email" value={email} onChange={(event) => setEmail(event.target.value)} size="lg" className={inputChrome} required />
       </label>
 
-      <Button type="submit" size="lg" className="h-12 w-full rounded-none text-base font-semibold">
-        Send reset link
+      {error ? (
+        <p className="border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">{error}</p>
+      ) : null}
+
+      <Button type="submit" size="lg" className="h-12 w-full rounded-none text-base font-semibold" disabled={loading}>
+        {loading ? "Sending…" : "Send reset link"}
       </Button>
     </form>
   );
 }
 
 export function ResetPasswordForm() {
+  const [token, setToken] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const strength = useMemo(() => strengthLabel(password), [password]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const t = params.get("token");
+    if (t) setToken(t);
+  }, []);
 
   if (submitted) {
     return (
@@ -534,19 +654,54 @@ export function ResetPasswordForm() {
     );
   }
 
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+    if (!token.trim()) {
+      setError("Reset link is missing a token. Open the link from your email again, or request a new reset.");
+      return;
+    }
+    setError(null);
+    setLoading(true);
+    try {
+      await api.post<void>("/auth/reset-password", { token: token.trim(), newPassword: password }, { skipAuth: true });
+      toast.success("Password updated. You can sign in with the new password.");
+      setSubmitted(true);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else {
+        setError("We could not reset your password. The link may have expired.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
-    <form
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (password !== confirmPassword) {
-          setError("Passwords do not match.");
-          return;
-        }
-        setError(null);
-        setSubmitted(true);
-      }}
-      className="space-y-5"
-    >
+    <form onSubmit={handleSubmit} className="space-y-5">
+      <label className="flex flex-col gap-2">
+        <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+          <Lock className="h-4 w-4 text-primary" aria-hidden />
+          Reset token
+        </span>
+        <Input
+          type="text"
+          value={token}
+          onChange={(event) => setToken(event.target.value)}
+          size="lg"
+          className={inputChrome}
+          placeholder="Paste token from your reset email"
+          autoComplete="off"
+        />
+        <p className="text-xs text-muted-foreground">
+          If your email client opened this page without query parameters, paste the token from the reset link here.
+        </p>
+      </label>
+
       <label className="flex flex-col gap-2">
         <span className="flex items-center gap-2 text-sm font-medium text-foreground">
           <Lock className="h-4 w-4 text-primary" aria-hidden />
@@ -579,8 +734,8 @@ export function ResetPasswordForm() {
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
-      <Button type="submit" size="lg" className="h-12 w-full rounded-none text-base font-semibold">
-        Reset password
+      <Button type="submit" size="lg" className="h-12 w-full rounded-none text-base font-semibold" disabled={loading}>
+        {loading ? "Updating…" : "Reset password"}
       </Button>
     </form>
   );

@@ -66,7 +66,7 @@ export interface RequestOptions extends Omit<RequestInit, "body" | "method"> {
    *
    * Plain objects are JSON-serialised. `FormData`, `Blob`, `URLSearchParams`,
    * strings, and other native request bodies pass through untouched so upload
-   * endpoints like haven v1.0.1's `POST /verifications/files` work without a
+   * endpoints like haven v1.0.2's `POST /verifications/files` work without a
    * separate client.
    */
   body?: unknown;

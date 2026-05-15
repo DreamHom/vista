@@ -1,37 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, ExternalLink, ShieldAlert } from "lucide-react";
-import {
-  approveListing,
-  approveVerification,
-  clearAdminCommentFlag,
-  DEFAULT_ADMIN_ADS_STATE,
-  DEFAULT_ADMIN_PLATFORM_SETTINGS,
-  deleteComment,
-  dismissListingReport,
-  getAdminAnalyticsWorkspace,
-  getAdminDashboardOverview,
-  listAdminAuditLogs,
-  listAdminListings,
-  listAdminModerationComments,
-  listAdminReports,
-  listAdminUsers,
-  listAdminVerifications,
-  readAdminAdsState,
-  readAdminPlatformSettings,
-  reactivateUser,
-  rejectVerification,
-  resolveListingReport,
-  saveAdminAdsState,
-  saveAdminPlatformSettings,
-  suspendUser,
-  takeDownListing,
-  type VerificationQueueType,
-} from "@/lib/admin-dashboard";
-import { DashboardPageIntro, EmptyPanel, ErrorPanel, LoadingPanel, MetricCard, SectionCard, SettingsToggle, StatusBadge } from "@/components/dashboard/applicant-ui";
+import { listAdminAuditLogs, listAdminUsers, reactivateUser, suspendUser } from "@/lib/admin-dashboard";
+import { DashboardPageIntro, EmptyPanel, ErrorPanel, LoadingPanel, StatusBadge } from "@/components/dashboard/applicant-ui";
 import { formatDate, formatDateTime } from "@/components/dashboard/utils";
 import {
   Dialog,
@@ -48,7 +20,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
-import { cn } from "@/lib/utils";
 import { NativeSelect } from "./admin-page-primitives";
 
 export function AdminUsersPage() {

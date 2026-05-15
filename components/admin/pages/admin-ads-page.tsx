@@ -1,125 +1,143 @@
 "use client";
 
-import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, ExternalLink, ShieldAlert } from "lucide-react";
 import {
-  approveListing,
-  approveVerification,
-  clearAdminCommentFlag,
-  DEFAULT_ADMIN_ADS_STATE,
   DEFAULT_ADMIN_PLATFORM_SETTINGS,
-  deleteComment,
-  dismissListingReport,
-  getAdminAnalyticsWorkspace,
-  getAdminDashboardOverview,
-  listAdminAuditLogs,
-  listAdminListings,
-  listAdminModerationComments,
-  listAdminReports,
-  listAdminUsers,
-  listAdminVerifications,
-  readAdminAdsState,
-  readAdminPlatformSettings,
-  reactivateUser,
-  rejectVerification,
-  resolveListingReport,
-  saveAdminAdsState,
-  saveAdminPlatformSettings,
-  suspendUser,
-  takeDownListing,
-  type VerificationQueueType,
+  fetchAdminPlatformSettings,
+  listAdminAdCampaigns,
+  patchAdminAdCampaign,
+  patchAdminPlatformSettings,
+  type AdCampaignRow,
+  type AdCampaignStatus,
 } from "@/lib/admin-dashboard";
-import { DashboardPageIntro, EmptyPanel, ErrorPanel, LoadingPanel, MetricCard, SectionCard, SettingsToggle, StatusBadge } from "@/components/dashboard/applicant-ui";
-import { formatDate, formatDateTime } from "@/components/dashboard/utils";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { DashboardPageIntro, EmptyPanel, ErrorPanel, LoadingPanel, SectionCard, StatusBadge } from "@/components/dashboard/applicant-ui";
+import { formatDateTime } from "@/components/dashboard/utils";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { CommaIntegerInput } from "@/components/ui/comma-number-input";
 import { toast } from "@/components/ui/toast";
-import { cn } from "@/lib/utils";
-import { FieldLabel, PrototypeNotice } from "./admin-page-primitives";
+import { FieldLabel } from "./admin-page-primitives";
+
+function formatMinorToNgn(minorUnits: number) {
+  return new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 }).format(minorUnits / 100);
+}
+
+function statusVariant(status: AdCampaignStatus): "success" | "warning" | "secondary" | "outline" {
+  if (status === "ACTIVE" || status === "APPROVED") return "success";
+  if (status === "PENDING_REVIEW" || status === "DRAFT") return "warning";
+  if (status === "REJECTED") return "outline";
+  return "secondary";
+}
 
 export function AdminAdsPage() {
-  const [state, setState] = useState(() => readAdminAdsState() ?? DEFAULT_ADMIN_ADS_STATE);
+  const queryClient = useQueryClient();
+  const [featuredAgentDailyRate, setFeaturedAgentDailyRate] = useState(DEFAULT_ADMIN_PLATFORM_SETTINGS.featuredAgentDailyRate);
+  const [featuredListingDailyRate, setFeaturedListingDailyRate] = useState(DEFAULT_ADMIN_PLATFORM_SETTINGS.featuredListingDailyRate);
 
-  function updateState(next: typeof state) {
-    setState(next);
-    saveAdminAdsState(next);
+  const settingsQuery = useQuery({
+    queryKey: ["admin-platform-settings"],
+    queryFn: fetchAdminPlatformSettings,
+  });
+
+  const campaignsQuery = useQuery({
+    queryKey: ["admin-ad-campaigns"],
+    queryFn: listAdminAdCampaigns,
+  });
+
+  useEffect(() => {
+    if (settingsQuery.data) {
+      setFeaturedAgentDailyRate(settingsQuery.data.settings.featuredAgentDailyRate);
+      setFeaturedListingDailyRate(settingsQuery.data.settings.featuredListingDailyRate);
+    }
+  }, [settingsQuery.data]);
+
+  const patchCampaignMutation = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: AdCampaignStatus }) => patchAdminAdCampaign(id, status),
+    onSuccess: async () => {
+      toast.success("Campaign updated.");
+      await queryClient.invalidateQueries({ queryKey: ["admin-ad-campaigns"] });
+    },
+    onError: () => toast.error("We couldn't update that campaign."),
+  });
+
+  const saveRatesMutation = useMutation({
+    mutationFn: () => {
+      const base = settingsQuery.data?.settings ?? DEFAULT_ADMIN_PLATFORM_SETTINGS;
+      return patchAdminPlatformSettings({
+        ...base,
+        featuredAgentDailyRate,
+        featuredListingDailyRate,
+      });
+    },
+    onSuccess: async () => {
+      toast.success("Reference pricing saved to platform settings.");
+      await queryClient.invalidateQueries({ queryKey: ["admin-platform-settings"] });
+    },
+    onError: () => toast.error("We couldn't save pricing."),
+  });
+
+  if (campaignsQuery.isLoading) return <LoadingPanel label="Loading ad campaigns..." />;
+  if (campaignsQuery.isError || !campaignsQuery.data) {
+    return <ErrorPanel body="We couldn’t load ad campaigns right now." onRetry={() => void campaignsQuery.refetch()} />;
   }
+
+  const campaigns = campaignsQuery.data;
 
   return (
     <div className="space-y-6">
       <DashboardPageIntro
         eyebrow="Admin console"
         title="Ads management"
-        description="Approve pending promotion requests, monitor active campaigns, and set pricing across ad products."
-      />
-
-      <PrototypeNotice
-        title="Ads operations are modelled locally for now"
-        body="Haven v1.0.1 doesn’t expose ad billing, approval, or delivery endpoints yet. This surface preserves the approval workflow and pricing controls expected by the product."
+        description="Review sponsor campaigns from Haven and keep reference featured-pricing fields in platform settings."
       />
 
       <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
-        <SectionCard title="Pending ad requests" description="Approve or reject incoming promotion requests.">
-          {state.pendingRequests.length === 0 ? (
-            <EmptyPanel title="No pending requests" body="New agent profile or listing promotion requests will appear here once the commerce flow is wired." />
+        <SectionCard title="Ad campaigns" description="Lifecycle actions use the Haven admin ad-campaign endpoints.">
+          {campaigns.length === 0 ? (
+            <EmptyPanel title="No campaigns" body="When sponsors submit campaigns for review, they will appear here." />
           ) : (
             <div className="space-y-3">
-              {state.pendingRequests.map((request) => (
-                <div key={request.id} className="border border-border bg-white px-4 py-4">
-                  <p className="text-sm font-medium text-foreground">{request.title}</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {request.requester} • {request.durationDays} days • {new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 }).format(request.cost)}
-                  </p>
-                  <div className="mt-4 flex gap-3">
-                    <Button
-                      onClick={() =>
-                        updateState({
-                          ...state,
-                          pendingRequests: state.pendingRequests.filter((item) => item.id !== request.id),
-                          activePromotions: [
-                            {
-                              id: request.id,
-                              type: request.type,
-                              title: request.title,
-                              durationDays: request.durationDays,
-                              cost: request.cost,
-                              status: "ACTIVE",
-                              createdAt: request.createdAt,
-                              endsAt: new Date(Date.now() + request.durationDays * 24 * 60 * 60 * 1000).toISOString(),
-                              views: 0,
-                            },
-                            ...state.activePromotions,
-                          ],
-                        })
-                      }
-                    >
-                      Approve
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() =>
-                        updateState({
-                          ...state,
-                          pendingRequests: state.pendingRequests.filter((item) => item.id !== request.id),
-                        })
-                      }
-                    >
-                      Reject
-                    </Button>
+              {campaigns.map((row: AdCampaignRow) => (
+                <div key={row.id} className="border border-border bg-white px-4 py-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-foreground">{row.title || `Campaign #${row.id}`}</p>
+                      <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{row.body || "—"}</p>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Sponsor #{row.sponsorUserId} · Budget {formatMinorToNgn(row.budgetCents)} · Updated {formatDateTime(row.updatedAt)}
+                      </p>
+                    </div>
+                    <StatusBadge label={row.status.replaceAll("_", " ")} variant={statusVariant(row.status)} />
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {row.status === "PENDING_REVIEW" ? (
+                      <>
+                        <Button size="sm" onClick={() => patchCampaignMutation.mutate({ id: row.id, status: "APPROVED" })}>
+                          Approve
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => patchCampaignMutation.mutate({ id: row.id, status: "REJECTED" })}>
+                          Reject
+                        </Button>
+                      </>
+                    ) : null}
+                    {row.status === "APPROVED" ? (
+                      <Button size="sm" onClick={() => patchCampaignMutation.mutate({ id: row.id, status: "ACTIVE" })}>
+                        Mark active
+                      </Button>
+                    ) : null}
+                    {row.status === "ACTIVE" ? (
+                      <Button size="sm" variant="outline" onClick={() => patchCampaignMutation.mutate({ id: row.id, status: "PAUSED" })}>
+                        Pause
+                      </Button>
+                    ) : null}
+                    {row.status === "PAUSED" ? (
+                      <Button size="sm" onClick={() => patchCampaignMutation.mutate({ id: row.id, status: "ACTIVE" })}>
+                        Resume
+                      </Button>
+                    ) : null}
+                    {row.status === "DRAFT" ? (
+                      <p className="text-xs text-muted-foreground">Draft — waiting for sponsor to submit for review.</p>
+                    ) : null}
                   </div>
                 </div>
               ))}
@@ -127,72 +145,34 @@ export function AdminAdsPage() {
           )}
         </SectionCard>
 
-        <SectionCard title="Set pricing" description="Configure featured agent and listing costs by duration.">
+        <SectionCard
+          title="Reference featured pricing"
+          description="Stored in Haven platform settings (flat JSON keys) for product copy and internal estimates — not a billing engine."
+        >
           <div className="space-y-4">
+            {settingsQuery.isError ? (
+              <ErrorPanel body="Could not load current platform settings for pricing." onRetry={() => void settingsQuery.refetch()} />
+            ) : null}
             <div className="space-y-2">
-              <FieldLabel>Featured agent cost per day</FieldLabel>
-              <Input
-                value={String(state.featuredAgentDailyRate)}
-                onChange={(event) =>
-                  updateState({
-                    ...state,
-                    featuredAgentDailyRate: Number(event.target.value || 0),
-                  })
-                }
-              />
+              <FieldLabel>Featured agent cost per day (₦)</FieldLabel>
+              <CommaIntegerInput value={featuredAgentDailyRate} onChange={setFeaturedAgentDailyRate} min={0} />
             </div>
             <div className="space-y-2">
-              <FieldLabel>Featured listing cost per day</FieldLabel>
-              <Input
-                value={String(state.featuredListingDailyRate)}
-                onChange={(event) =>
-                  updateState({
-                    ...state,
-                    featuredListingDailyRate: Number(event.target.value || 0),
-                  })
-                }
-              />
+              <FieldLabel>Featured listing cost per day (₦)</FieldLabel>
+              <CommaIntegerInput value={featuredListingDailyRate} onChange={setFeaturedListingDailyRate} min={0} />
             </div>
+            <Button onClick={() => saveRatesMutation.mutate()} disabled={saveRatesMutation.isPending || settingsQuery.isLoading}>
+              {saveRatesMutation.isPending ? "Saving…" : "Save pricing"}
+            </Button>
           </div>
         </SectionCard>
       </div>
 
-      <SectionCard title="Active promotions" description="Performance metrics for running campaigns.">
-        {state.activePromotions.length === 0 ? (
-          <EmptyPanel title="No active promotions" body="Approved campaigns will appear here once the ads pipeline is connected." />
-        ) : (
-          <div className="space-y-3">
-            {state.activePromotions.map((promotion) => (
-              <div key={promotion.id} className="border border-border bg-white px-4 py-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-medium text-foreground">{promotion.title}</p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {promotion.type} • ends {formatDate(promotion.endsAt)}
-                    </p>
-                  </div>
-                  <StatusBadge label={promotion.status} variant="success" />
-                </div>
-                <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                  <div className="border border-border bg-secondary/40 px-4 py-3">
-                    <p className="text-xs uppercase tracking-eyebrow">Views</p>
-                    <p className="mt-2 text-base font-semibold text-foreground">{promotion.views}</p>
-                  </div>
-                  <div className="border border-border bg-secondary/40 px-4 py-3">
-                    <p className="text-xs uppercase tracking-eyebrow">Duration</p>
-                    <p className="mt-2 text-base font-semibold text-foreground">{promotion.durationDays} days</p>
-                  </div>
-                  <div className="border border-border bg-secondary/40 px-4 py-3">
-                    <p className="text-xs uppercase tracking-eyebrow">Cost</p>
-                    <p className="mt-2 text-base font-semibold text-foreground">
-                      {new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 }).format(promotion.cost)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+      <SectionCard title="Campaign statuses" description="Quick reference for Haven lifecycle values.">
+        <p className="text-sm text-muted-foreground">
+          DRAFT → PENDING_REVIEW → APPROVED or REJECTED → ACTIVE or PAUSED → ENDED. Vista sends PATCH with the target status only; invalid
+          transitions return 400/409 from the API.
+        </p>
       </SectionCard>
     </div>
   );

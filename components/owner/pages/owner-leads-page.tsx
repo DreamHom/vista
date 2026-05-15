@@ -48,6 +48,7 @@ import {
   readOwnerPropertyDraft,
   removeListingComment,
   replyToListingComment,
+  revealOwnerListingLead,
   revokeAgentAssignment,
   saveInspectionNote,
   saveInspectionStatus,
@@ -116,6 +117,16 @@ export function OwnerLeadsPage() {
     enabled: !!user?.id,
   });
 
+  const revealMutation = useMutation({
+    mutationFn: async ({ listingId, leadId }: { listingId: number; leadId: number }) =>
+      revealOwnerListingLead(listingId, leadId),
+    onSuccess: async () => {
+      toast.success("Contact details unlocked.");
+      await queryClient.invalidateQueries({ queryKey: ["owner-leads", user?.id] });
+    },
+    onError: () => toast.error("Could not reveal contact details."),
+  });
+
   const toggleShortlistMutation = useMutation({
     mutationFn: async (leadKey: string) => {
       toggleLeadShortlist(user!.id, leadKey);
@@ -147,8 +158,8 @@ export function OwnerLeadsPage() {
       />
 
       <PrototypeNotice
-        title="Lead contacts are not exposed by Haven v1.0.1 yet."
-        body="This screen combines real offer and comment activity into a useful lead queue, but phone and email reveal still need dedicated backend support before owners can unlock them."
+        title="How leads are built"
+        body="This view merges offers and public comments with formal listing leads returned by Haven for each of your listings. When a row comes from Haven, Reveal contact calls the server to unlock phone and email after you confirm you want the PII."
       />
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -195,12 +206,38 @@ export function OwnerLeadsPage() {
                   <StatusBadge label={`Last activity ${formatDateTime(lead.lastActivityAt)}`} variant="outline" />
                 </div>
                 <p className="text-sm leading-6 text-muted-foreground">{lead.sourceSummary}</p>
+                {lead.leadMessage?.trim() ? (
+                  <p className="rounded-md border border-border bg-muted/20 p-3 text-sm text-foreground">
+                    <span className="font-medium text-muted-foreground">Their message · </span>
+                    {lead.leadMessage.trim()}
+                  </p>
+                ) : null}
+                {lead.contactRevealed && (lead.contactPhone || lead.contactEmail) ? (
+                  <div className="space-y-1 rounded-md border border-border bg-secondary/15 p-3 text-sm">
+                    {lead.contactPhone ? (
+                      <p>
+                        <span className="font-medium text-muted-foreground">Phone · </span>
+                        {lead.contactPhone}
+                      </p>
+                    ) : null}
+                    {lead.contactEmail ? (
+                      <p>
+                        <span className="font-medium text-muted-foreground">Email · </span>
+                        {lead.contactEmail}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
                 <div className="flex flex-wrap gap-3">
                   <Button
                     variant="outline"
-                    onClick={() => toast.message("Contact reveal needs dedicated Haven support before owner phone/email access can be enabled.")}
+                    disabled={!lead.havenLeadId || lead.contactRevealed || revealMutation.isPending}
+                    onClick={() => {
+                      if (!lead.havenLeadId) return;
+                      revealMutation.mutate({ listingId: lead.listingId, leadId: lead.havenLeadId });
+                    }}
                   >
-                    Reveal contact
+                    {lead.contactRevealed ? "Contact revealed" : "Reveal contact"}
                   </Button>
                   <Button variant="outline" onClick={() => toggleShortlistMutation.mutate(lead.key)}>
                     {lead.shortlist ? "Remove from shortlist" : "Shortlist lead"}

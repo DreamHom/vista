@@ -1,4 +1,6 @@
 import { api } from "@/lib/api";
+import { latestPropertyDocumentsVerification, latestVerificationByType } from "@/lib/verification-helpers";
+import { datetimeLocalToInstantJson } from "@/lib/datetime-api";
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
   getNotificationHref,
@@ -7,6 +9,7 @@ import {
   readApplicantNotificationPreferences,
   saveApplicantNotificationPreferences,
   type ApplicantNotificationPreferences,
+  type InspectionResponse,
   type NotificationResponse,
   type OfferResponse,
   type PagedModel,
@@ -39,6 +42,8 @@ export interface PropertyResponse {
   sizeSqm?: number | null;
   description?: string | null;
   createdAt: string;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 export interface PropertySummary {
@@ -49,6 +54,8 @@ export interface PropertySummary {
   bathrooms?: number | null;
   sizeSqm?: number | null;
   documentsVerifiedAt?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 export interface OwnerListingResponse {
@@ -149,6 +156,23 @@ export interface OwnerLead {
   lastActivityAt: string;
   sourceSummary: string;
   shortlist: boolean;
+  /** Haven formal lead row when `GET /listings/{id}/leads` returned it. */
+  havenLeadId?: number | null;
+  contactRevealed?: boolean;
+  contactPhone?: string | null;
+  contactEmail?: string | null;
+  leadMessage?: string | null;
+}
+
+export interface ListingLeadResponse {
+  id: number;
+  listingId: number;
+  applicantUserId: number;
+  message?: string | null;
+  createdAt: string;
+  revealed: boolean;
+  contactPhone?: string | null;
+  contactEmail?: string | null;
 }
 
 export interface OwnerCommentItem {
@@ -164,6 +188,8 @@ export interface OwnerInspectionItem {
   applicantName: string;
   statusLabel: "Pending" | "Confirmed" | "Completed" | "Cancelled";
   localStatus: "pending" | "confirmed" | "completed" | "cancelled";
+  /** When the notification payload carries a Haven inspection id, owner actions can call the API. */
+  inspectionId: number | null;
 }
 
 export interface OwnerPropertyFormDraft {
@@ -385,10 +411,22 @@ export async function listOwnerComments(ownerUserId: number) {
     );
 }
 
+function pickInspectionIdFromPayload(payload: unknown): number | null {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
+  const raw = payload as Record<string, unknown>;
+  for (const key of ["inspectionId", "inspection_id"]) {
+    const v = raw[key];
+    if (typeof v === "number" && Number.isFinite(v)) return v;
+    if (typeof v === "string" && /^\d+$/.test(v)) return Number(v);
+  }
+  return null;
+}
+
 export async function listOwnerLeads(ownerUserId: number) {
-  const [offers, comments] = await Promise.all([
+  const [offers, comments, ownerListingsPage] = await Promise.all([
     listOwnerOffers(ownerUserId, 100),
     listOwnerComments(ownerUserId),
+    listOwnerListings(100),
   ]);
 
   const shortlistSet = readLeadShortlist(ownerUserId);
@@ -431,6 +469,57 @@ export async function listOwnerLeads(ownerUserId: number) {
     });
   }
 
+  const listingMeta = new Map(
+    ownerListingsPage.items.map(({ listing }) => [
+      listing.id,
+      {
+        title: listing.title ?? `Listing #${listing.id}`,
+        location: listing.property.address,
+      },
+    ]),
+  );
+
+  await Promise.all(
+    ownerListingsPage.items.map(async ({ listing }) => {
+      try {
+        const page = await api.get<PagedModel<ListingLeadResponse>>(`/listings/${listing.id}/leads`, {
+          query: { page: 0, size: 50 },
+        });
+        for (const row of page.content) {
+          const key = `${row.applicantUserId}-${row.listingId}`;
+          const meta = listingMeta.get(row.listingId);
+          const listingTitle = meta?.title ?? `Listing #${row.listingId}`;
+          const listingLocation = meta?.location ?? "Listing location";
+          const existing = leadMap.get(key);
+          const summaryFromRow = row.message?.trim()
+            ? `Listing lead: ${row.message.trim()}`
+            : "Submitted a formal interest request on your listing";
+          leadMap.set(key, {
+            key,
+            applicantId: row.applicantUserId,
+            applicantName: existing?.applicantName ?? `Applicant #${row.applicantUserId}`,
+            listingId: row.listingId,
+            listingTitle,
+            listingLocation,
+            temperature: "Hot",
+            lastActivityAt:
+              existing && new Date(existing.lastActivityAt).getTime() > new Date(row.createdAt).getTime()
+                ? existing.lastActivityAt
+                : row.createdAt,
+            sourceSummary: existing ? `${existing.sourceSummary}; ${summaryFromRow}` : summaryFromRow,
+            havenLeadId: row.id,
+            contactRevealed: row.revealed,
+            contactPhone: row.contactPhone ?? null,
+            contactEmail: row.contactEmail ?? null,
+            leadMessage: row.message ?? null,
+          });
+        }
+      } catch {
+        /* Not every listing exposes leads to this caller. */
+      }
+    }),
+  );
+
   const applicantProfiles = await loadPublicUserProfiles([...leadMap.values()].map((lead) => lead.applicantId));
 
   return [...leadMap.values()]
@@ -451,9 +540,21 @@ export async function listOwnerInspectionItems(userId: number) {
 
   return notifications.items.map((notification) => {
     const payload = getNotificationPayload(notification);
-    const listingId = typeof payload?.listingId === "number" ? payload.listingId : null;
-    const applicantId = typeof payload?.applicantId === "number" ? payload.applicantId : null;
+    const payloadRecord = payload && typeof payload === "object" && !Array.isArray(payload) ? (payload as Record<string, unknown>) : null;
+    const listingId =
+      typeof payloadRecord?.listingId === "number"
+        ? payloadRecord.listingId
+        : typeof payloadRecord?.listingId === "string" && /^\d+$/.test(payloadRecord.listingId)
+          ? Number(payloadRecord.listingId)
+          : null;
+    const applicantId =
+      typeof payloadRecord?.applicantId === "number"
+        ? payloadRecord.applicantId
+        : typeof payloadRecord?.applicantId === "string" && /^\d+$/.test(payloadRecord.applicantId)
+          ? Number(payloadRecord.applicantId)
+          : null;
     const listing = listingId ? listingMap.get(listingId) ?? null : null;
+    const inspectionId = pickInspectionIdFromPayload(payload);
 
     return {
       notification,
@@ -462,6 +563,7 @@ export async function listOwnerInspectionItems(userId: number) {
       applicantName: applicantId ? `Applicant #${applicantId}` : "Interested applicant",
       statusLabel: localStatuses[notification.id] ?? "Pending",
       localStatus: (localStatuses[notification.id] ?? "pending").toLowerCase() as OwnerInspectionItem["localStatus"],
+      inspectionId,
     };
   });
 }
@@ -533,8 +635,7 @@ export async function getOwnerDashboardOverview(userId: number): Promise<OwnerDa
       href: getNotificationHref(notification),
     })),
     showVerificationBanner: !profileData.privateProfile.identityVerifiedAt,
-    latestIdentityVerification:
-      profileData.verifications.find((item) => item.type === "OWNER_IDENTITY") ?? null,
+    latestIdentityVerification: latestVerificationByType(profileData.verifications, "OWNER_IDENTITY"),
   };
 }
 
@@ -559,10 +660,7 @@ export async function getOwnerPropertyManagement(propertyId: number, ownerUserId
     assignments: assignments.filter((item) => item.assignment.listingId === listingBundle?.listing.id),
     offers: offers.filter((item) => item.offer.listingId === listingBundle?.listing.id),
     comments: comments.filter((item) => item.comment.listingId === listingBundle?.listing.id),
-    propertyVerification:
-      verifications.content.find(
-        (item) => item.type === "PROPERTY_DOCUMENTS" && item.targetPropertyId === propertyId,
-      ) ?? null,
+    propertyVerification: latestPropertyDocumentsVerification(verifications.content, propertyId),
   };
 }
 
@@ -648,7 +746,10 @@ export async function submitPropertyDocumentsVerification(propertyId: number, fi
 }
 
 export async function createInspectionSlot(listingId: number, payload: { startsAt: string; endsAt: string }) {
-  return api.post<SlotResponse>(`/listings/${listingId}/slots`, payload);
+  return api.post<SlotResponse>(`/listings/${listingId}/slots`, {
+    startsAt: datetimeLocalToInstantJson(payload.startsAt),
+    endsAt: datetimeLocalToInstantJson(payload.endsAt),
+  });
 }
 
 export async function inviteAgentToListing(listingId: number, agentId: number) {
@@ -742,6 +843,37 @@ export function saveInspectionNote(userId: number, notificationId: number, note:
   const current = readInspectionNotes(userId);
   current[notificationId] = note;
   writeToStorage(storageKey(OWNER_INSPECTION_NOTES_KEY, userId), current);
+}
+
+export async function revealOwnerListingLead(listingId: number, leadId: number) {
+  return api.post<ListingLeadResponse>(`/listings/${listingId}/leads/${leadId}/reveal`, {});
+}
+
+export async function ownerApproveInspectionRequest(inspectionId: number) {
+  return api.post<InspectionResponse>(`/inspections/${inspectionId}/owner/approve`, {});
+}
+
+export async function ownerDeclineInspectionRequest(inspectionId: number) {
+  return api.post<InspectionResponse>(`/inspections/${inspectionId}/owner/decline`, {});
+}
+
+export async function ownerMarkInspectionNoShow(inspectionId: number) {
+  return api.post<InspectionResponse>(`/inspections/${inspectionId}/mark-no-show`, {});
+}
+
+export async function updateOwnerProperty(
+  propertyId: number,
+  payload: Partial<{
+    address: string;
+    bedrooms: number | null;
+    bathrooms: number | null;
+    sizeSqm: number | null;
+    description: string | null;
+    latitude: number | null;
+    longitude: number | null;
+  }>,
+) {
+  return api.patch<PropertyResponse>(`/properties/${propertyId}`, payload);
 }
 
 export { DEFAULT_NOTIFICATION_PREFERENCES };

@@ -15,9 +15,14 @@ import {
   HandCoins,
 } from "lucide-react";
 import { WorkspaceAccountMenu } from "@/components/layout/workspace-account-menu";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { LogoMark } from "@/components/logo";
-import { ACCOUNT_MENU_GLOBAL_EXTRAS } from "@/lib/account-menu-by-role";
+import {
+  ACCOUNT_MENU_GLOBAL_EXTRAS,
+  accountSubtitleForRole,
+  getAccountMenuItemsForRole,
+  notificationHubHref,
+} from "@/lib/account-menu-by-role";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/use-auth";
 import { toast } from "@/components/ui/toast";
@@ -36,6 +41,7 @@ export function ApplicantShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, clear } = useAuth();
+  const notifHref = user ? notificationHubHref(user.role) : null;
 
   function handleLogout() {
     clear();
@@ -48,7 +54,7 @@ export function ApplicantShell({ children }: { children: React.ReactNode }) {
       <div className="grid min-h-screen w-full lg:grid-cols-[248px_minmax(0,1fr)]">
         <aside className="hidden border-r border-border bg-white text-foreground lg:sticky lg:top-0 lg:flex lg:h-svh lg:max-h-svh lg:flex-col lg:overflow-hidden">
           <div className="shrink-0 border-b border-border px-6 py-5">
-            <Link href="/dashboard" className="inline-flex">
+            <Link href="/" className="inline-flex" aria-label="DreamHomes home">
               <LogoMark size="md" />
             </Link>
           </div>
@@ -95,51 +101,61 @@ export function ApplicantShell({ children }: { children: React.ReactNode }) {
               <span>Browse listings</span>
               <ShieldCheck className="h-4 w-4" aria-hidden />
             </Link>
-            <Button
-              variant="ghost"
-              className="w-full justify-start px-3 text-muted-foreground hover:bg-secondary hover:text-foreground"
-              onClick={handleLogout}
-            >
-              <LogOut className="h-4 w-4" aria-hidden />
-              Sign out
-            </Button>
             </div>
           </div>
         </aside>
 
         <div className="flex min-h-screen flex-col bg-background">
           <header className="sticky top-0 z-30 border-b border-border bg-background">
-            <div className="flex flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
-              <div className="flex items-center justify-between gap-4 lg:hidden">
-                <Link href="/dashboard" className="inline-flex">
-                  <LogoMark size="sm" />
-                </Link>
-                <WorkspaceAccountMenu
-                  fullName={user?.fullName ?? "DreamHomes User"}
-                  email={user?.email}
-                  accountSubtitle="Applicant account"
-                  menuItems={APPLICANT_NAV_ITEMS}
-                  extraLinks={ACCOUNT_MENU_GLOBAL_EXTRAS}
-                  onSignOut={handleLogout}
-                  triggerVariant="mobile"
-                  avatarVariant="initials"
-                />
+            <div className="flex items-center justify-between gap-3 px-4 py-2.5 sm:px-6 lg:px-8">
+              <Link href="/" className="inline-flex shrink-0 lg:hidden" aria-label="DreamHomes home">
+                <LogoMark size="sm" />
+              </Link>
+              <div className="hidden min-w-0 flex-1 lg:block" aria-hidden />
+              <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
+                {notifHref ? (
+                  <Link
+                    href={notifHref}
+                    aria-label="Notifications"
+                    className={cn(
+                      buttonVariants({ variant: "ghost", size: "icon" }),
+                      "h-8 w-8 sm:h-9 sm:w-9",
+                      pathname.startsWith(notifHref) && "bg-secondary text-foreground",
+                    )}
+                  >
+                    <Bell className="h-4 w-4" aria-hidden />
+                  </Link>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 sm:h-9 sm:w-9"
+                  aria-label="Sign out"
+                  onClick={handleLogout}
+                >
+                  <LogOut className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden />
+                </Button>
+                {user ? (
+                  <WorkspaceAccountMenu
+                    fullName={user.fullName}
+                    email={user.email}
+                    accountSubtitle={accountSubtitleForRole(user.role)}
+                    menuItems={getAccountMenuItemsForRole(user.role)}
+                    extraLinks={ACCOUNT_MENU_GLOBAL_EXTRAS}
+                    onSignOut={handleLogout}
+                    triggerVariant="desktop"
+                    photoUrl={user.profileImageUrl}
+                    personAvatarSize={32}
+                  />
+                ) : null}
               </div>
+            </div>
 
-              <div className="hidden justify-end lg:flex">
-                <WorkspaceAccountMenu
-                  fullName={user?.fullName ?? "Applicant"}
-                  email={user?.email}
-                  accountSubtitle="Applicant account"
-                  menuItems={APPLICANT_NAV_ITEMS}
-                  extraLinks={ACCOUNT_MENU_GLOBAL_EXTRAS}
-                  onSignOut={handleLogout}
-                  triggerVariant="desktop"
-                  avatarVariant="initials"
-                />
-              </div>
-
-              <nav className="-mx-1 flex gap-px overflow-x-auto border-t border-border pt-4 lg:hidden">
+            <nav
+              className="-mx-1 flex gap-px overflow-x-auto border-t border-border px-4 py-2 sm:px-6 lg:hidden"
+              aria-label="Dashboard sections"
+            >
                 {APPLICANT_NAV_ITEMS.map(({ href, label }) => {
                   const active = pathname === href || (href !== "/dashboard" && pathname.startsWith(`${href}/`));
 
@@ -158,8 +174,7 @@ export function ApplicantShell({ children }: { children: React.ReactNode }) {
                     </Link>
                   );
                 })}
-              </nav>
-            </div>
+            </nav>
           </header>
 
           <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</main>

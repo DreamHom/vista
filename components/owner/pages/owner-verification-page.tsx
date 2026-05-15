@@ -1,109 +1,40 @@
 "use client";
 
-/* eslint-disable @next/next/no-img-element */
-
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  FileUp,
-  ImagePlus,
-  MapPin,
-  Plus,
-  Sparkles,
-  UserRound,
-} from "lucide-react";
-import {
-  changeMyPassword,
-  getNotificationHref,
-  listNotifications,
-  markAllNotificationsRead,
-  markNotificationRead,
-  respondToOffer,
-  updateMyProfileBasics,
-} from "@/lib/applicant-dashboard";
-import {
-  counterOwnerOffer,
-  createInspectionSlot,
-  createOwnerListing,
-  createOwnerProperty,
-  DEFAULT_NOTIFICATION_PREFERENCES,
-  DEFAULT_OWNER_PROFILE_DRAFT,
-  DEFAULT_PROPERTY_DRAFT,
-  getOwnerDashboardOverview,
   getOwnerProfileData,
-  getOwnerPropertyManagement,
-  inviteAgentToListing,
-  listOwnerAssignments,
-  listOwnerComments,
-  listOwnerInspectionItems,
-  listOwnerLeads,
-  listOwnerListings,
-  listOwnerOffers,
   listOwnerProperties,
-  readInspectionNotes,
-  readOwnerNotificationPreferences,
-  readOwnerProfileDraft,
-  readOwnerPropertyDraft,
-  removeListingComment,
-  replyToListingComment,
-  revokeAgentAssignment,
-  saveInspectionNote,
-  saveInspectionStatus,
-  saveOwnerNotificationPreferences,
-  saveOwnerProfileDraft,
-  saveOwnerPropertyDraft,
-  searchAssignableAgents,
   submitOwnerIdentityVerification,
   submitPropertyDocumentsVerification,
-  toggleLeadShortlist,
-  updateOwnerListing,
-  uploadOwnerListingPhoto,
-  type AgentListingResponse,
-  type CommentResponse,
-  type OwnerManagedProperty,
-  type OwnerProfileDraft,
-  type OwnerPropertyFormDraft,
 } from "@/lib/owner-dashboard";
 import { useAuth } from "@/lib/use-auth";
-import { formatNaira } from "@/lib/format";
 import {
   DashboardPageIntro,
-  EmptyPanel,
   ErrorPanel,
   LoadingPanel,
-  MetricCard,
   SectionCard,
-  SettingsToggle,
   StatusBadge,
 } from "@/components/dashboard/applicant-ui";
-import {
-  firstName,
-  formatDate,
-  formatDateTime,
-  getGreeting,
-  offerStatusLabel,
-  offerStatusVariant,
-} from "@/components/dashboard/utils";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { formatDateTime } from "@/components/dashboard/utils";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
-import { cn } from "@/lib/utils";
+import { latestPropertyDocumentsVerification, latestVerificationByType } from "@/lib/verification-helpers";
 
 import { listingTitle } from "./owner-page-primitives";
+
+function PendingVerificationNotice({ submittedAt }: { submittedAt: string }) {
+  return (
+    <div className="rounded-2xl border border-amber-500/25 bg-amber-500/5 p-4">
+      <p className="text-sm font-semibold text-foreground">Under review</p>
+      <p className="mt-2 text-sm leading-6 text-muted-foreground">
+        Review usually takes up to three business days. When there is a decision, your status will update here and you will get a response through your notifications.
+      </p>
+      <p className="mt-2 text-xs text-muted-foreground">Submitted {formatDateTime(submittedAt)}.</p>
+    </div>
+  );
+}
 
 export function OwnerVerificationPage() {
   const { user } = useAuth();
@@ -151,6 +82,8 @@ export function OwnerVerificationPage() {
 
   const profile = profileQuery.data!;
   const properties = propertiesQuery.data!.items;
+  const latestIdentity = latestVerificationByType(profile.verifications, "OWNER_IDENTITY");
+  const identityPending = latestIdentity?.status === "PENDING";
 
   return (
     <div className="space-y-6">
@@ -161,22 +94,35 @@ export function OwnerVerificationPage() {
       />
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-        <SectionCard title="Owner identity" description="Submit or resubmit identity documents tied to your owner account.">
+        <SectionCard
+          title="Owner identity"
+          description={
+            identityPending
+              ? "Your latest submission is waiting for trust operations."
+              : "Submit or resubmit identity documents tied to your owner account."
+          }
+        >
           <div className="space-y-4">
             <div className="rounded-2xl border border-border bg-secondary/30 p-4">
               <p className="text-sm font-semibold text-foreground">
-                Current status: {profile.verifications.find((item) => item.type === "OWNER_IDENTITY")?.status ?? "Not submitted"}
+                Current status: {latestIdentity?.status ?? "Not submitted"}
               </p>
               <p className="mt-2 text-sm text-muted-foreground">
-                {profile.verifications.find((item) => item.type === "OWNER_IDENTITY")?.decidedAt
-                  ? `Last decision was recorded ${formatDateTime(profile.verifications.find((item) => item.type === "OWNER_IDENTITY")?.decidedAt ?? profile.verifications.find((item) => item.type === "OWNER_IDENTITY")?.submittedAt ?? new Date().toISOString())}.`
+                {latestIdentity?.decidedAt
+                  ? `Last decision was recorded ${formatDateTime(latestIdentity.decidedAt)}.`
                   : "Identity verification unlocks stronger trust on your owner profile and listings."}
               </p>
             </div>
-            <Input type="file" multiple onChange={(event) => setIdentityFiles(Array.from(event.target.files ?? []))} />
-            <Button onClick={() => identityMutation.mutate()} disabled={identityMutation.isPending || identityFiles.length === 0}>
-              {identityMutation.isPending ? "Submitting..." : "Submit owner identity"}
-            </Button>
+            {identityPending && latestIdentity ? (
+              <PendingVerificationNotice submittedAt={latestIdentity.submittedAt} />
+            ) : (
+              <>
+                <Input type="file" multiple onChange={(event) => setIdentityFiles(Array.from(event.target.files ?? []))} />
+                <Button onClick={() => identityMutation.mutate()} disabled={identityMutation.isPending || identityFiles.length === 0}>
+                  {identityMutation.isPending ? "Submitting..." : "Submit owner identity"}
+                </Button>
+              </>
+            )}
           </div>
         </SectionCard>
 
@@ -201,9 +147,8 @@ export function OwnerVerificationPage() {
       <SectionCard title="Property documents per property" description="Resubmit supporting files on the specific address that needs them.">
         <div className="space-y-4">
           {properties.map((item) => {
-            const verification = profile.verifications.find(
-              (entry) => entry.type === "PROPERTY_DOCUMENTS" && entry.targetPropertyId === item.property.id,
-            );
+            const verification = latestPropertyDocumentsVerification(profile.verifications, item.property.id);
+            const docPending = verification?.status === "PENDING";
 
             return (
               <div key={item.property.id} className="rounded-3xl border border-border bg-white p-5">
@@ -212,32 +157,51 @@ export function OwnerVerificationPage() {
                     <p className="text-lg font-semibold text-foreground">{listingTitle(item)}</p>
                     <p className="mt-1 text-sm text-muted-foreground">{item.property.address}</p>
                   </div>
-                  <StatusBadge label={verification?.status ?? "Not submitted"} variant={verification?.status === "APPROVED" ? "success" : "outline"} />
-                </div>
-                <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                  {verification?.decidedAt
-                    ? `Last decision recorded ${formatDateTime(verification.decidedAt)}. Upload the corrected files for another review pass.`
-                    : "Upload the files Haven should attach to the next property-doc verification request."}
-                </p>
-                <div className="mt-4 flex flex-wrap gap-3">
-                  <Input
-                    type="file"
-                    multiple
-                    className="max-w-sm"
-                    onChange={(event) =>
-                      setPropertyFiles((state) => ({
-                        ...state,
-                        [item.property.id]: Array.from(event.target.files ?? []),
-                      }))
+                  <StatusBadge
+                    label={verification?.status ?? "Not submitted"}
+                    variant={
+                      verification?.status === "APPROVED"
+                        ? "success"
+                        : verification?.status === "REJECTED"
+                          ? "warning"
+                          : verification?.status === "PENDING"
+                            ? "secondary"
+                            : "outline"
                     }
                   />
-                  <Button
-                    onClick={() => propertyMutation.mutate({ propertyId: item.property.id, files: propertyFiles[item.property.id] ?? [] })}
-                    disabled={propertyMutation.isPending || (propertyFiles[item.property.id] ?? []).length === 0}
-                  >
-                    Submit docs
-                  </Button>
                 </div>
+                <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                  {docPending
+                    ? "Your documents for this property are in the review queue."
+                    : verification?.decidedAt
+                      ? `Last decision recorded ${formatDateTime(verification.decidedAt)}. Upload the corrected files for another review pass.`
+                      : "Upload the files Haven should attach to the next property-doc verification request."}
+                </p>
+                {docPending && verification ? (
+                  <div className="mt-4">
+                    <PendingVerificationNotice submittedAt={verification.submittedAt} />
+                  </div>
+                ) : (
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <Input
+                      type="file"
+                      multiple
+                      className="max-w-sm"
+                      onChange={(event) =>
+                        setPropertyFiles((state) => ({
+                          ...state,
+                          [item.property.id]: Array.from(event.target.files ?? []),
+                        }))
+                      }
+                    />
+                    <Button
+                      onClick={() => propertyMutation.mutate({ propertyId: item.property.id, files: propertyFiles[item.property.id] ?? [] })}
+                      disabled={propertyMutation.isPending || (propertyFiles[item.property.id] ?? []).length === 0}
+                    >
+                      Submit docs
+                    </Button>
+                  </div>
+                )}
               </div>
             );
           })}

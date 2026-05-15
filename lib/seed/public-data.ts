@@ -61,6 +61,8 @@ interface PropertySummary {
   bathrooms: number | null;
   sizeSqm: number | null;
   documentsVerifiedAt: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 interface ListingResponse {
@@ -85,6 +87,12 @@ interface ListingResponse {
   property: PropertySummary;
   assignedAgentId: number | null;
   pendingReportCount: number | null;
+  petsAllowed?: string | null;
+  utilitiesNote?: string | null;
+  virtualTourUrl?: string | null;
+  priceNegotiable?: boolean | null;
+  floorPlanUrl?: string | null;
+  ownerPublicBio?: string | null;
 }
 
 interface PhotoResponse {
@@ -134,6 +142,7 @@ interface PublicUserProfileApi {
   closedDealCount: number | null;
   medianResponseMinutes: number | null;
   joinedAt: string | null;
+  publicBio?: string | null;
 }
 
 export interface PublicPhoto {
@@ -156,6 +165,10 @@ export interface PublicPerson {
   joinedAt: string | null;
   identityVerifiedAt?: string | null;
   agentCredentialVerifiedAt?: string | null;
+  /** From Haven `publicBio` on owner public profile when present. */
+  publicBio?: string | null;
+  /** Avatar URL when the API surfaces one; UI falls back to seeded pastel. */
+  profileImageUrl?: string | null;
 }
 
 export type PublicOwner = PublicPerson;
@@ -229,9 +242,14 @@ export interface PublicListing {
   comments: ListingComment[];
   slots: ListingSlot[];
   mapArea: string;
-  /** Approximate coordinates (Lagos / Abuja) until Haven exposes real geometry. */
+  /** WGS-84 when Haven supplies coordinates; else seeded approximate pin. */
   latitude: number;
   longitude: number;
+  petsAllowed?: string | null;
+  utilitiesNote?: string | null;
+  virtualTourUrl?: string | null;
+  priceNegotiable?: boolean;
+  ownerPublicBio?: string | null;
 }
 
 export interface PublicListingDetail extends PublicListing {
@@ -368,6 +386,7 @@ function toPublicPerson(profile: PublicUserProfileApi): PublicPerson {
     joinedAt: profile.joinedAt,
     identityVerifiedAt: profile.identityVerifiedAt,
     agentCredentialVerifiedAt: profile.agentCredentialVerifiedAt,
+    publicBio: profile.publicBio?.trim() || null,
   };
 }
 
@@ -427,7 +446,16 @@ async function enrichListing(
   const agent = agentProfile ? toPublicPerson(agentProfile) : null;
 
   const gallery = photos ?? (await getPhotos(listing.id));
-  const { latitude, longitude } = getListingCoordinates(String(listing.id), listing.property.address);
+  const serverLat = listing.property.latitude;
+  const serverLng = listing.property.longitude;
+  const hasServerCoords =
+    typeof serverLat === "number" &&
+    typeof serverLng === "number" &&
+    Number.isFinite(serverLat) &&
+    Number.isFinite(serverLng);
+  const { latitude, longitude } = hasServerCoords
+    ? { latitude: serverLat, longitude: serverLng }
+    : getListingCoordinates(String(listing.id), listing.property.address);
 
   return {
     id: String(listing.id),
@@ -465,6 +493,11 @@ async function enrichListing(
     mapArea: shortLocation(listing.property.address),
     latitude,
     longitude,
+    petsAllowed: listing.petsAllowed ?? null,
+    utilitiesNote: listing.utilitiesNote ?? null,
+    virtualTourUrl: listing.virtualTourUrl?.trim() || null,
+    priceNegotiable: listing.priceNegotiable ?? false,
+    ownerPublicBio: listing.ownerPublicBio?.trim() || null,
   };
 }
 
@@ -578,6 +611,26 @@ async function listManyListings(limit = 100) {
 
 export async function getDreamAiInventory(limit = 60) {
   return listManyListings(limit);
+}
+
+/**
+ * Normalise a listing identifier coming from a route segment.
+ *
+ * URLs in Next.js dynamic routes (`/listings/[id]`) arrive percent-encoded
+ * and sometimes with extra whitespace from search-form submissions. Haven's
+ * listing IDs are simple stringified longs, but the route shape should
+ * tolerate leading/trailing whitespace and decoded characters before we
+ * pass the value to `getListingById` or use it as a comparison key.
+ */
+export function normalizeListingRouteId(rawId: string): string {
+  if (!rawId) return "";
+  let value = rawId;
+  try {
+    value = decodeURIComponent(value);
+  } catch {
+    // Malformed escape — fall through with the raw value.
+  }
+  return value.trim();
 }
 
 export async function getListingById(id: string): Promise<PublicListingDetail | undefined> {

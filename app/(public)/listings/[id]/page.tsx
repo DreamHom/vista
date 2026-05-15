@@ -28,7 +28,9 @@ import {
   formatAvailability,
   getListingById,
   getSimilarListings,
+  normalizeListingRouteId,
 } from "@/lib/seed/public-data";
+import { truncateMetaDescription } from "@/lib/seo-metadata";
 import { cn } from "@/lib/utils";
 
 function formatListingTypeLabel(raw: string) {
@@ -44,13 +46,32 @@ export async function generateMetadata({
 }: {
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
-  const { id } = await params;
+  const { id: rawId } = await params;
+  const id = normalizeListingRouteId(rawId);
   const listing = await getListingById(id);
-  if (!listing) return {};
+  if (!listing) {
+    return { title: "Listing", robots: { index: false, follow: true } };
+  }
+
+  const description = truncateMetaDescription(
+    [listing.address, listing.description].filter(Boolean).join(" "),
+  );
 
   return {
     title: listing.title,
-    description: `${listing.address}. ${listing.description}`,
+    description,
+    alternates: { canonical: `/listings/${id}` },
+    openGraph: {
+      title: listing.title,
+      description,
+      url: `/listings/${id}`,
+      type: "website",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: listing.title,
+      description,
+    },
   };
 }
 
@@ -59,7 +80,8 @@ export default async function ListingDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const { id } = await params;
+  const { id: rawId } = await params;
+  const id = normalizeListingRouteId(rawId);
   const listing = await getListingById(id);
   if (!listing) notFound();
 
@@ -142,7 +164,7 @@ export default async function ListingDetailPage({
                 Schedule inspection
               </ListingScheduleInspectionLink>
               <p className="mt-3 text-center text-xs leading-relaxed text-muted-foreground md:text-sm">
-                Applicants go to My Inspections; everyone else can create an account first. Messages stay on-platform.
+                Signed-in applicants pick an open slot on My Inspections (or here in the sidebar). Everyone else can create an account first.
               </p>
             </div>
           </article>
@@ -282,9 +304,26 @@ export default async function ListingDetailPage({
                 icon={<ShieldCheck className="h-4 w-4" aria-hidden />}
                 title="Pet &amp; utilities"
                 body={
-                  <p className="text-muted-foreground">
-                    Ask during inspection. Haven does not expose pet or utility responsibility on every listing yet.
-                  </p>
+                  listing.petsAllowed?.trim() || listing.utilitiesNote?.trim() ? (
+                    <div className="space-y-2 text-sm text-muted-foreground">
+                      {listing.petsAllowed?.trim() ? (
+                        <p>
+                          <span className="font-medium text-foreground">Pets: </span>
+                          {listing.petsAllowed.trim()}
+                        </p>
+                      ) : null}
+                      {listing.utilitiesNote?.trim() ? (
+                        <p>
+                          <span className="font-medium text-foreground">Utilities: </span>
+                          {listing.utilitiesNote.trim()}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground">
+                      The owner has not added pet or utility notes on this listing yet. Ask during inspection if it matters for your move.
+                    </p>
+                  )
                 }
               />
             </div>

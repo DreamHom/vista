@@ -6508,9 +6508,9 @@ components:
           maxLength: 64
           minLength: 0
           type: string
-        agentLicenseProvidedWhenNeeded:
-          type: boolean
         publicRole:
+          type: boolean
+        agentLicenseProvidedWhenNeeded:
           type: boolean
     RegisterAcceptedResponse:
       type: object
@@ -6851,9 +6851,9 @@ components:
           maxLength: 8000
           minLength: 0
           type: string
-        fullNamePresentOrNonBlank:
-          type: boolean
         emailPresentOrNonBlank:
+          type: boolean
+        fullNamePresentOrNonBlank:
           type: boolean
         displayNamePresentOrNonBlank:
           type: boolean

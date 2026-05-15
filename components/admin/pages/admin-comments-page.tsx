@@ -1,38 +1,15 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, ExternalLink, ShieldAlert } from "lucide-react";
 import {
-  approveListing,
-  approveVerification,
-  clearAdminCommentFlag,
-  DEFAULT_ADMIN_ADS_STATE,
-  DEFAULT_ADMIN_PLATFORM_SETTINGS,
   deleteComment,
-  dismissListingReport,
-  getAdminAnalyticsWorkspace,
-  getAdminDashboardOverview,
-  listAdminAuditLogs,
-  listAdminListings,
+  dismissAdminCommentFlag,
   listAdminModerationComments,
-  listAdminReports,
-  listAdminUsers,
-  listAdminVerifications,
-  readAdminAdsState,
-  readAdminPlatformSettings,
-  reactivateUser,
-  rejectVerification,
-  resolveListingReport,
-  saveAdminAdsState,
-  saveAdminPlatformSettings,
-  suspendUser,
-  takeDownListing,
-  type VerificationQueueType,
+  resolveAdminCommentFlag,
 } from "@/lib/admin-dashboard";
-import { DashboardPageIntro, EmptyPanel, ErrorPanel, LoadingPanel, MetricCard, SectionCard, SettingsToggle, StatusBadge } from "@/components/dashboard/applicant-ui";
-import { formatDate, formatDateTime } from "@/components/dashboard/utils";
+import { DashboardPageIntro, EmptyPanel, ErrorPanel, LoadingPanel, StatusBadge } from "@/components/dashboard/applicant-ui";
+import { formatDateTime } from "@/components/dashboard/utils";
 import {
   Dialog,
   DialogClose,
@@ -46,10 +23,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
-import { cn } from "@/lib/utils";
-import { PrototypeNotice } from "./admin-page-primitives";
 
 export function AdminCommentsPage() {
   const queryClient = useQueryClient();
@@ -61,12 +35,33 @@ export function AdminCommentsPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: deleteComment,
+    mutationFn: async ({ commentId, flagId }: { commentId: string; flagId: number }) => {
+      await deleteComment(commentId);
+      await resolveAdminCommentFlag(flagId).catch(() => undefined);
+    },
     onSuccess: async () => {
-      toast.success("Comment removed.");
+      toast.success("Comment removed and flag resolved.");
       await queryClient.invalidateQueries({ queryKey: ["admin-comments"] });
     },
     onError: () => toast.error("We couldn't remove that comment."),
+  });
+
+  const dismissMutation = useMutation({
+    mutationFn: dismissAdminCommentFlag,
+    onSuccess: async () => {
+      toast.success("Flag dismissed.");
+      await queryClient.invalidateQueries({ queryKey: ["admin-comments"] });
+    },
+    onError: () => toast.error("We couldn't dismiss that flag."),
+  });
+
+  const resolveMutation = useMutation({
+    mutationFn: resolveAdminCommentFlag,
+    onSuccess: async () => {
+      toast.success("Flag resolved.");
+      await queryClient.invalidateQueries({ queryKey: ["admin-comments"] });
+    },
+    onError: () => toast.error("We couldn't resolve that flag."),
   });
 
   if (query.isLoading) return <LoadingPanel label="Loading comment moderation queue..." />;
@@ -85,12 +80,7 @@ export function AdminCommentsPage() {
       <DashboardPageIntro
         eyebrow="Admin console"
         title="Comments moderation"
-        description="Review flagged comment candidates and take moderation action where needed."
-      />
-
-      <PrototypeNotice
-        title="Flagged comment queues are not exposed by Haven yet"
-        body="This moderation surface combines locally flagged comments with comments on reported listings so the full admin flow can be reviewed before backend support lands."
+        description="Review user-flagged listing comments from the Haven moderation queue."
       />
 
       <div className="grid gap-4 lg:grid-cols-[1fr_220px]">
@@ -109,6 +99,7 @@ export function AdminCommentsPage() {
                   <div>
                     <p className="text-lg font-semibold text-foreground">{item.listingTitle}</p>
                     <p className="mt-1 text-sm text-muted-foreground">
+                      {item.listingAddress ? `${item.listingAddress} · ` : null}
                       {item.author} • {formatDateTime(item.flaggedAt)}
                     </p>
                   </div>
@@ -130,18 +121,27 @@ export function AdminCommentsPage() {
                           <Button variant="outline">Cancel</Button>
                         </DialogClose>
                         <DialogClose asChild>
-                          <Button onClick={() => deleteMutation.mutate(item.commentId)}>Confirm removal</Button>
+                          <Button
+                            disabled={deleteMutation.isPending}
+                            onClick={() => deleteMutation.mutate({ commentId: item.commentId, flagId: item.flagId })}
+                          >
+                            Confirm removal
+                          </Button>
                         </DialogClose>
                       </DialogFooter>
                     </DialogContent>
                   </Dialog>
                   <Button
                     variant="outline"
-                    onClick={async () => {
-                      clearAdminCommentFlag(item.key);
-                      toast.success("Flag dismissed.");
-                      await queryClient.invalidateQueries({ queryKey: ["admin-comments"] });
-                    }}
+                    disabled={resolveMutation.isPending}
+                    onClick={() => resolveMutation.mutate(item.flagId)}
+                  >
+                    Resolve flag
+                  </Button>
+                  <Button
+                    variant="outline"
+                    disabled={dismissMutation.isPending}
+                    onClick={() => dismissMutation.mutate(item.flagId)}
                   >
                     Dismiss flag
                   </Button>

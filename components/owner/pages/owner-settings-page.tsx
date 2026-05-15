@@ -1,91 +1,21 @@
 "use client";
 
-/* eslint-disable @next/next/no-img-element */
-
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  FileUp,
-  ImagePlus,
-  MapPin,
-  Plus,
-  Sparkles,
-  UserRound,
-} from "lucide-react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   changeMyPassword,
-  getNotificationHref,
-  listNotifications,
-  markAllNotificationsRead,
-  markNotificationRead,
-  respondToOffer,
+  deleteMyAccount,
   updateMyProfileBasics,
 } from "@/lib/applicant-dashboard";
 import {
-  counterOwnerOffer,
-  createInspectionSlot,
-  createOwnerListing,
-  createOwnerProperty,
   DEFAULT_NOTIFICATION_PREFERENCES,
-  DEFAULT_OWNER_PROFILE_DRAFT,
-  DEFAULT_PROPERTY_DRAFT,
-  getOwnerDashboardOverview,
   getOwnerProfileData,
-  getOwnerPropertyManagement,
-  inviteAgentToListing,
-  listOwnerAssignments,
-  listOwnerComments,
-  listOwnerInspectionItems,
-  listOwnerLeads,
-  listOwnerListings,
-  listOwnerOffers,
-  listOwnerProperties,
-  readInspectionNotes,
   readOwnerNotificationPreferences,
-  readOwnerProfileDraft,
-  readOwnerPropertyDraft,
-  removeListingComment,
-  replyToListingComment,
-  revokeAgentAssignment,
-  saveInspectionNote,
-  saveInspectionStatus,
   saveOwnerNotificationPreferences,
-  saveOwnerProfileDraft,
-  saveOwnerPropertyDraft,
-  searchAssignableAgents,
-  submitOwnerIdentityVerification,
-  submitPropertyDocumentsVerification,
-  toggleLeadShortlist,
-  updateOwnerListing,
-  uploadOwnerListingPhoto,
-  type AgentListingResponse,
-  type CommentResponse,
-  type OwnerManagedProperty,
-  type OwnerProfileDraft,
-  type OwnerPropertyFormDraft,
 } from "@/lib/owner-dashboard";
 import { useAuth } from "@/lib/use-auth";
-import { formatNaira } from "@/lib/format";
-import {
-  DashboardPageIntro,
-  EmptyPanel,
-  ErrorPanel,
-  LoadingPanel,
-  MetricCard,
-  SectionCard,
-  SettingsToggle,
-  StatusBadge,
-} from "@/components/dashboard/applicant-ui";
-import {
-  firstName,
-  formatDate,
-  formatDateTime,
-  getGreeting,
-  offerStatusLabel,
-  offerStatusVariant,
-} from "@/components/dashboard/utils";
+import { DashboardPageIntro, ErrorPanel, LoadingPanel, SectionCard, SettingsToggle } from "@/components/dashboard/applicant-ui";
 import {
   Dialog,
   DialogClose,
@@ -97,20 +27,21 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
-import { cn } from "@/lib/utils";
 
 import { FieldLabel } from "./owner-page-primitives";
 
+type NotificationPrefs = typeof DEFAULT_NOTIFICATION_PREFERENCES;
+
 export function OwnerSettingsPage() {
   const { user, clear } = useAuth();
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
-  const [preferences, setPreferences] = useState(DEFAULT_NOTIFICATION_PREFERENCES);
+  const [preferences, setPreferences] = useState<NotificationPrefs>(DEFAULT_NOTIFICATION_PREFERENCES);
+  const [prefsReady, setPrefsReady] = useState(false);
 
   const profileQuery = useQuery({
     queryKey: ["owner-profile", user?.id],
@@ -125,10 +56,27 @@ export function OwnerSettingsPage() {
   }, [profileQuery.data]);
 
   useEffect(() => {
-    if (user) {
+    if (!user?.id || !profileQuery.data || prefsReady) return;
+    const raw = profileQuery.data.privateProfile.notificationPreferences;
+    if (typeof raw === "string" && raw.trim()) {
+      try {
+        const parsed = JSON.parse(raw) as Partial<NotificationPrefs>;
+        setPreferences({ ...DEFAULT_NOTIFICATION_PREFERENCES, ...parsed });
+      } catch {
+        setPreferences(readOwnerNotificationPreferences(user.id));
+      }
+    } else {
       setPreferences(readOwnerNotificationPreferences(user.id));
     }
-  }, [user]);
+    setPrefsReady(true);
+  }, [prefsReady, profileQuery.data, user?.id]);
+
+  const prefsMutation = useMutation({
+    mutationFn: (next: NotificationPrefs) => updateMyProfileBasics({ notificationPreferences: JSON.stringify(next) }),
+    onError: () => {
+      toast.error("Could not sync preferences to the server. They are still saved in this browser.");
+    },
+  });
 
   const emailMutation = useMutation({
     mutationFn: () => updateMyProfileBasics({ email }),
@@ -146,6 +94,18 @@ export function OwnerSettingsPage() {
     onError: () => toast.error("We couldn't change your password."),
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteMyAccount(),
+    onSuccess: async () => {
+      toast.success("Account closed.");
+      clear();
+      router.replace("/login");
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "We could not close your account.");
+    },
+  });
+
   if (profileQuery.isLoading) return <LoadingPanel label="Loading owner settings..." />;
   if (profileQuery.error) {
     return <ErrorPanel body="We couldn't load your settings." onRetry={() => profileQuery.refetch()} />;
@@ -156,7 +116,7 @@ export function OwnerSettingsPage() {
       <DashboardPageIntro
         eyebrow="Account controls"
         title="Settings"
-        description="Security, notifications, and the controls you reach for when your owner workspace needs a reset."
+        description="Security, notifications, and account closure for your owner workspace."
       />
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
@@ -172,7 +132,7 @@ export function OwnerSettingsPage() {
           </div>
         </SectionCard>
 
-        <SectionCard title="Change password" description="Use your current password once, then set the new one you want Haven to enforce.">
+        <SectionCard title="Change password" description="Use your current password once, then set the new one you want enforced.">
           <div className="space-y-4">
             <div className="space-y-2">
               <FieldLabel>Current password</FieldLabel>
@@ -182,23 +142,31 @@ export function OwnerSettingsPage() {
               <FieldLabel>New password</FieldLabel>
               <Input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} />
             </div>
-            <Button onClick={() => passwordMutation.mutate()} disabled={passwordMutation.isPending || !currentPassword || !newPassword}>
+            <Button
+              onClick={() => passwordMutation.mutate()}
+              disabled={passwordMutation.isPending || !currentPassword || !newPassword}
+            >
               {passwordMutation.isPending ? "Updating..." : "Change password"}
             </Button>
           </div>
         </SectionCard>
       </div>
 
-      <SectionCard title="Notification preferences" description="These preferences are stored locally until Haven exposes a dedicated owner settings API.">
+      <SectionCard
+        title="Notification preferences"
+        description="Saved to your DreamHomes account. We also keep a copy in this browser if the network request fails."
+      >
         <div className="divide-y divide-border overflow-hidden rounded-md border border-border bg-muted/15 px-4 py-1 sm:px-5 sm:py-1.5">
           <SettingsToggle
             title="Inspection updates"
             description="Important inspection activity and slot movement."
             checked={preferences.inspectionUpdates}
             onCheckedChange={(next) => {
+              if (!user?.id) return;
               const updated = { ...preferences, inspectionUpdates: next };
               setPreferences(updated);
-              if (user) saveOwnerNotificationPreferences(user.id, updated);
+              saveOwnerNotificationPreferences(user.id, updated);
+              prefsMutation.mutate(updated);
             }}
           />
           <SettingsToggle
@@ -206,9 +174,11 @@ export function OwnerSettingsPage() {
             description="Offer submissions, responses, and counters."
             checked={preferences.offerUpdates}
             onCheckedChange={(next) => {
+              if (!user?.id) return;
               const updated = { ...preferences, offerUpdates: next };
               setPreferences(updated);
-              if (user) saveOwnerNotificationPreferences(user.id, updated);
+              saveOwnerNotificationPreferences(user.id, updated);
+              prefsMutation.mutate(updated);
             }}
           />
           <SettingsToggle
@@ -216,52 +186,59 @@ export function OwnerSettingsPage() {
             description="Product and trust-program updates from DreamHomes."
             checked={preferences.platformAnnouncements}
             onCheckedChange={(next) => {
+              if (!user?.id) return;
               const updated = { ...preferences, platformAnnouncements: next };
               setPreferences(updated);
-              if (user) saveOwnerNotificationPreferences(user.id, updated);
+              saveOwnerNotificationPreferences(user.id, updated);
+              prefsMutation.mutate(updated);
             }}
           />
           <SettingsToggle
             title="Email notifications"
-            description="Keep important events mirrored to email once Haven wires owner notification channels."
+            description="Mirror important events to your inbox when enabled."
             checked={preferences.email}
             onCheckedChange={(next) => {
+              if (!user?.id) return;
               const updated = { ...preferences, email: next };
               setPreferences(updated);
-              if (user) saveOwnerNotificationPreferences(user.id, updated);
+              saveOwnerNotificationPreferences(user.id, updated);
+              prefsMutation.mutate(updated);
             }}
           />
         </div>
       </SectionCard>
 
-      <SectionCard title="Delete account" description="This remains a guarded prototype until Haven ships an explicit owner account deletion endpoint.">
-        <Dialog>
-          <DialogTrigger asChild>
-            <Button variant="outline">Delete account</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Delete account</DialogTitle>
-              <DialogDescription>
-                Haven v1.0.1 does not yet expose an owner delete-account endpoint. We can sign you out locally, but not remove the account server-side yet.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <DialogClose asChild>
-                <Button variant="outline">Close</Button>
-              </DialogClose>
-              <Button
-                variant="destructive"
-                onClick={() => {
-                  clear();
-                  toast.message("Signed out locally. Server-side account deletion still needs backend support.");
-                }}
-              >
-                Sign out instead
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+      <SectionCard
+        title="Delete account"
+        description="Soft-delete on DreamHomes: your session ends immediately and your email can be reused after anonymisation."
+      >
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="max-w-2xl text-sm leading-7 text-muted-foreground">
+            This closes your account on the server. Listings and workspace data tied to this login will no longer be
+            available from this account.
+          </p>
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="destructive">Delete account</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Delete your DreamHomes account?</DialogTitle>
+                <DialogDescription>
+                  This uses the account closure API. You will be signed out immediately after it succeeds.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <DialogClose asChild>
+                  <Button variant="outline">Keep account</Button>
+                </DialogClose>
+                <Button variant="destructive" disabled={deleteMutation.isPending} onClick={() => deleteMutation.mutate()}>
+                  {deleteMutation.isPending ? "Closing…" : "Confirm delete"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </SectionCard>
     </div>
   );

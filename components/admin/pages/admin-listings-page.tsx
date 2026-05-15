@@ -3,36 +3,10 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, ExternalLink, ShieldAlert } from "lucide-react";
-import {
-  approveListing,
-  approveVerification,
-  clearAdminCommentFlag,
-  DEFAULT_ADMIN_ADS_STATE,
-  DEFAULT_ADMIN_PLATFORM_SETTINGS,
-  deleteComment,
-  dismissListingReport,
-  getAdminAnalyticsWorkspace,
-  getAdminDashboardOverview,
-  listAdminAuditLogs,
-  listAdminListings,
-  listAdminModerationComments,
-  listAdminReports,
-  listAdminUsers,
-  listAdminVerifications,
-  readAdminAdsState,
-  readAdminPlatformSettings,
-  reactivateUser,
-  rejectVerification,
-  resolveListingReport,
-  saveAdminAdsState,
-  saveAdminPlatformSettings,
-  suspendUser,
-  takeDownListing,
-  type VerificationQueueType,
-} from "@/lib/admin-dashboard";
-import { DashboardPageIntro, EmptyPanel, ErrorPanel, LoadingPanel, MetricCard, SectionCard, SettingsToggle, StatusBadge } from "@/components/dashboard/applicant-ui";
-import { formatDate, formatDateTime } from "@/components/dashboard/utils";
+import { ExternalLink } from "lucide-react";
+import { approveListing, listAdminListings, takeDownListing } from "@/lib/admin-dashboard";
+import { DashboardPageIntro, EmptyPanel, ErrorPanel, LoadingPanel, SectionCard, StatusBadge } from "@/components/dashboard/applicant-ui";
+import { formatDate } from "@/components/dashboard/utils";
 import {
   Dialog,
   DialogClose,
@@ -45,10 +19,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
-import { cn } from "@/lib/utils";
 import { FilterPills, PrototypeNotice } from "./admin-page-primitives";
 
 export function AdminListingsPage() {
@@ -99,7 +71,6 @@ export function AdminListingsPage() {
         options={[
           { label: "All", value: "all" },
           { label: "Live", value: "LIVE" },
-          { label: "Pending", value: "PAUSED" },
           { label: "Paused", value: "PAUSED" },
           { label: "Taken down", value: "TAKEN_DOWN" },
         ]}
@@ -115,7 +86,7 @@ export function AdminListingsPage() {
       ) : (
         <div className="space-y-3">
           {items.map((item) => (
-            <Card key={`${item.source}-${item.listingId}`} className="border-border shadow-none">
+            <Card key={item.rowKey} className="border-border shadow-none">
               <CardContent className="space-y-4 p-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>

@@ -24,9 +24,8 @@ export interface FilterPillsProps {
  * Segmented control / filter pills, matching the reference: sharp-edged,
  * black-fill on the selected state, hairline outline on the rest. No shadow.
  *
- * Decorative on the landing: when an `href` is provided each pill links
- * out to a filtered listings index. Real interactivity (URL param sync,
- * client-side filter) lands when we build `/listings`.
+ * When `href` is set, each pill navigates to `/listings` (or other routes) with
+ * the right query string so the browse screen opens with that filter applied.
  */
 export function FilterPills({ options, selected, className, size = "md" }: FilterPillsProps) {
   const heightClass = size === "sm" ? "min-h-8 px-3 py-1.5 text-xs" : "min-h-9 px-4 py-2 text-sm";

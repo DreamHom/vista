@@ -52,8 +52,6 @@ export interface Dictionary {
   shorts: {
     eyebrow: string;
     topics: readonly string[];
-    featuredCaption: string;
-    viewsLabel: string;
   };
   featured: {
     eyebrow: string;
@@ -142,8 +140,6 @@ const en: Dictionary = {
       "Owner's insight",
       "Living experience",
     ],
-    featuredCaption: "A closer look at your future home",
-    viewsLabel: "{n} views",
   },
   featured: {
     eyebrow: "Featured · Entire House",
@@ -253,8 +249,6 @@ const yo: Dictionary = {
       "Ìmọ̀ olówó",
       "Ìrírí ìgbé ayé",
     ],
-    featuredCaption: "Wo ilé ọjọ́ iwájú rẹ ní jíjinlẹ̀",
-    viewsLabel: "{n} ìwò",
   },
   featured: {
     eyebrow: "Àyànfẹ́ · Ilé Pípé",
@@ -364,8 +358,6 @@ const ig: Dictionary = {
       "Echiche onye nwe",
       "Ahụmahụ ibi ndụ",
     ],
-    featuredCaption: "Lekwasị ụlọ ọdịnihu gị anya nke ọma",
-    viewsLabel: "{n} nlele",
   },
   featured: {
     eyebrow: "A họrọ · Ụlọ Dum",
@@ -475,8 +467,6 @@ const ha: Dictionary = {
       "Hangen mai mallaka",
       "Kwarewar zama",
     ],
-    featuredCaption: "Duba gidan nan gabanka da kyau",
-    viewsLabel: "Ra'ayoyi {n}",
   },
   featured: {
     eyebrow: "Zaɓaɓɓe · Gida Cikakke",

@@ -1,4 +1,5 @@
 import { ApiError, api } from "@/lib/api";
+import { latestVerificationByType } from "@/lib/verification-helpers";
 import {
   getListingById,
   type PublicListingDetail,
@@ -88,17 +89,25 @@ export interface PrivateUserProfile {
   agency?: string | null;
   suspended?: boolean;
   joinedAt?: string | null;
+  /** JSON string; Haven persists notification toggles. */
+  notificationPreferences?: string | null;
+  profileImageUrl?: string | null;
+  publicBio?: string | null;
 }
 
 export interface PublicUserProfile {
   id: number;
   fullName: string;
+  displayName?: string | null;
   role: Role;
   identityVerifiedAt?: string | null;
   agentCredentialVerifiedAt?: string | null;
   averageRating?: number | null;
   reviewCount: number;
   suspended?: boolean;
+  /** Public narrative and headshot from Haven when present. */
+  publicBio?: string | null;
+  profileImageUrl?: string | null;
 }
 
 export interface VerificationResponse {
@@ -124,8 +133,9 @@ export interface InspectionResponse {
   id: number;
   slotId: number;
   applicantId: number;
-  status: "PENDING" | "APPROVED" | "DECLINED" | "CANCELLED";
+  status: "PENDING" | "APPROVED" | "DECLINED" | "CANCELLED" | "NO_SHOW" | "COMPLETED";
   notes?: string | null;
+  agentExtras?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -457,8 +467,7 @@ export async function getApplicantProfileData(userId: number) {
     privateProfile,
     publicProfile,
     reviews: reviewsPage.content,
-    latestIdentityVerification:
-      verificationsPage.content.find((item) => item.type === "APPLICANT_IDENTITY") ?? null,
+    latestIdentityVerification: latestVerificationByType(verificationsPage.content, "APPLICANT_IDENTITY"),
   };
 }
 
@@ -467,8 +476,22 @@ export async function updateMyProfileBasics(payload: {
   email?: string;
   phone?: string;
   displayName?: string;
+  publicBio?: string;
+  profileImageUrl?: string;
+  notificationPreferences?: string;
 }) {
   return api.patch<PrivateUserProfile>("/me", payload);
+}
+
+/** Multipart avatar — Haven writes the public URL to `profile_image_url`. */
+export async function uploadMyAvatar(file: File) {
+  const formData = new FormData();
+  formData.set("file", file);
+  return api.post<PrivateUserProfile>("/me/avatar", formData);
+}
+
+export async function deleteMyAccount() {
+  return api.delete<void>("/me");
 }
 
 export async function changeMyPassword(payload: { currentPassword: string; newPassword: string }) {
@@ -493,6 +516,41 @@ export async function respondToOffer(offerId: number, status: "ACCEPTED" | "DECL
 
 export async function cancelInspection(inspectionId: number) {
   return api.delete<void>(`/inspections/${inspectionId}`);
+}
+
+/** Public listing header for the inspection booking panel (GET /listings/{id}). */
+export interface ListingBookingSummary {
+  id: number;
+  listingType: "RENT" | "SALE";
+  askingPrice: number;
+  title: string | null;
+  property: { address: string };
+}
+
+export interface ListingPhotoRow {
+  id: number;
+  listingId: number;
+  url: string;
+  displayOrder: number;
+  caption: string | null;
+  uploadedAt: string;
+}
+
+export function fetchListingBookingSummary(listingId: string) {
+  return api.get<ListingBookingSummary>(`/listings/${listingId}`, { skipAuth: true });
+}
+
+export function fetchListingBookingSlots(listingId: string) {
+  return api.get<SlotResponse[]>(`/listings/${listingId}/slots`, { skipAuth: true });
+}
+
+export function fetchListingBookingPhotos(listingId: string) {
+  return api.get<ListingPhotoRow[]>(`/listings/${listingId}/photos`, { skipAuth: true });
+}
+
+/** Claim a published slot (POST /inspections). APPLICANT only; 409 if slot was taken. */
+export function requestInspection(payload: { slotId: number; notes?: string }) {
+  return api.post<InspectionResponse>("/inspections", payload);
 }
 
 export async function submitApplicantVerification(file: File) {

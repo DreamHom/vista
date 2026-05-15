@@ -3,7 +3,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, ExternalLink, Flag, Sparkles } from "lucide-react";
 import {
@@ -23,13 +23,11 @@ import {
   listAgentOffers,
   listAgentOwnerRelationships,
   readAgentNotificationPreferences,
-  readAgentProfileDraft,
   readAgentPromotions,
   saveAgentInspectionDecision,
   saveAgentLeadState,
   saveAgentNotificationPreferences,
   saveAgentOfferState,
-  saveAgentProfileDraft,
   saveAgentPromotions,
   updateAgentProfile,
   type AgentInspectionDecision,
@@ -68,7 +66,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 
-import { FieldLabel, FieldHint } from "./agent-page-primitives";
+import { FieldLabel } from "./agent-page-primitives";
+
+function splitCommaList(raw: string, max = 20): string[] {
+  return raw
+    .split(/[,;\n]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, max);
+}
 
 export function AgentProfilePage() {
   const { user, setUser } = useAuth();
@@ -79,17 +85,22 @@ export function AgentProfilePage() {
     queryFn: () => getAgentProfileWorkspace(userId),
     enabled: userId > 0,
   });
-  const [draft, setDraft] = useState(() => readAgentProfileDraft(userId) ?? DEFAULT_AGENT_PROFILE_DRAFT);
+  const [draft, setDraft] = useState<typeof DEFAULT_AGENT_PROFILE_DRAFT>(DEFAULT_AGENT_PROFILE_DRAFT);
+
+  useEffect(() => {
+    if (!profileQuery.data) return;
+    const { publicProfile } = profileQuery.data;
+    setDraft({
+      bio: publicProfile.publicBio ?? "",
+      specializations: (publicProfile.specializationTags ?? []).join(", "),
+      locations: (publicProfile.serviceAreas ?? []).join(", "),
+      feeStructure: publicProfile.feeSchedule ?? "",
+      languages: (publicProfile.languages ?? []).join(", "),
+    });
+  }, [profileQuery.data]);
 
   const updateMutation = useMutation({
-    mutationFn: (payload: {
-      fullName?: string;
-      email?: string;
-      phone?: string;
-      displayName?: string;
-      licenseNumber?: string;
-      agency?: string;
-    }) => updateAgentProfile(payload),
+    mutationFn: (payload: Parameters<typeof updateAgentProfile>[0]) => updateAgentProfile(payload),
     onSuccess: async (result) => {
       setUser({
         id: result.userId,
@@ -97,7 +108,7 @@ export function AgentProfilePage() {
         email: result.email,
         role: result.role,
       });
-      toast.success("Agent profile basics updated.");
+      toast.success("Agent profile updated.");
       await queryClient.invalidateQueries({ queryKey: ["agent-profile-workspace", userId] });
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "We couldn't update your profile."),
@@ -115,7 +126,7 @@ export function AgentProfilePage() {
       <DashboardPageIntro
         eyebrow="Agent profile"
         title="Public profile"
-        description="Preview how your trust signals appear to owners and applicants, then update the fields that are already wired in Haven."
+        description="Preview how your trust signals appear to owners and applicants, then save changes to your live profile."
       />
 
       <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
@@ -149,26 +160,24 @@ export function AgentProfilePage() {
                 </p>
               </div>
             </div>
-            <div className="border border-dashed border-border px-4 py-4">
-              <p className="text-sm font-medium text-foreground">Publicly visible draft-only fields</p>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Bio, specializations, locations, fee structure, and languages are currently held as local prototype fields while Haven only exposes core agent profile settings.
-              </p>
+            <div className="rounded-lg border border-border bg-secondary/20 px-4 py-4">
+              <p className="text-sm font-medium text-foreground">Public marketing</p>
+              <p className="mt-1 text-xs text-muted-foreground">Shown on your public agent profile when set.</p>
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <div>
                   <p className="text-xs uppercase tracking-eyebrow text-muted-foreground">Bio</p>
-                  <p className="mt-2 text-sm text-foreground">{draft.bio || "No bio drafted yet."}</p>
+                  <p className="mt-2 text-sm text-foreground">{draft.bio || "—"}</p>
                 </div>
                 <div>
                   <p className="text-xs uppercase tracking-eyebrow text-muted-foreground">Locations</p>
-                  <p className="mt-2 text-sm text-foreground">{draft.locations || "No locations drafted yet."}</p>
+                  <p className="mt-2 text-sm text-foreground">{draft.locations || "—"}</p>
                 </div>
               </div>
             </div>
           </div>
         </SectionCard>
 
-        <SectionCard title="Edit profile" description="Core account fields are live; richer marketing copy is staged locally.">
+        <SectionCard title="Edit profile" description="Account, license, and marketing fields are saved to your DreamHomes agent profile.">
           <div className="grid gap-4">
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
@@ -232,7 +241,6 @@ export function AgentProfilePage() {
                 <Input value={draft.languages} onChange={(event) => setDraft((current) => ({ ...current, languages: event.target.value }))} />
               </div>
             </div>
-            <FieldHint>Fields marked as draft-only are stored locally until Haven exposes public marketing attributes for agents.</FieldHint>
             <div className="flex flex-wrap gap-3">
               <Button
                 disabled={updateMutation.isPending}
@@ -245,19 +253,15 @@ export function AgentProfilePage() {
                     phone: readValue("agent-phone"),
                     licenseNumber: readValue("agent-license"),
                     agency: readValue("agent-agency"),
+                    publicBio: draft.bio,
+                    specializationTags: splitCommaList(draft.specializations),
+                    serviceAreas: splitCommaList(draft.locations),
+                    languages: splitCommaList(draft.languages),
+                    feeSchedule: draft.feeStructure.trim() ? draft.feeStructure.trim() : null,
                   });
                 }}
               >
-                {updateMutation.isPending ? "Saving..." : "Update live profile fields"}
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  saveAgentProfileDraft(userId, draft);
-                  toast.success("Draft-only profile fields saved locally.");
-                }}
-              >
-                Save draft-only fields
+                {updateMutation.isPending ? "Saving…" : "Save profile"}
               </Button>
             </div>
           </div>

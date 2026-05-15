@@ -1,29 +1,37 @@
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 
+/** Natural pixels of `/public/logo.png` (380×315). Width/height props must preserve this ratio. */
+const LOGO_SRC_WIDTH = 380;
+const LOGO_SRC_HEIGHT = 315;
+
 /**
  * DreamHomes brand glyph. The source asset is the brand-blue PNG that
  * lives at `/public/logo.png` (and at `app/icon.png` / `app/apple-icon.png`
  * for favicons). Use {@link Logo} for the icon alone, or {@link LogoMark}
  * for the icon + wordmark lockup.
  *
- *   <Logo className="h-7 w-7" />
+ *   <Logo className="h-7" />
  *   <LogoMark size="lg" />
  */
 export interface LogoProps {
-  size?: number; // px
+  /** Target height in CSS pixels; width is derived from the asset aspect ratio. */
+  size?: number;
   className?: string;
 }
 
 export function Logo({ size = 24, className }: LogoProps) {
+  const height = size;
+  const width = Math.round((size * LOGO_SRC_WIDTH) / LOGO_SRC_HEIGHT);
+
   return (
     <Image
       src="/logo.png"
       alt="DreamHomes"
-      width={size}
-      height={size}
+      width={width}
+      height={height}
       priority
-      className={cn("block shrink-0", className)}
+      className={cn("block h-auto w-auto shrink-0", className)}
     />
   );
 }

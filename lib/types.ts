@@ -2,24 +2,8 @@
  * Shared API types: kept in lock-step with haven (Spring Boot backend).
  *
  * When backend DTOs change, update these. Source of truth lives at:
- *   ../haven/src/main/java/com/dreamhomes/haven/** (DTOs / enums)
+ *   ../haven/modules/feature/<domain>/api/**
  */
-
-/**
- * Physical property kind. Mirrors {@code com.dreamhomes.haven.property.model.PropertyType}
- * (DB CHECK constraint must match this set).
- */
-export const HAVEN_PROPERTY_TYPES = [
-  "APARTMENT",
-  "HOUSE",
-  "LAND",
-  "COMMERCIAL",
-  "SELF_CONTAIN",
-  "MINI_FLAT",
-  "STUDIO",
-  "ROOM_AND_PARLOUR",
-] as const;
-export type HavenPropertyType = (typeof HAVEN_PROPERTY_TYPES)[number];
 
 /** The four actor types on the platform. Mirrors {@code com.dreamhomes.haven.user.Role}. */
 export const ROLES = ["OWNER", "AGENT", "APPLICANT", "ADMIN"] as const;
@@ -36,16 +20,8 @@ export interface User {
   role: Role;
   email?: string;
   createdAt?: string;
-  /** Present after session hydrate when `/me/profile` returns an image URL. */
+  /** Set when `/me/profile` or profile mutations return a photo URL. */
   profileImageUrl?: string | null;
-}
-
-/** GET `/me` — haven user snapshot (ids and role align with {@link LoginResponse}). */
-export interface MeResponse {
-  userId: number;
-  fullName: string;
-  role: Role;
-  email?: string;
 }
 
 /** Mirrors haven's {@code RegisterRequest}. */
@@ -81,10 +57,24 @@ export interface LoginResponse {
   fullName: string;
 }
 
-/** POST `/auth/forgot-password` — optional dev token when backend echoes it. */
+/** Mirrors haven's {@code MeResponse} (GET /api/me). */
+export interface MeResponse {
+  userId: number;
+  email?: string;
+  fullName: string;
+  role: Role;
+}
+
+/** POST /api/auth/forgot-password — 202 Accepted. */
 export interface ForgotPasswordResponse {
-  message?: string;
+  accepted: boolean;
+  /** Present only when Haven enables debug token return (non-prod). */
   debugResetToken?: string;
+}
+
+/** @deprecated Prefer {@link import("./dream-ai/contracts").DreamAiRunTurnResponse}. */
+export interface DreamAiSuggestionResponse {
+  listingIds: number[];
 }
 
 /**

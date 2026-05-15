@@ -14,14 +14,14 @@ import {
 
 /** Rent / buy segmented pills — same icons as listings toolbar. */
 export const LISTING_TYPE_PILLS: { value: string; label: string; Icon: LucideIcon }[] = [
-  { value: "", label: "Rent or buy", Icon: Building2 },
+  { value: "", label: "Any", Icon: Building2 },
   { value: "RENT", label: "Rent", Icon: KeyRound },
   { value: "SALE", label: "Buy", Icon: CircleDollarSign },
 ];
 
 /** Property shape pills — same icons as listings toolbar. */
 export const PROPERTY_TYPE_PILLS: { value: string; label: string; Icon: LucideIcon }[] = [
-  { value: "", label: "Any type", Icon: LayoutGrid },
+  { value: "", label: "Any", Icon: LayoutGrid },
   { value: "APARTMENT", label: "Apartment", Icon: Building },
   { value: "HOUSE", label: "House", Icon: House },
   { value: "VILLA", label: "Villa", Icon: Castle },

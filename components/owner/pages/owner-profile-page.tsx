@@ -22,6 +22,7 @@ import {
   markNotificationRead,
   respondToOffer,
   updateMyProfileBasics,
+  uploadMyAvatar,
 } from "@/lib/applicant-dashboard";
 import {
   counterOwnerOffer,
@@ -29,7 +30,6 @@ import {
   createOwnerListing,
   createOwnerProperty,
   DEFAULT_NOTIFICATION_PREFERENCES,
-  DEFAULT_OWNER_PROFILE_DRAFT,
   DEFAULT_PROPERTY_DRAFT,
   getOwnerDashboardOverview,
   getOwnerProfileData,
@@ -44,7 +44,6 @@ import {
   listOwnerProperties,
   readInspectionNotes,
   readOwnerNotificationPreferences,
-  readOwnerProfileDraft,
   readOwnerPropertyDraft,
   removeListingComment,
   replyToListingComment,
@@ -52,7 +51,6 @@ import {
   saveInspectionNote,
   saveInspectionStatus,
   saveOwnerNotificationPreferences,
-  saveOwnerProfileDraft,
   saveOwnerPropertyDraft,
   searchAssignableAgents,
   submitOwnerIdentityVerification,
@@ -103,12 +101,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 
-import { FieldLabel, FieldHint } from "./owner-page-primitives";
+import { FieldLabel } from "./owner-page-primitives";
 
 export function OwnerProfilePage() {
   const { user, setUser } = useAuth();
   const queryClient = useQueryClient();
-  const [draft, setDraft] = useState<OwnerProfileDraft>(DEFAULT_OWNER_PROFILE_DRAFT);
+  const [draft, setDraft] = useState<OwnerProfileDraft>({ bio: "", profilePhotoDataUrl: null });
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
 
@@ -119,21 +117,22 @@ export function OwnerProfilePage() {
   });
 
   useEffect(() => {
-    if (user) {
-      setDraft(readOwnerProfileDraft(user.id));
-    }
-  }, [user]);
-
-  useEffect(() => {
     if (!profileQuery.data) return;
-    setFullName(profileQuery.data.privateProfile.fullName ?? "");
-    setPhone(profileQuery.data.privateProfile.phone ?? "");
+    const { privateProfile, publicProfile } = profileQuery.data;
+    setFullName(privateProfile.fullName ?? "");
+    setPhone(privateProfile.phone ?? "");
+    const pic =
+      privateProfile.profileImageUrl?.trim() || publicProfile.profileImageUrl?.trim() || null;
+    setDraft({
+      bio: privateProfile.publicBio ?? "",
+      profilePhotoDataUrl: pic,
+    });
   }, [profileQuery.data]);
 
   const saveBasicsMutation = useMutation({
-    mutationFn: () => updateMyProfileBasics({ fullName, phone }),
+    mutationFn: () => updateMyProfileBasics({ fullName, phone, publicBio: draft.bio }),
     onSuccess: async (profile) => {
-      toast.success("Profile basics updated.");
+      toast.success("Profile updated.");
       setUser({
         id: profile.userId,
         email: profile.email,
@@ -143,6 +142,15 @@ export function OwnerProfilePage() {
       await queryClient.invalidateQueries({ queryKey: ["owner-profile", user?.id] });
     },
     onError: () => toast.error("We couldn't update those profile fields."),
+  });
+
+  const avatarMutation = useMutation({
+    mutationFn: (file: File) => uploadMyAvatar(file),
+    onSuccess: async () => {
+      toast.success("Profile photo updated.");
+      await queryClient.invalidateQueries({ queryKey: ["owner-profile", user?.id] });
+    },
+    onError: () => toast.error("We couldn't upload that photo."),
   });
 
   if (profileQuery.isLoading) return <LoadingPanel label="Loading your owner profile..." />;
@@ -194,7 +202,7 @@ export function OwnerProfilePage() {
           </div>
         </SectionCard>
 
-        <SectionCard title="Edit owner profile" description="Live fields are saved to Haven. Bio and photo remain local prototype fields until dedicated endpoints land.">
+        <SectionCard title="Edit owner profile" description="Name, phone, bio, and photo are saved to your DreamHomes account.">
           <div className="space-y-4">
             <div className="space-y-2">
               <FieldLabel>Full name</FieldLabel>
@@ -210,9 +218,7 @@ export function OwnerProfilePage() {
                 rows={4}
                 value={draft.bio}
                 onChange={(event) => {
-                  const next = { ...draft, bio: event.target.value };
-                  setDraft(next);
-                  if (user) saveOwnerProfileDraft(user.id, next);
+                  setDraft((d) => ({ ...d, bio: event.target.value }));
                 }}
               />
             </div>
@@ -221,19 +227,15 @@ export function OwnerProfilePage() {
               <Input
                 type="file"
                 accept="image/*"
+                disabled={avatarMutation.isPending}
                 onChange={(event) => {
                   const file = event.target.files?.[0];
-                  if (!file || !user) return;
-                  const reader = new FileReader();
-                  reader.onload = () => {
-                    const next = { ...draft, profilePhotoDataUrl: String(reader.result ?? "") };
-                    setDraft(next);
-                    saveOwnerProfileDraft(user.id, next);
-                  };
-                  reader.readAsDataURL(file);
+                  if (!file) return;
+                  avatarMutation.mutate(file);
+                  event.target.value = "";
                 }}
               />
-              <FieldHint>Stored locally for now. Haven does not yet expose owner avatar upload.</FieldHint>
+              <p className="text-xs text-muted-foreground">JPG or PNG. Replaces your public headshot.</p>
             </div>
             <Button onClick={() => saveBasicsMutation.mutate()} disabled={saveBasicsMutation.isPending}>
               {saveBasicsMutation.isPending ? "Saving..." : "Save profile"}

@@ -4,7 +4,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   FileUp,
@@ -12,6 +12,7 @@ import {
   MapPin,
   Plus,
   Sparkles,
+  Trash2,
   UserRound,
 } from "lucide-react";
 import {
@@ -67,7 +68,7 @@ import {
   type OwnerPropertyFormDraft,
 } from "@/lib/owner-dashboard";
 import { useAuth } from "@/lib/use-auth";
-import { formatNaira } from "@/lib/format";
+import { formatGroupedIntegerInput, formatNaira, formatStoredGroupedInteger, parseGroupedNumberInput } from "@/lib/format";
 import {
   DashboardPageIntro,
   EmptyPanel,
@@ -105,6 +106,22 @@ import { cn } from "@/lib/utils";
 
 import { FieldLabel, FieldHint, NativeSelect, PrototypeNotice } from "./owner-page-primitives";
 
+type PendingListingPhoto = {
+  id: string;
+  file: File;
+  caption: string;
+  previewUrl: string;
+};
+
+function makePendingPhoto(file: File): PendingListingPhoto {
+  return {
+    id: typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${file.name}-${Date.now()}-${Math.random()}`,
+    file,
+    caption: "",
+    previewUrl: URL.createObjectURL(file),
+  };
+}
+
 export function OwnerNewPropertyPage() {
   const { user } = useAuth();
   const router = useRouter();
@@ -113,14 +130,40 @@ export function OwnerNewPropertyPage() {
   const [draft, setDraft] = useState<OwnerPropertyFormDraft>(() =>
     user ? readOwnerPropertyDraft(user.id) : DEFAULT_PROPERTY_DRAFT,
   );
-  const [photoFiles, setPhotoFiles] = useState<File[]>([]);
+  const [pendingPhotos, setPendingPhotos] = useState<PendingListingPhoto[]>([]);
+  const pendingPhotosRef = useRef<PendingListingPhoto[]>([]);
+  pendingPhotosRef.current = pendingPhotos;
+  const photoFileInputRef = useRef<HTMLInputElement>(null);
   const [docFiles, setDocFiles] = useState<File[]>([]);
 
   useEffect(() => {
-    if (user) {
-      setDraft(readOwnerPropertyDraft(user.id));
-    }
+    if (!user) return;
+    const d = readOwnerPropertyDraft(user.id);
+    setDraft({
+      ...d,
+      basic: {
+        ...d.basic,
+        sizeSqm: d.basic.sizeSqm ? formatStoredGroupedInteger(d.basic.sizeSqm) : "",
+        bedrooms: d.basic.bedrooms ? formatStoredGroupedInteger(d.basic.bedrooms) : "",
+        bathrooms: d.basic.bathrooms ? formatStoredGroupedInteger(d.basic.bathrooms) : "",
+      },
+      terms: {
+        ...d.terms,
+        askingPrice: d.terms.askingPrice ? formatStoredGroupedInteger(d.terms.askingPrice) : "",
+        cautionFee: d.terms.cautionFee ? formatStoredGroupedInteger(d.terms.cautionFee) : "",
+        serviceCharge: d.terms.serviceCharge ? formatStoredGroupedInteger(d.terms.serviceCharge) : "",
+        agencyFee: d.terms.agencyFee ? formatStoredGroupedInteger(d.terms.agencyFee) : "",
+      },
+    });
   }, [user]);
+
+  useEffect(() => {
+    return () => {
+      for (const p of pendingPhotosRef.current) {
+        URL.revokeObjectURL(p.previewUrl);
+      }
+    };
+  }, []);
 
   function updateDraft(next: Partial<OwnerPropertyFormDraft>) {
     setDraft((current) => {
@@ -130,31 +173,82 @@ export function OwnerNewPropertyPage() {
     });
   }
 
+  function syncPhotoDraftFromQueue(queue: PendingListingPhoto[]) {
+    setDraft((current) => {
+      const updated = {
+        ...current,
+        photos: queue.map((p) => ({ name: p.file.name, caption: p.caption })),
+      };
+      if (user) saveOwnerPropertyDraft(user.id, updated);
+      return updated;
+    });
+  }
+
+  function appendListingPhotos(files: File[]) {
+    const imageFiles = files.filter((f) => f.type.startsWith("image/"));
+    if (imageFiles.length < files.length) {
+      toast.info("Some files were skipped", {
+        description: "Only image uploads are supported for listing photos.",
+      });
+    }
+    if (imageFiles.length === 0) return;
+    setPendingPhotos((prev) => {
+      const next = [...prev, ...imageFiles.map((file) => makePendingPhoto(file))];
+      queueMicrotask(() => syncPhotoDraftFromQueue(next));
+      return next;
+    });
+  }
+
+  function removePendingPhoto(id: string) {
+    setPendingPhotos((prev) => {
+      const victim = prev.find((p) => p.id === id);
+      if (victim) URL.revokeObjectURL(victim.previewUrl);
+      const next = prev.filter((p) => p.id !== id);
+      queueMicrotask(() => syncPhotoDraftFromQueue(next));
+      return next;
+    });
+  }
+
+  function updatePendingPhotoCaption(id: string, caption: string) {
+    setPendingPhotos((prev) => {
+      const next = prev.map((p) => (p.id === id ? { ...p, caption } : p));
+      queueMicrotask(() => syncPhotoDraftFromQueue(next));
+      return next;
+    });
+  }
+
   const submitMutation = useMutation({
     mutationFn: async () => {
       const property = await createOwnerProperty({
         address: draft.basic.address,
         type: draft.basic.type,
-        bedrooms: draft.basic.bedrooms ? Number(draft.basic.bedrooms) : undefined,
-        bathrooms: draft.basic.bathrooms ? Number(draft.basic.bathrooms) : undefined,
-        sizeSqm: draft.basic.sizeSqm ? Number(draft.basic.sizeSqm) : undefined,
+        bedrooms: draft.basic.bedrooms ? parseGroupedNumberInput(draft.basic.bedrooms) ?? undefined : undefined,
+        bathrooms: draft.basic.bathrooms ? parseGroupedNumberInput(draft.basic.bathrooms) ?? undefined : undefined,
+        sizeSqm: draft.basic.sizeSqm ? parseGroupedNumberInput(draft.basic.sizeSqm) ?? undefined : undefined,
         description: draft.basic.description,
       });
 
       const listing = await createOwnerListing({
         propertyId: property.id,
         listingType: draft.terms.listingType,
-        askingPrice: Number(draft.terms.askingPrice || 0),
-        cautionFee: draft.terms.cautionFee ? Number(draft.terms.cautionFee) : undefined,
-        serviceCharge: draft.terms.serviceCharge ? Number(draft.terms.serviceCharge) : undefined,
-        agencyFee: draft.terms.agencyFee ? Number(draft.terms.agencyFee) : undefined,
+        askingPrice: parseGroupedNumberInput(draft.terms.askingPrice) ?? 0,
+        cautionFee: draft.terms.cautionFee ? parseGroupedNumberInput(draft.terms.cautionFee) ?? undefined : undefined,
+        serviceCharge: draft.terms.serviceCharge ? parseGroupedNumberInput(draft.terms.serviceCharge) ?? undefined : undefined,
+        agencyFee: draft.terms.agencyFee ? parseGroupedNumberInput(draft.terms.agencyFee) ?? undefined : undefined,
         title: `${draft.basic.type.replaceAll("_", " ")} in ${draft.basic.address.split(",")[0] ?? "DreamHomes"}`,
         headline: draft.terms.negotiable ? "Negotiable terms available" : "Fixed pricing",
         description: draft.basic.description,
         handoverDate: draft.terms.availabilityDate || undefined,
       });
 
-      await Promise.all(photoFiles.map((file, index) => uploadOwnerListingPhoto(listing.id, file, draft.photos[index]?.caption)));
+      const uploadQueue = pendingPhotosRef.current;
+      for (const item of uploadQueue) {
+        await uploadOwnerListingPhoto(
+          listing.id,
+          item.file,
+          item.caption.trim() ? item.caption.trim() : undefined,
+        );
+      }
 
       if (docFiles.length > 0) {
         await submitPropertyDocumentsVerification(property.id, docFiles);
@@ -163,9 +257,17 @@ export function OwnerNewPropertyPage() {
       return property.id;
     },
     onSuccess: async (propertyId) => {
+      const snapshot = [...pendingPhotosRef.current];
+      for (const p of snapshot) {
+        URL.revokeObjectURL(p.previewUrl);
+      }
+      setPendingPhotos([]);
       toast.success("Property created and listing published.");
       if (user) saveOwnerPropertyDraft(user.id, DEFAULT_PROPERTY_DRAFT);
       await queryClient.invalidateQueries({ queryKey: ["owner-properties"] });
+      if (user) {
+        await queryClient.invalidateQueries({ queryKey: ["owner-property", user.id, propertyId] });
+      }
       router.push(`/owner/properties/${propertyId}`);
     },
     onError: () => {
@@ -246,25 +348,34 @@ export function OwnerNewPropertyPage() {
             <div className="space-y-2">
               <FieldLabel>Size (sqm)</FieldLabel>
               <Input
+                inputMode="numeric"
                 value={draft.basic.sizeSqm}
-                onChange={(event) => updateDraft({ basic: { ...draft.basic, sizeSqm: event.target.value } })}
-                placeholder="145"
+                onChange={(event) =>
+                  updateDraft({ basic: { ...draft.basic, sizeSqm: formatGroupedIntegerInput(event.target.value) } })
+                }
+                placeholder="e.g. 1,450"
               />
             </div>
             <div className="space-y-2">
               <FieldLabel>Bedrooms</FieldLabel>
               <Input
+                inputMode="numeric"
                 value={draft.basic.bedrooms}
-                onChange={(event) => updateDraft({ basic: { ...draft.basic, bedrooms: event.target.value } })}
-                placeholder="3"
+                onChange={(event) =>
+                  updateDraft({ basic: { ...draft.basic, bedrooms: formatGroupedIntegerInput(event.target.value) } })
+                }
+                placeholder="e.g. 3"
               />
             </div>
             <div className="space-y-2">
               <FieldLabel>Bathrooms</FieldLabel>
               <Input
+                inputMode="numeric"
                 value={draft.basic.bathrooms}
-                onChange={(event) => updateDraft({ basic: { ...draft.basic, bathrooms: event.target.value } })}
-                placeholder="2"
+                onChange={(event) =>
+                  updateDraft({ basic: { ...draft.basic, bathrooms: formatGroupedIntegerInput(event.target.value) } })
+                }
+                placeholder="e.g. 2"
               />
             </div>
             <div className="space-y-2 md:col-span-2">
@@ -310,35 +421,45 @@ export function OwnerNewPropertyPage() {
             <div className="space-y-2">
               <FieldLabel>Asking price</FieldLabel>
               <Input
+                inputMode="numeric"
                 value={draft.terms.askingPrice}
-                onChange={(event) => updateDraft({ terms: { ...draft.terms, askingPrice: event.target.value } })}
-                placeholder="8500000"
+                onChange={(event) =>
+                  updateDraft({ terms: { ...draft.terms, askingPrice: formatGroupedIntegerInput(event.target.value) } })
+                }
+                placeholder="e.g. 8,500,000"
               />
             </div>
             <div className="space-y-2">
               <FieldLabel>Caution fee</FieldLabel>
               <Input
+                inputMode="numeric"
                 value={draft.terms.cautionFee}
-                onChange={(event) => updateDraft({ terms: { ...draft.terms, cautionFee: event.target.value } })}
-                placeholder="500000"
+                onChange={(event) =>
+                  updateDraft({ terms: { ...draft.terms, cautionFee: formatGroupedIntegerInput(event.target.value) } })
+                }
+                placeholder="e.g. 500,000"
               />
             </div>
             <div className="space-y-2">
               <FieldLabel>Service charge</FieldLabel>
               <Input
+                inputMode="numeric"
                 value={draft.terms.serviceCharge}
                 onChange={(event) =>
-                  updateDraft({ terms: { ...draft.terms, serviceCharge: event.target.value } })
+                  updateDraft({ terms: { ...draft.terms, serviceCharge: formatGroupedIntegerInput(event.target.value) } })
                 }
-                placeholder="150000"
+                placeholder="e.g. 150,000"
               />
             </div>
             <div className="space-y-2">
               <FieldLabel>Agency fee</FieldLabel>
               <Input
+                inputMode="numeric"
                 value={draft.terms.agencyFee}
-                onChange={(event) => updateDraft({ terms: { ...draft.terms, agencyFee: event.target.value } })}
-                placeholder="850000"
+                onChange={(event) =>
+                  updateDraft({ terms: { ...draft.terms, agencyFee: formatGroupedIntegerInput(event.target.value) } })
+                }
+                placeholder="e.g. 850,000"
               />
             </div>
             <div className="md:col-span-2">
@@ -354,57 +475,98 @@ export function OwnerNewPropertyPage() {
       ) : null}
 
       {step === 2 ? (
-        <SectionCard title="Photos" description="Upload photo files for the live listing and keep captions for your own internal context.">
-          <div className="space-y-5">
+        <SectionCard
+          title="Photos"
+          description="Add images as many times as you like. Each batch is appended. Order here is the order sent to Haven (first photo becomes the gallery lead)."
+        >
+          <div className="space-y-6">
             <div className="rounded-3xl border border-dashed border-border bg-secondary/30 p-5">
-              <label className="flex cursor-pointer flex-col items-center justify-center gap-3 text-center">
+              <div className="flex flex-col items-center justify-center gap-3 text-center">
                 <div className="rounded-full bg-white p-3">
                   <ImagePlus className="h-5 w-5 text-primary" aria-hidden />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-foreground">Select photo files</p>
-                  <p className="text-sm text-muted-foreground">JPG, PNG, or WEBP. DreamHomes will append these to the gallery in upload order.</p>
+                  <p className="text-sm font-semibold text-foreground">Add listing photos</p>
+                  <p className="text-sm text-muted-foreground">
+                    JPG, PNG, or WEBP. Choose one or many — you can come back and add more. Remove any thumbnail before submit if you change your mind.
+                  </p>
                 </div>
                 <input
+                  ref={photoFileInputRef}
                   type="file"
                   accept="image/*"
                   multiple
                   className="hidden"
                   onChange={(event) => {
-                    const files = Array.from(event.target.files ?? []);
-                    setPhotoFiles(files);
-                    updateDraft({
-                      photos: files.map((file) => ({ name: file.name, caption: "" })),
-                    });
+                    const picked = Array.from(event.target.files ?? []);
+                    appendListingPhotos(picked);
+                    event.target.value = "";
                   }}
                 />
-                <span className="inline-flex rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
+                <button
+                  type="button"
+                  className="inline-flex rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+                  onClick={() => photoFileInputRef.current?.click()}
+                >
                   Choose images
-                </span>
-              </label>
+                </button>
+              </div>
             </div>
 
-            {draft.photos.length > 0 ? (
-              <div className="space-y-3">
-                {draft.photos.map((photo, index) => (
-                  <div key={`${photo.name}-${index}`} className="grid gap-3 rounded-2xl border border-border bg-white p-4 md:grid-cols-[1fr_minmax(0,280px)]">
-                    <div>
-                      <p className="text-sm font-medium text-foreground">{photo.name}</p>
-                      <p className="text-sm text-muted-foreground">Will upload to the listing on the final step.</p>
-                    </div>
-                    <Input
-                      value={photo.caption}
-                      onChange={(event) => {
-                        const nextPhotos = [...draft.photos];
-                        nextPhotos[index] = { ...nextPhotos[index], caption: event.target.value };
-                        updateDraft({ photos: nextPhotos });
-                      }}
-                      placeholder="Optional caption"
-                    />
-                  </div>
-                ))}
-              </div>
+            {draft.photos.length > 0 && pendingPhotos.length === 0 ? (
+              <p className="rounded-xl border border-amber-200/80 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+                This device can&apos;t restore image files from a saved draft after a refresh. Use{" "}
+                <span className="font-medium">Choose images</span> to queue photos again before you submit.
+              </p>
             ) : null}
+
+            {pendingPhotos.length > 0 ? (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-eyebrow text-muted-foreground">
+                  {pendingPhotos.length} photo{pendingPhotos.length === 1 ? "" : "s"} queued
+                </p>
+                <ul className="mt-4 grid list-none grid-cols-1 gap-4 p-0 sm:grid-cols-2 lg:grid-cols-3">
+                  {pendingPhotos.map((photo, index) => (
+                    <li
+                      key={photo.id}
+                      className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm"
+                    >
+                      <div className="relative aspect-[4/3] bg-muted">
+                        <img
+                          src={photo.previewUrl}
+                          alt={photo.file.name}
+                          className="h-full w-full object-cover"
+                        />
+                        <span className="absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white">
+                          {index + 1}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => removePendingPhoto(photo.id)}
+                          className="absolute right-2 top-2 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-black/55 text-white transition-colors hover:bg-black/75"
+                          aria-label={`Remove ${photo.file.name}`}
+                        >
+                          <Trash2 className="h-4 w-4" aria-hidden />
+                        </button>
+                      </div>
+                      <div className="space-y-1.5 p-3">
+                        <p className="truncate text-xs font-medium text-foreground" title={photo.file.name}>
+                          {photo.file.name}
+                        </p>
+                        <Input
+                          value={photo.caption}
+                          onChange={(event) => updatePendingPhotoCaption(photo.id, event.target.value)}
+                          placeholder="Optional caption"
+                          className="h-9 text-xs"
+                        />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No photos queued yet. Add at least one before publishing if you want a rich gallery.</p>
+            )}
 
             <div className="space-y-2">
               <FieldLabel>Virtual tour link</FieldLabel>

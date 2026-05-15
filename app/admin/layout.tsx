@@ -2,12 +2,12 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { ApiError, api } from "@/lib/api";
+import { ApiError } from "@/lib/api";
+import { loadSessionUserWithAvatar } from "@/lib/auth-hydrate-user";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { Spinner } from "@/components/ui/spinner";
 import { getDefaultDashboardPath } from "@/lib/dashboard-routes";
 import { useAuth } from "@/lib/use-auth";
-import type { Role } from "@/lib/types";
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
@@ -29,17 +29,18 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       }
 
       try {
-        const me = await api.get<{ userId: number; email?: string; fullName: string; role: Role }>("/me");
+        const me = await loadSessionUserWithAvatar();
         if (cancelled) return;
         if (me.role !== "ADMIN") {
           router.replace(getDefaultDashboardPath(me.role));
           return;
         }
         setUser({
-          id: me.userId,
+          id: me.id,
           email: me.email,
           fullName: me.fullName,
           role: me.role,
+          profileImageUrl: me.profileImageUrl,
         });
       } catch (error) {
         if (cancelled) return;

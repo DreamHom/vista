@@ -2,19 +2,26 @@
 
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-import { LISTINGS } from "@/lib/seed/listings";
 import { useTranslations } from "@/lib/i18n/provider";
-import { ListingCard } from "@/components/listing/listing-card";
+import { ListingDiscoveryCard, PublicApiNotice } from "@/components/public/public-components";
 import { iconForListingType, iconForPropertyType } from "@/components/public/listing-pill-defs";
+import type { PublicListing } from "@/lib/seed/public-data";
+import { buildListingsBrowseHref } from "@/lib/query-string";
 import { SectionHeading } from "./section-heading";
 import { FilterPills } from "./filter-pills";
 
 /**
- * Section 02: Listings preview grid.
+ * Section 02: Listings preview grid — live Haven inventory via {@link PublicListing}
+ * and the same discovery cards as `/listings`.
  */
-export function ListingsPreview() {
+export function ListingsPreview({
+  listings,
+  backendUnavailable,
+}: {
+  listings: PublicListing[];
+  backendUnavailable: boolean;
+}) {
   const { t } = useTranslations();
-  const featured = LISTINGS.slice(0, 6);
 
   const termPills = [
     {
@@ -26,19 +33,19 @@ export function ListingsPreview() {
     {
       value: "RENT",
       label: t.listingsPreview.filters.rent,
-      href: "/listings?listingType=RENT",
+      href: buildListingsBrowseHref({ listingType: "RENT" }),
       icon: iconForListingType("RENT"),
     },
     {
       value: "SALE",
       label: t.listingsPreview.filters.sale,
-      href: "/listings?listingType=SALE",
+      href: buildListingsBrowseHref({ listingType: "SALE" }),
       icon: iconForListingType("SALE"),
     },
     {
       value: "COMMERCIAL",
       label: t.listingsPreview.filters.commercial,
-      href: "/listings?propertyType=COMMERCIAL",
+      href: buildListingsBrowseHref({ propertyType: "COMMERCIAL" }),
       icon: iconForPropertyType("COMMERCIAL"),
     },
   ];
@@ -47,31 +54,31 @@ export function ListingsPreview() {
     {
       value: "APARTMENT",
       label: t.listingsPreview.filters.apartment,
-      href: "/listings?propertyType=APARTMENT",
+      href: buildListingsBrowseHref({ propertyType: "APARTMENT" }),
       icon: iconForPropertyType("APARTMENT"),
     },
     {
       value: "HOUSE",
       label: t.listingsPreview.filters.house,
-      href: "/listings?propertyType=HOUSE",
+      href: buildListingsBrowseHref({ propertyType: "HOUSE" }),
       icon: iconForPropertyType("HOUSE"),
     },
     {
       value: "VILLA",
       label: t.listingsPreview.filters.villa,
-      href: "/listings?propertyType=VILLA",
+      href: buildListingsBrowseHref({ propertyType: "VILLA" }),
       icon: iconForPropertyType("VILLA"),
     },
     {
       value: "SHORTLET",
       label: t.listingsPreview.filters.shortlet,
-      href: "/listings?listingType=RENT",
+      href: buildListingsBrowseHref({ listingType: "RENT", q: "shortlet" }),
       icon: iconForPropertyType("SHORTLET"),
     },
     {
       value: "LAND",
       label: t.listingsPreview.filters.land,
-      href: "/listings",
+      href: buildListingsBrowseHref({ propertyType: "LAND" }),
       icon: iconForPropertyType("LAND"),
     },
   ];
@@ -97,11 +104,24 @@ export function ListingsPreview() {
         <FilterPills options={typePills} size="sm" />
       </div>
 
-      <div className="mt-12 grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">
-        {featured.map((listing) => (
-          <ListingCard key={listing.id} listing={listing} variant="overlay" />
-        ))}
-      </div>
+      {backendUnavailable ? (
+        <div className="mt-8">
+          <PublicApiNotice>
+            We couldn&apos;t reach the listings service right now, so this section is empty. Try again shortly or open
+            the full directory — your filters still work from there.
+          </PublicApiNotice>
+        </div>
+      ) : null}
+
+      {listings.length > 0 ? (
+        <div className="mt-12 grid grid-cols-1 gap-5 md:grid-cols-2">
+          {listings.map((listing) => (
+            <ListingDiscoveryCard key={listing.id} listing={listing} />
+          ))}
+        </div>
+      ) : !backendUnavailable ? (
+        <p className="mt-12 text-sm text-muted-foreground">No published listings yet — check back soon.</p>
+      ) : null}
     </section>
   );
 }

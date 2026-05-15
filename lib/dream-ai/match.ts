@@ -1,7 +1,8 @@
 /**
  * DreamHomes AI: mock matching engine.
  *
- * Until we wire haven's v1.0.1 public listing browse endpoint (`GET /api/listings`
+ * Until we wire haven's full LLM stack, public `GET /api/listings` plus optional
+ * authenticated `POST /api/dream-ai/suggestions` (see `resolve-matches.ts`) supply inventory.
  * with filters like `listingType`, `propertyType`, `location`, and `priceMax`)
  * plus an actual LLM, this file is the brain of the Dream AI page. It parses a
  * user's free-form prompt into structured filters and returns ranked matches

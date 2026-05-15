@@ -1,5 +1,5 @@
 import { api } from "@/lib/api";
-import { getDreamAiInventory, type PublicReview } from "@/lib/seed/public-data";
+import { getDreamAiInventory } from "@/lib/seed/public-data";
 import type { PagedModel } from "@/lib/applicant-dashboard";
 import type { Role } from "@/lib/types";
 
@@ -16,7 +16,8 @@ export interface VerificationAdminView {
   submitterUserId: number;
   targetUserId?: number | null;
   targetPropertyId?: number | null;
-  documentRefs?: string | null;
+  /** JSON string from Haven, or already-parsed object when the client normalizes responses. */
+  documentRefs?: string | Record<string, unknown> | null;
   submittedAt: string;
   decidedAt?: string | null;
   decidedByAdminId?: number | null;
@@ -105,10 +106,13 @@ export interface AdminListingRow {
   createdAt: string;
   reportCount: number;
   source: "inventory" | "audit";
+  /** Stable key for lists (multiple audit rows can reference the same listing id). */
+  rowKey: string;
 }
 
 export interface ModerationCommentItem {
   key: string;
+  flagId: number;
   commentId: string;
   listingId: number;
   listingTitle: string;
@@ -119,29 +123,24 @@ export interface ModerationCommentItem {
   flagReason: string;
 }
 
-export interface AdminAdsState {
-  featuredAgentDailyRate: number;
-  featuredListingDailyRate: number;
-  pendingRequests: Array<{
-    id: string;
-    type: "PROFILE" | "LISTING";
-    title: string;
-    durationDays: number;
-    requester: string;
-    cost: number;
-    createdAt: string;
-  }>;
-  activePromotions: Array<{
-    id: string;
-    type: "PROFILE" | "LISTING";
-    title: string;
-    durationDays: number;
-    cost: number;
-    status: "ACTIVE" | "ENDED";
-    createdAt: string;
-    endsAt: string;
-    views: number;
-  }>;
+export type AdCampaignStatus =
+  | "DRAFT"
+  | "PENDING_REVIEW"
+  | "APPROVED"
+  | "REJECTED"
+  | "ACTIVE"
+  | "PAUSED"
+  | "ENDED";
+
+export interface AdCampaignRow {
+  id: number;
+  sponsorUserId: number;
+  title: string;
+  body: string;
+  status: AdCampaignStatus;
+  budgetCents: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface AdminPlatformSettings {
@@ -151,18 +150,9 @@ export interface AdminPlatformSettings {
   defaultCommissionRate: number;
   ownerResponseSlaHours: number;
   inspectionConflictBufferMinutes: number;
+  featuredAgentDailyRate: number;
+  featuredListingDailyRate: number;
 }
-
-const ADMIN_COMMENT_FLAGS_KEY = "dreamhomes.admin.comment-flags";
-const ADMIN_ADS_KEY = "dreamhomes.admin.ads";
-const ADMIN_SETTINGS_KEY = "dreamhomes.admin.settings";
-
-export const DEFAULT_ADMIN_ADS_STATE: AdminAdsState = {
-  featuredAgentDailyRate: 35000,
-  featuredListingDailyRate: 50000,
-  pendingRequests: [],
-  activePromotions: [],
-};
 
 export const DEFAULT_ADMIN_PLATFORM_SETTINGS: AdminPlatformSettings = {
   ownerIdentityRequired: true,
@@ -171,22 +161,116 @@ export const DEFAULT_ADMIN_PLATFORM_SETTINGS: AdminPlatformSettings = {
   defaultCommissionRate: 7.5,
   ownerResponseSlaHours: 24,
   inspectionConflictBufferMinutes: 30,
+  featuredAgentDailyRate: 35000,
+  featuredListingDailyRate: 50000,
 };
 
-function readFromStorage<T>(key: string, fallback: T): T {
-  if (typeof window === "undefined") return fallback;
+function coalesceBoolean(value: unknown, fallback: boolean): boolean {
+  if (typeof value === "boolean") return value;
+  return fallback;
+}
 
+function coalesceNumber(value: unknown, fallback: number): number {
+  const n = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(n) ? n : fallback;
+}
+
+/** Maps Haven `platform_settings.settings` JSON to the admin UI shape (flat keys). */
+export function parseAdminPlatformSettingsFromJson(settings: Record<string, unknown> | null | undefined): AdminPlatformSettings {
+  const s = settings ?? {};
+  const d = DEFAULT_ADMIN_PLATFORM_SETTINGS;
+  return {
+    ownerIdentityRequired: coalesceBoolean(s.ownerIdentityRequired, d.ownerIdentityRequired),
+    propertyDocumentsRequired: coalesceBoolean(s.propertyDocumentsRequired, d.propertyDocumentsRequired),
+    agentCredentialsRequired: coalesceBoolean(s.agentCredentialsRequired, d.agentCredentialsRequired),
+    defaultCommissionRate: coalesceNumber(s.defaultCommissionRate, d.defaultCommissionRate),
+    ownerResponseSlaHours: coalesceNumber(s.ownerResponseSlaHours, d.ownerResponseSlaHours),
+    inspectionConflictBufferMinutes: coalesceNumber(s.inspectionConflictBufferMinutes, d.inspectionConflictBufferMinutes),
+    featuredAgentDailyRate: coalesceNumber(s.featuredAgentDailyRate, d.featuredAgentDailyRate),
+    featuredListingDailyRate: coalesceNumber(s.featuredListingDailyRate, d.featuredListingDailyRate),
+  };
+}
+
+function adminPlatformSettingsToPatch(settings: AdminPlatformSettings): Record<string, unknown> {
+  return { ...settings };
+}
+
+export interface AdminPlatformSettingsPayload {
+  settings: AdminPlatformSettings;
+  updatedAt: string | null;
+}
+
+export async function fetchAdminPlatformSettings(): Promise<AdminPlatformSettingsPayload> {
+  const res = await api.get<{ settings?: Record<string, unknown>; updatedAt?: string | null }>("/admin/platform-settings");
+  return {
+    settings: parseAdminPlatformSettingsFromJson(res.settings),
+    updatedAt: res.updatedAt ?? null,
+  };
+}
+
+export async function patchAdminPlatformSettings(settings: AdminPlatformSettings): Promise<AdminPlatformSettingsPayload> {
+  const res = await api.patch<{ settings?: Record<string, unknown>; updatedAt?: string | null }>("/admin/platform-settings", {
+    patch: adminPlatformSettingsToPatch(settings),
+  });
+  return {
+    settings: parseAdminPlatformSettingsFromJson(res.settings),
+    updatedAt: res.updatedAt ?? null,
+  };
+}
+
+interface CommentFlagApiRow {
+  id: number;
+  listingId: number;
+  commentId: number;
+  reporterUserId: number;
+  reason?: string | null;
+  status: "OPEN" | "RESOLVED" | "DISMISSED";
+  createdAt: string;
+}
+
+interface ListingSnippet {
+  title?: string | null;
+  property?: { address?: string | null } | null;
+}
+
+async function resolveListingSnippet(listingId: number): Promise<{ title: string; address: string }> {
   try {
-    const raw = window.localStorage.getItem(key);
-    return raw ? ({ ...fallback, ...JSON.parse(raw) } as T) : fallback;
+    const listing = await api.get<ListingSnippet>(`/listings/${listingId}`);
+    return {
+      title: listing.title?.trim() || `Listing #${listingId}`,
+      address: listing.property?.address?.trim() ?? "",
+    };
   } catch {
-    return fallback;
+    try {
+      const snap = await api.get<{ listing?: ListingSnippet | null; property?: { address?: string | null } | null }>(
+        `/admin/listings/${listingId}/moderation-snapshot`,
+      );
+      const listing = snap.listing;
+      return {
+        title: listing?.title?.trim() || `Listing #${listingId}`,
+        address: listing?.property?.address?.trim() ?? snap.property?.address?.trim() ?? "",
+      };
+    } catch {
+      return { title: `Listing #${listingId}`, address: "" };
+    }
   }
 }
 
-function writeToStorage<T>(key: string, value: T) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(key, JSON.stringify(value));
+export async function listAdminAdCampaigns(): Promise<AdCampaignRow[]> {
+  const res = await api.get<PagedModel<AdCampaignRow>>("/admin/ad-campaigns", { query: { page: 0, size: 100 } });
+  return res.content;
+}
+
+export async function patchAdminAdCampaign(campaignId: number, status: AdCampaignStatus): Promise<AdCampaignRow> {
+  return api.patch<AdCampaignRow>(`/admin/ad-campaigns/${campaignId}`, { status });
+}
+
+export async function dismissAdminCommentFlag(flagId: number) {
+  return api.post<CommentFlagApiRow>(`/admin/comment-flags/${flagId}/dismiss`);
+}
+
+export async function resolveAdminCommentFlag(flagId: number) {
+  return api.post<CommentFlagApiRow>(`/admin/comment-flags/${flagId}/resolve`);
 }
 
 async function getPublicProfile(userId: number) {
@@ -377,6 +461,7 @@ export async function listAdminListings() {
     createdAt: listing.publishedAt,
     reportCount: reportCountByListing.get(Number(listing.id)) ?? 0,
     source: "inventory",
+    rowKey: `inventory-${listing.id}`,
   }));
 
   const knownIds = new Set(liveRows.map((row) => row.listingId));
@@ -393,6 +478,7 @@ export async function listAdminListings() {
       createdAt: item.createdAt,
       reportCount: reportCountByListing.get(item.targetId) ?? 0,
       source: "audit",
+      rowKey: `audit-${item.id}`,
     }));
 
   return [...liveRows, ...auditRows].sort(
@@ -400,49 +486,61 @@ export async function listAdminListings() {
   );
 }
 
-export function readAdminCommentFlags() {
-  return readFromStorage<Record<string, { reason: string; flaggedAt: string }>>(ADMIN_COMMENT_FLAGS_KEY, {});
-}
+export async function listAdminModerationComments(): Promise<ModerationCommentItem[]> {
+  const page = await api.get<PagedModel<CommentFlagApiRow>>("/admin/comment-flags", {
+    query: { status: "OPEN", page: 0, size: 100 },
+  });
 
-export function saveAdminCommentFlag(commentKey: string, reason: string) {
-  const current = readAdminCommentFlags();
-  current[commentKey] = {
-    reason,
-    flaggedAt: new Date().toISOString(),
-  };
-  writeToStorage(ADMIN_COMMENT_FLAGS_KEY, current);
-}
+  const flags = page.content.filter((row) => row.status === "OPEN");
+  const listingIds = [...new Set(flags.map((f) => f.listingId))];
 
-export function clearAdminCommentFlag(commentKey: string) {
-  const current = readAdminCommentFlags();
-  delete current[commentKey];
-  writeToStorage(ADMIN_COMMENT_FLAGS_KEY, current);
-}
+  const [snippets, commentMaps] = await Promise.all([
+    Promise.all(listingIds.map(async (id) => [id, await resolveListingSnippet(id)] as const)).then((entries) => new Map(entries)),
+    Promise.all(
+      listingIds.map(async (id) => {
+        const res = await api
+          .get<PagedModel<{ id: number; authorUserId: number; body: string }>>(`/listings/${id}/comments`, {
+            query: { page: 0, size: 200 },
+          })
+          .catch(() => ({ content: [] as { id: number; authorUserId: number; body: string }[] }));
+        const map = new Map<number, { body: string; authorUserId: number }>();
+        for (const c of res.content) map.set(c.id, { body: c.body, authorUserId: c.authorUserId });
+        return [id, map] as const;
+      }),
+    ).then((entries) => new Map(entries)),
+  ]);
 
-export async function listAdminModerationComments() {
-  const [inventory, reports] = await Promise.all([getDreamAiInventory(40), listAdminReports({})]);
-  const flags = readAdminCommentFlags();
-  const reportedListingIds = new Set(reports.items.map((report) => report.listingId));
+  const authorIds = new Set<number>();
+  for (const flag of flags) {
+    const row = commentMaps.get(flag.listingId)?.get(flag.commentId);
+    if (row) authorIds.add(row.authorUserId);
+  }
+  const authorProfiles = await Promise.all([...authorIds].map((id) => getPublicProfile(id)));
+  const authorNameById = new Map([...authorIds].map((id, index) => [id, authorProfiles[index]?.fullName ?? `User #${id}`] as const));
 
-  const seeded = inventory.flatMap((listing) =>
-    listing.comments
-      .filter((comment, index) => reportedListingIds.has(Number(listing.id)) || index === 0)
-      .map((comment) => ({
-        key: `${listing.id}-${comment.id}`,
-        commentId: comment.id,
-        listingId: Number(listing.id),
-        listingTitle: listing.title,
-        listingAddress: listing.address,
-        author: comment.authorName,
-        body: comment.body,
-        flaggedAt: flags[`${listing.id}-${comment.id}`]?.flaggedAt ?? comment.date,
-        flagReason:
-          flags[`${listing.id}-${comment.id}`]?.reason ??
-          (reportedListingIds.has(Number(listing.id)) ? "Linked to a reported listing." : "Prototype moderation seed."),
-      })),
-  );
+  return flags
+    .map((flag) => {
+      const snippet = snippets.get(flag.listingId) ?? { title: `Listing #${flag.listingId}`, address: "" };
+      const comment = commentMaps.get(flag.listingId)?.get(flag.commentId);
+      const author = comment ? (authorNameById.get(comment.authorUserId) ?? `User #${comment.authorUserId}`) : "Unknown author";
+      const body =
+        comment?.body?.trim() ||
+        `Comment #${flag.commentId} (text unavailable — it may have been removed or is outside the fetched page).`;
 
-  return seeded.sort((left, right) => new Date(right.flaggedAt).getTime() - new Date(left.flaggedAt).getTime());
+      return {
+        key: `flag-${flag.id}`,
+        flagId: flag.id,
+        commentId: String(flag.commentId),
+        listingId: flag.listingId,
+        listingTitle: snippet.title,
+        listingAddress: snippet.address,
+        author,
+        body,
+        flaggedAt: flag.createdAt,
+        flagReason: flag.reason?.trim() || "Flagged for review",
+      } satisfies ModerationCommentItem;
+    })
+    .sort((left, right) => new Date(right.flaggedAt).getTime() - new Date(left.flaggedAt).getTime());
 }
 
 export async function getAdminAnalyticsWorkspace() {
@@ -472,20 +570,13 @@ export async function getAdminAnalyticsWorkspace() {
   const agentPerformance = await Promise.all(
     agents.items.slice(0, 12).map(async (agent) => {
       const profile = await getPublicProfile(agent.id);
-      const reviews = await api
-        .get<PagedModel<PublicReview>>(`/users/${agent.id}/reviews`, {
-          skipAuth: true,
-          query: { page: 0, size: 12 },
-        })
-        .catch(() => ({ content: [], page: { size: 12, number: 0, totalElements: 0, totalPages: 0 } }));
-
       return {
         id: agent.id,
         name: profile?.fullName ?? agent.fullName ?? agent.email,
         dealsClosed: profile?.closedDealCount ?? 0,
-        responseRate: profile?.medianResponseMinutes ? Math.max(35, 100 - profile.medianResponseMinutes / 2) : 78,
-        rating: profile?.averageRating ?? 0,
-        reviewCount: reviews.content.length,
+        medianResponseMinutes: profile?.medianResponseMinutes ?? null,
+        rating: profile?.averageRating ?? null,
+        reviewCount: profile?.reviewCount ?? 0,
       };
     }),
   );
@@ -496,22 +587,6 @@ export async function getAdminAnalyticsWorkspace() {
     priceTrends,
     agentPerformance: agentPerformance.sort((left, right) => right.dealsClosed - left.dealsClosed),
   };
-}
-
-export function readAdminAdsState() {
-  return readFromStorage(ADMIN_ADS_KEY, DEFAULT_ADMIN_ADS_STATE);
-}
-
-export function saveAdminAdsState(state: AdminAdsState) {
-  writeToStorage(ADMIN_ADS_KEY, state);
-}
-
-export function readAdminPlatformSettings() {
-  return readFromStorage(ADMIN_SETTINGS_KEY, DEFAULT_ADMIN_PLATFORM_SETTINGS);
-}
-
-export function saveAdminPlatformSettings(settings: AdminPlatformSettings) {
-  writeToStorage(ADMIN_SETTINGS_KEY, settings);
 }
 
 export async function approveVerification(verificationId: number) {

@@ -1,5 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  /**
+   * Emit `.next/standalone` for Docker / self-hosted deploys (`node server.js`).
+   * Vercel and similar managed hosts ignore this flag for their own output layout.
+   */
+  output: "standalone",
   transpilePackages: ["leaflet", "react-leaflet"],
   images: {
     remotePatterns: [

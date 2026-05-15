@@ -194,10 +194,23 @@ export function ListingGallery({
     return () => window.clearTimeout(t);
   }, [lightboxOpen]);
 
+  const goFirst = useCallback(() => {
+    if (n <= 1) return;
+    setIndex(0);
+  }, [n]);
+
+  const goLast = useCallback(() => {
+    if (n <= 1) return;
+    setIndex(n - 1);
+  }, [n]);
+
   useEffect(() => {
     if (!lightboxOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setLightboxOpen(false);
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setLightboxOpen(false);
+      }
       if (e.key === "ArrowRight") {
         e.preventDefault();
         goNext();
@@ -206,10 +219,18 @@ export function ListingGallery({
         e.preventDefault();
         goPrev();
       }
+      if (e.key === "Home") {
+        e.preventDefault();
+        goFirst();
+      }
+      if (e.key === "End") {
+        e.preventDefault();
+        goLast();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [lightboxOpen, goNext, goPrev]);
+  }, [lightboxOpen, goNext, goPrev, goFirst, goLast]);
 
   const openLightbox = useCallback(() => {
     if (n === 0) return;
@@ -322,114 +343,129 @@ export function ListingGallery({
             aria-modal="true"
             aria-labelledby={dialogLabelId}
           >
+            {/* Tap dimmed backdrop to close */}
             <button
               type="button"
               aria-label="Close gallery"
-              className="absolute inset-0 bg-black/82 backdrop-blur-[2px] transition-opacity"
+              className="absolute inset-0 z-0 bg-black/85 backdrop-blur-[2px]"
               onClick={closeLightbox}
             />
 
-            <div className="relative z-[1] flex min-h-0 flex-1 flex-col">
-              <div className="flex shrink-0 items-center justify-between gap-3 px-3 pt-3 md:px-4">
-                <p id={dialogLabelId} className="min-w-0 truncate text-sm font-medium text-white/90 md:text-base">
-                  {title}
-                </p>
+            <div className="pointer-events-none relative z-10 flex min-h-0 flex-1 flex-col">
+              <div className="pointer-events-auto absolute right-3 top-3 z-20 md:right-4 md:top-4">
                 <button
                   ref={closeButtonRef}
                   type="button"
                   onClick={closeLightbox}
-                  className="flex h-11 w-11 shrink-0 items-center justify-center border border-white/15 bg-white/10 text-white transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black"
+                  className="flex h-11 w-11 items-center justify-center border border-white/20 bg-black/50 text-white shadow-lg backdrop-blur-sm transition-colors hover:bg-black/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                   aria-label="Close"
                 >
                   <X className="h-5 w-5" aria-hidden />
                 </button>
               </div>
 
-              <div className="relative flex min-h-0 flex-1 items-center justify-center px-2 pb-2 md:px-4">
-                {n > 1 ? (
-                  <button
-                    type="button"
-                    onClick={goPrev}
-                    aria-label="Previous photo"
-                    className="absolute left-1 z-[2] flex h-12 w-12 items-center justify-center border border-white/15 bg-black/50 text-white shadow-lg transition-colors hover:bg-black/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white md:left-3 md:h-14 md:w-14"
-                  >
-                    <ChevronLeft className="h-7 w-7 md:h-8 md:w-8" aria-hidden />
-                  </button>
-                ) : null}
-                {n > 1 ? (
-                  <button
-                    type="button"
-                    onClick={goNext}
-                    aria-label="Next photo"
-                    className="absolute right-1 z-[2] flex h-12 w-12 items-center justify-center border border-white/15 bg-black/50 text-white shadow-lg transition-colors hover:bg-black/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white md:right-3 md:h-14 md:w-14"
-                  >
-                    <ChevronRight className="h-7 w-7 md:h-8 md:w-8" aria-hidden />
-                  </button>
-                ) : null}
-
+              <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-3 pb-6 pt-14 md:px-6 md:pb-10 md:pt-16">
                 <div
-                  className="relative z-[1] flex h-full max-h-[min(72vh,720px)] w-full max-w-6xl touch-manipulation select-none items-center justify-center px-10 md:px-16"
-                  onPointerDown={onLightboxPointerDown}
-                  onPointerUp={onLightboxPointerUp}
-                  onPointerCancel={onLightboxPointerUp}
+                  className="pointer-events-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col items-center gap-4"
+                  onClick={(e) => e.stopPropagation()}
+                  role="presentation"
                 >
-                  {photos.map((photo, i) => (
+                  <p id={dialogLabelId} className="sr-only">
+                    {title} — photo {index + 1} of {n}
+                  </p>
+
+                  <div className="relative flex min-h-0 w-full max-w-4xl flex-1 touch-manipulation select-none flex-col justify-center">
+                    {n > 1 ? (
+                      <button
+                        type="button"
+                        onClick={goPrev}
+                        aria-label="Previous photo"
+                        className="absolute left-0 top-1/2 z-[2] flex h-11 w-11 -translate-y-1/2 items-center justify-center border border-white/15 bg-black/55 text-white shadow-md backdrop-blur-sm transition-colors hover:bg-black/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white md:h-12 md:w-12"
+                      >
+                        <ChevronLeft className="h-6 w-6 md:h-7 md:w-7" aria-hidden />
+                      </button>
+                    ) : null}
+                    {n > 1 ? (
+                      <button
+                        type="button"
+                        onClick={goNext}
+                        aria-label="Next photo"
+                        className="absolute right-0 top-1/2 z-[2] flex h-11 w-11 -translate-y-1/2 items-center justify-center border border-white/15 bg-black/55 text-white shadow-md backdrop-blur-sm transition-colors hover:bg-black/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white md:h-12 md:w-12"
+                      >
+                        <ChevronRight className="h-6 w-6 md:h-7 md:w-7" aria-hidden />
+                      </button>
+                    ) : null}
+
                     <div
-                      key={`lb-${photo.id}`}
-                      className={cn(
-                        "absolute inset-0 flex items-center justify-center px-1",
-                        transitionClass,
-                        i === index ? "z-[1] opacity-100" : "z-0 pointer-events-none opacity-0",
-                      )}
+                      className="relative mx-auto flex min-h-[min(32dvh,260px)] w-full max-h-[min(78dvh,calc(100vh-9rem))] max-w-full flex-1 items-center justify-center md:min-h-[min(36dvh,300px)] md:max-h-[min(82dvh,calc(100vh-10rem))]"
+                      onPointerDown={onLightboxPointerDown}
+                      onPointerUp={onLightboxPointerUp}
+                      onPointerCancel={onLightboxPointerUp}
                     >
-                      <PhotoWithStatus
-                        photo={photo}
-                        alt={photo.alt || `${title} — photo ${i + 1} of ${n}`}
-                        className="max-h-full max-w-full rounded-none bg-black/20"
-                        imgClassName="max-h-[min(72vh,720px)] max-w-full object-contain"
-                        sizes="(max-width: 768px) 100vw, 1152px"
-                        priority={i === index}
-                      />
+                      {photos.map((photo, i) => (
+                        <div
+                          key={`lb-${photo.id}`}
+                          className={cn(
+                            "absolute inset-0 flex items-center justify-center bg-black/25 p-1 md:p-2",
+                            transitionClass,
+                            i === index ? "z-[1] opacity-100" : "z-0 pointer-events-none opacity-0",
+                          )}
+                        >
+                          <PhotoWithStatus
+                            photo={photo}
+                            alt={photo.alt || `${title} — photo ${i + 1} of ${n}`}
+                            className="relative flex max-h-full max-w-full items-center justify-center bg-transparent"
+                            imgClassName="h-auto w-auto max-h-full max-w-full object-contain object-center"
+                            sizes="(max-width: 768px) 100vw, 1024px"
+                            priority={i === index}
+                          />
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  </div>
+
+                  {n > 1 ? (
+                    <div className="flex w-full max-w-4xl flex-col items-center gap-2">
+                      <div
+                        ref={thumbStripRef}
+                        className="flex w-full max-w-xl justify-center gap-2 overflow-x-auto px-1 py-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                      >
+                        {photos.map((photo, i) => (
+                          <button
+                            key={`thumb-${photo.id}`}
+                            type="button"
+                            data-thumb-index={i}
+                            onClick={() => setIndex(i)}
+                            aria-label={`Show photo ${i + 1}`}
+                            aria-current={i === index ? "true" : undefined}
+                            className={cn(
+                              "relative h-14 w-14 shrink-0 overflow-hidden border-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white md:h-16 md:w-16",
+                              i === index ? "border-white" : "border-white/25 opacity-75 hover:opacity-100",
+                            )}
+                          >
+                            <PhotoWithStatus
+                              photo={photo}
+                              alt={photo.alt ? `${photo.alt} (thumbnail)` : `Thumbnail ${i + 1}`}
+                              variant="thumb"
+                              className="h-full w-full"
+                              imgClassName="h-full w-full object-cover"
+                              sizes="64px"
+                            />
+                          </button>
+                        ))}
+                      </div>
+                      <p className="max-w-md text-center text-[10px] leading-relaxed text-white/45 md:text-[11px]">
+                        Swipe left or right on the photo ·{" "}
+                        <kbd className="rounded border border-white/20 bg-white/10 px-1 font-sans">←</kbd>{" "}
+                        <kbd className="rounded border border-white/20 bg-white/10 px-1 font-sans">→</kbd>{" "}
+                        <kbd className="rounded border border-white/20 bg-white/10 px-1 font-sans">Home</kbd>{" "}
+                        <kbd className="rounded border border-white/20 bg-white/10 px-1 font-sans">End</kbd> ·{" "}
+                        <kbd className="rounded border border-white/20 bg-white/10 px-1 font-sans">Esc</kbd> to close
+                      </p>
+                    </div>
+                  ) : null}
                 </div>
               </div>
-
-              {n > 1 ? (
-                <div className="relative z-[1] shrink-0 border-t border-white/10 bg-black/55 px-3 py-3 backdrop-blur-sm md:px-4">
-                  <p className="mb-2 text-center text-[11px] font-medium uppercase tracking-eyebrow text-white/55">
-                    All photos · tap to jump
-                  </p>
-                  <div
-                    ref={thumbStripRef}
-                    className="flex max-w-full gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-                  >
-                    {photos.map((photo, i) => (
-                      <button
-                        key={`thumb-${photo.id}`}
-                        type="button"
-                        data-thumb-index={i}
-                        onClick={() => setIndex(i)}
-                        aria-label={`Show photo ${i + 1}`}
-                        aria-current={i === index ? "true" : undefined}
-                        className={cn(
-                          "relative h-16 w-16 shrink-0 overflow-hidden border-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black",
-                          i === index ? "border-white" : "border-transparent opacity-70 hover:opacity-100",
-                        )}
-                      >
-                        <PhotoWithStatus
-                          photo={photo}
-                          alt={photo.alt ? `${photo.alt} (thumbnail)` : `Thumbnail ${i + 1}`}
-                          variant="thumb"
-                          className="h-full w-full"
-                          imgClassName="h-full w-full object-cover"
-                          sizes="64px"
-                        />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
             </div>
           </div>,
           document.body,

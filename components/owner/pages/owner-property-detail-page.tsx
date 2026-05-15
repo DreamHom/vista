@@ -67,7 +67,7 @@ import {
   type OwnerPropertyFormDraft,
 } from "@/lib/owner-dashboard";
 import { useAuth } from "@/lib/use-auth";
-import { formatNaira } from "@/lib/format";
+import { formatGroupedIntegerInput, formatNaira, formatStoredGroupedInteger, parseGroupedNumberInput } from "@/lib/format";
 import {
   DashboardPageIntro,
   EmptyPanel,
@@ -138,7 +138,7 @@ export function OwnerPropertyDetailPage({ propertyId }: { propertyId: number }) 
       title: listing.title ?? "",
       headline: listing.headline ?? "",
       description: listing.description ?? "",
-      askingPrice: String(listing.askingPrice ?? ""),
+      askingPrice: formatStoredGroupedInteger(String(listing.askingPrice ?? "")),
       handoverDate: listing.handoverDate ?? "",
       status: listing.status,
     });
@@ -152,7 +152,7 @@ export function OwnerPropertyDetailPage({ propertyId }: { propertyId: number }) 
         title: editState.title,
         headline: editState.headline,
         description: editState.description,
-        askingPrice: Number(editState.askingPrice || 0),
+        askingPrice: parseGroupedNumberInput(editState.askingPrice) ?? 0,
         handoverDate: editState.handoverDate || undefined,
         status: editState.status,
       });
@@ -270,7 +270,7 @@ export function OwnerPropertyDetailPage({ propertyId }: { propertyId: number }) 
           </div>
         </SectionCard>
 
-        <SectionCard title="Edit listing details" description="Inline owner controls for the active listing. Property basics remain read-only until Haven exposes a property update endpoint.">
+        <SectionCard title="Edit listing details" description="Inline owner controls for the active listing. Property address and room counts can be updated on the underlying property record via Haven when you edit them in the property workspace.">
           {listing ? (
             <div className="space-y-4">
               <div className="space-y-2">
@@ -288,7 +288,17 @@ export function OwnerPropertyDetailPage({ propertyId }: { propertyId: number }) 
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <FieldLabel>Asking price</FieldLabel>
-                  <Input value={editState.askingPrice} onChange={(event) => setEditState((current) => ({ ...current, askingPrice: event.target.value }))} />
+                  <Input
+                    inputMode="numeric"
+                    value={editState.askingPrice}
+                    onChange={(event) =>
+                      setEditState((current) => ({
+                        ...current,
+                        askingPrice: formatGroupedIntegerInput(event.target.value),
+                      }))
+                    }
+                    placeholder="e.g. 8,500,000"
+                  />
                 </div>
                 <div className="space-y-2">
                   <FieldLabel>Availability status</FieldLabel>

@@ -34,4 +34,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-/.claude/launch.json
+
+# Lighthouse CI / local reports
+lighthouse*.json
+/.lighthouse/

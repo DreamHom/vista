@@ -2,7 +2,7 @@
 
 This document collates **Vista-facing limitations** tied to the **Haven** API and to **features that are stubbed, local-only, or blocked** until backend support exists. For each theme it states **what is missing**, **what we want from Haven**, **what we use it for in the product**, and **where Vista should integrate** once APIs land.
 
-**Canonical API contract:** `docs/haven-api-docs-1.0.1.yaml` (DreamHomes Haven API). “v1.0.1” in UI copy aligns with this bundle.
+**Canonical API contract:** `docs/haven-api-docs-1.0.2.yaml` (DreamHomes Haven API). **Changelog + matrix:** [`docs/integration-log.md`](./integration-log.md). **Contract drift vs changelog:** [`docs/openapi-diff-1.0.1-to-1.0.2.md`](./openapi-diff-1.0.1-to-1.0.2.md).
 
 **Vista integration surface:** `lib/api.ts` (fetch + JWT + `FormData` for uploads), `app/api/[...path]/route.ts` (browser → Haven proxy), `lib/seed/public-data.ts` (public browse + `backendUnavailable`), `lib/*-dashboard.ts` (role workspaces).
 
@@ -40,7 +40,7 @@ Vista already integrates Haven for **login**, **registration (202 + next-step co
 
 | Location | Message / intent |
 | --- | --- |
-| `app/(public)/listings/[id]/page.tsx` | Backend-driven listing; **pet rules & utilities** not in v1.0.1; **map pin approximate** until real coordinates. |
+| `app/(public)/listings/[id]/page.tsx` | Backend-driven listing; **pet rules & utilities** and **coordinates** when returned by Haven; **approximate pin** only as fallback. |
 | `app/(public)/map/page.tsx` | Haven listing browse **unavailable** at configured API base **or** pins are **approximate** until geometry ships. |
 | `components/public/listings-explorer.tsx` | Haven public endpoints **unavailable** — empty backend state (not local mock listings). |
 | `app/(public)/compare/page.tsx` | Haven **compare suggestions empty** at API base. |
@@ -60,8 +60,8 @@ Vista already integrates Haven for **login**, **registration (202 + next-step co
 | `components/agent/pages/agent-offers-page.tsx` | Agent countering **staged** — offer mutations **owner/applicant scoped**; roadmap for agent negotiation. |
 | `components/agent/pages/agent-leads-page.tsx` | Contact detail **intentionally narrow** — applicant PII behind workflow. |
 | `components/agent/pages/agent-ads-page.tsx` | Same ads **v1.0.1** gap as admin (purchase/approval). |
-| `components/owner/pages/owner-inspections-page.tsx` | Owner inspection **response actions prototype** — approve/decline/no-show not in v1.0.1; **local** status/notes. |
-| `components/owner/pages/owner-leads-page.tsx` | **Lead contacts** not exposed by v1.0.1. |
+| `components/owner/pages/owner-inspections-page.tsx` | **Approve / decline / no-show** call Haven when `inspectionId` is present on the notification payload; otherwise local status/notes. |
+| `components/owner/pages/owner-leads-page.tsx` | **Formal leads** from `GET /listings/{id}/leads` merged with offer/comment activity; **reveal** uses Haven when `havenLeadId` is present. |
 | `components/owner/pages/owner-new-property-page.tsx` | **Documents real; draft memory local** — submit uploads to Haven + verification; draft in **browser storage**. |
 | `components/owner/pages/owner-dashboard-home-page.tsx` | **Complete owner verification** to unlock trust (product nudge; verification APIs exist but UX ties to Haven state). |
 
@@ -75,7 +75,7 @@ Vista already integrates Haven for **login**, **registration (202 + next-step co
 | `components/agent/pages/agent-profile-page.tsx` | **Marketing fields staged locally**; FieldHint: draft-only until **public marketing attributes** for agents. |
 | `components/owner/pages/owner-property-detail-page.tsx` | **Property basics read-only** until **property update** endpoint (non-price fields). |
 | `components/owner/pages/owner-new-property-page.tsx` | **Negotiable flag** not persisted; **virtual tour** field missing; various **FieldHint** “local draft”. |
-| `components/dashboard/settings-page.tsx` | Notification prefs **local** until preference endpoints; delete account **blocked** until delete route. |
+| `components/dashboard/settings-page.tsx` | Notification prefs **`PATCH /me`** + local fallback; **`DELETE /me`** for account closure (applicant). |
 | `components/owner/pages/owner-settings-page.tsx` | Notification prefs **local**; delete account **prototype**; email mirroring “once Haven wires channels”. |
 | `components/agent/pages/agent-settings-page.tsx` | Notification prefs **local**; account deletion **not exposed**. |
 | `components/dashboard/inspections-page.tsx` | Fallback copy: location **loading from Haven** (enrichment). |
@@ -88,9 +88,9 @@ Vista already integrates Haven for **login**, **registration (202 + next-step co
 | Gap | What we want | Product use | Vista today |
 | --- | --- | --- | --- |
 | **JWT in `localStorage`** | httpOnly cookie session (or BFF token exchange) + CSRF strategy for browser | Reduce XSS token theft risk | `lib/auth-store.ts` documents this as **capstone-only**; `setAuthTokenProvider` in `app-providers`. |
-| **Forgot password** | `POST` initiate reset + email delivery + rate limits | Users recover access without support | `ForgotPasswordForm` (`components/public/auth-forms.tsx`) **only sets local state** — **no Haven call**; always shows success path. |
-| **Reset password** | Token-validated `POST` to set new password | Complete reset links | `ResetPasswordForm` same file — **no API**; validates client-side and shows success. |
-| **Login when already signed in** | Optional `GET /me` redirect on `/login` | Avoid redundant sign-in screens | Not implemented in `LoginForm` (by design today). |
+| **Forgot password** | `POST` initiate reset + email delivery + rate limits | Users recover access without support | `ForgotPasswordForm` calls **`POST /auth/forgot-password`** (202); optional dev token surfaced via toast. |
+| **Reset password** | Token-validated `POST` to set new password | Complete reset links | `ResetPasswordForm` calls **`POST /auth/reset-password`** (204); token from query or manual paste. |
+| **Login when already signed in** | Optional `GET /me` redirect on `/login` | Avoid redundant sign-in screens | **`LoginForm`** calls **`GET /api/me`** after store hydration when a JWT exists and redirects to the role dashboard. |
 | **Registration** | Already calls `POST /auth/register` per OpenAPI (202 semantics) | Signup → “Continue to sign in” | `SignupForm` wired; success copy from `RegisterAcceptedResponse`. |
 
 **Integration ask:** Ship **password reset** + **session hardening** contracts in OpenAPI; Vista replaces both forms with real `api.post` flows and error handling; update auth store when moving to cookies.
@@ -124,7 +124,7 @@ Vista already integrates Haven for **login**, **registration (202 + next-step co
 | **Admin platform settings** (verification toggles, SLAs, etc.) | `localStorage` | `lib/admin-dashboard.ts` `readAdminPlatformSettings` / `saveAdminPlatformSettings`; `admin-settings-page.tsx`. |
 | **Admin ads state** | `localStorage` | `lib/admin-dashboard.ts` `readAdminAdsState`; admin + agent ads pages. |
 | **Admin comment flags** (stitched moderation) | `localStorage` | `lib/admin-dashboard.ts` `readAdminCommentFlags`; `admin-comments-page.tsx`. |
-| **Applicant notification preferences** | `localStorage` | `lib/applicant-dashboard.ts`; `dashboard/settings-page.tsx`. |
+| **Applicant notification preferences** | `localStorage` + **`PATCH /me` `notificationPreferences`** (JSON) when signed in | `lib/applicant-dashboard.ts`; `dashboard/settings-page.tsx`. |
 | **Applicant profile “draft” extras** (incl. photo metadata) | `localStorage` | `lib/applicant-dashboard.ts`; `profile-page.tsx`. |
 | **Owner notification preferences** | `localStorage` | `lib/owner-dashboard.ts`; `owner-settings-page.tsx`. |
 | **Owner property wizard draft** | `localStorage` | `lib/owner-dashboard.ts`; `owner-new-property-page.tsx`. |
@@ -142,7 +142,7 @@ Vista already integrates Haven for **login**, **registration (202 + next-step co
 | --- | --- | --- | --- |
 | **Inventory** | Depends on public listings API | Stable filtered `GET /listings` | `dream-ai-page-shell.tsx` PublicApiNotice; `lib/dream-ai/match.ts`. |
 | **Reasoning** | Heuristic parser, not LLM | Server-side prompt + safety + citations to listing IDs | `match.ts` |
-| **Transport** | Fake word-by-word streaming | SSE or chunked HTTP for assistant tokens | `dream-ai-chat.tsx` header comment: swap `runAssistant` for **`/api/dream-ai`** (or Haven-hosted equivalent) + real transport. |
+| **Transport** | Fake word-by-word streaming | SSE or chunked HTTP for assistant tokens | `dream-ai-chat.tsx` still streams locally; when signed in, **`resolveDreamAiMatches`** merges **`POST /dream-ai/suggestions`** ids with `match.ts` heuristics. |
 | **Auth / rate limits** | N/A client-side | Authenticated quota, abuse controls | New BFF or Haven routes. |
 
 ---
@@ -233,10 +233,10 @@ Vista already integrates Haven for **login**, **registration (202 + next-step co
 
 | Location | User-visible behaviour | Backend need |
 | --- | --- | --- |
-| `components/dashboard/settings-page.tsx` | Delete account button → **toast: waiting on backend** | `DELETE /me` or role-specific delete |
+| `components/dashboard/settings-page.tsx` | Applicant **delete account** calls **`DELETE /me`** then signs out. | — |
 | `components/agent/pages/agent-settings-page.tsx` | Same | Same |
 | `components/owner/pages/owner-settings-page.tsx` | Delete flow → **toast: signed out locally**; server delete missing | Owner delete endpoint |
-| `components/owner/pages/owner-leads-page.tsx` | Contact reveal click → **toast: needs Haven support** | Gated reveal API |
+| `components/owner/pages/owner-leads-page.tsx` | **Reveal contact** calls Haven when the row has `havenLeadId`. | Ensure notifications / payloads stay aligned |
 | `components/admin/pages/admin-verification-page.tsx` | “Request more info” → **toast: staged** | Workflow endpoint |
 
 ---

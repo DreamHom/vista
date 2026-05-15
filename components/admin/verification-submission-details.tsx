@@ -2,12 +2,36 @@
 
 import { ExternalLink, FileText, Image as ImageIcon } from "lucide-react";
 
-import {
-  VERIFICATION_ATTACHMENT_IMAGE_PATTERN,
-  isSafeHttpUrl,
-  normalizeVerificationDocumentRefs,
-} from "@/lib/verification-document-refs";
 import { cn } from "@/lib/utils";
+
+const IMAGE_URL = /\.(png|jpe?g|webp|gif)(\?|#|$)/i;
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const u = new URL(value);
+    return u.protocol === "https:" || u.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+/** Accepts API string, already-parsed JSON, or empty. */
+export function normalizeVerificationDocumentRefs(
+  raw: string | Record<string, unknown> | null | undefined,
+): unknown | null {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw === "object" && !Array.isArray(raw)) return raw;
+  const s = String(raw).trim();
+  if (!s) return null;
+  if (!(s.startsWith("{") && s.endsWith("}")) && !(s.startsWith("[") && s.endsWith("]"))) {
+    return s;
+  }
+  try {
+    return JSON.parse(s) as unknown;
+  } catch {
+    return s;
+  }
+}
 
 function isDocumentRefEntry(value: unknown): value is { kind?: unknown; ref?: unknown } {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value) && ("ref" in (value as object) || "kind" in (value as object));
@@ -41,8 +65,8 @@ function AttachmentCard({
   kindLabel: string;
   refValue: string;
 }) {
-  const href = isSafeHttpUrl(refValue) ? refValue : null;
-  const showImage = Boolean(href && VERIFICATION_ATTACHMENT_IMAGE_PATTERN.test(refValue));
+  const href = isHttpUrl(refValue) ? refValue : null;
+  const showImage = Boolean(href && IMAGE_URL.test(refValue));
 
   return (
     <div className="rounded-lg border border-border bg-white p-3 shadow-sm">
@@ -126,8 +150,8 @@ function NestedValue({ value, depth }: { value: unknown; depth: number }) {
   }
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
     const s = String(value);
-    if (typeof value === "string" && isSafeHttpUrl(s)) {
-      const img = VERIFICATION_ATTACHMENT_IMAGE_PATTERN.test(s);
+    if (typeof value === "string" && isHttpUrl(s)) {
+      const img = IMAGE_URL.test(s);
       return (
         <span className="inline-flex flex-wrap items-center gap-2">
           <a href={s} target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline">

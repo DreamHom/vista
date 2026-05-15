@@ -5,6 +5,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { buildQueryString, type QueryState } from "@/lib/query-string";
 import { searchListings, summarizeQuery, type ListingSearchInput } from "@/lib/seed/public-data";
 import { cn } from "@/lib/utils";
+import { ListingsExplorerPresets } from "@/components/listings/listings-explorer-presets";
 import { EmptyHint, ListingDiscoveryCard, PublicApiNotice } from "./public-components";
 import { ListingsToolbar } from "./listings-toolbar";
 import { SortAutoSubmitForm } from "./sort-auto-submit";
@@ -30,6 +31,7 @@ export async function ListingsExplorer({
   return (
     <div className="container py-10 md:py-14">
       <ListingsToolbar mode={mode} searchParams={searchParams} sort={sort} />
+      <ListingsExplorerPresets mode={mode} current={searchParams} />
 
       <section className="mt-8 space-y-6">
           {backendUnavailable ? (

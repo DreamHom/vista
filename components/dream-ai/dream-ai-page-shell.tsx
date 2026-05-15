@@ -24,8 +24,8 @@ export function DreamAiPageShell({ listings }: DreamAiPageShellProps) {
   return (
     <div
       className={cn(
-        "flex flex-1 flex-col motion-reduce:transition-none",
-        immersive ? "px-3 py-2 md:px-4 md:py-3" : "container py-6 md:py-8",
+        "flex min-h-0 flex-1 flex-col motion-reduce:transition-none",
+        immersive ? "overflow-hidden px-3 py-2 md:px-4 md:py-3" : "overflow-y-auto py-6 md:py-8 container",
         "transition-[padding] duration-500",
       )}
       style={{ transitionTimingFunction: shellEase }}
@@ -63,15 +63,15 @@ export function DreamAiPageShell({ listings }: DreamAiPageShellProps) {
 
       <div
         className={cn(
-          "flex flex-col overflow-hidden border border-border bg-card motion-reduce:transition-none",
-          "transition-[transform,box-shadow,border-radius,min-height,margin] duration-500",
+          "flex min-h-0 flex-col overflow-hidden border border-border bg-card motion-reduce:transition-none",
+          "transition-[transform,box-shadow,border-radius,margin] duration-500",
           immersive
             ? cn(
-                "min-h-0 flex-1 origin-top scale-100 shadow-2xl ring-1 ring-border/40",
-                "min-h-[calc(100dvh-5.5rem)] max-md:rounded-none md:mx-auto md:max-w-5xl md:rounded-lg",
+                "h-full min-h-0 flex-1 origin-top scale-100 shadow-2xl ring-1 ring-border/40",
+                "max-md:rounded-none md:mx-auto md:max-w-5xl md:rounded-lg",
                 "motion-reduce:scale-100",
               )
-            : "min-h-0 origin-top scale-[0.992] shadow-none motion-reduce:scale-100",
+            : "min-h-0 shrink-0 origin-top scale-[0.992] shadow-none motion-reduce:scale-100",
         )}
         style={{ transitionTimingFunction: shellEase }}
       >

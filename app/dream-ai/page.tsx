@@ -30,12 +30,14 @@ export default async function DreamAiPage() {
   const listings = await getDreamAiInventory();
 
   return (
-    <div className="flex min-h-screen flex-col font-sans">
+    <div className="flex h-dvh max-h-dvh flex-col overflow-hidden font-sans">
       <PublicHeader />
-      <main className="flex min-h-[calc(100dvh-4rem)] flex-1 flex-col bg-background">
+      <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
         <DreamAiPageShell listings={listings} />
       </main>
-      <PublicFooter />
+      <div className="max-h-[min(40vh,320px)] shrink-0 overflow-y-auto border-t border-border">
+        <PublicFooter />
+      </div>
     </div>
   );
 }

@@ -1,30 +1,38 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { buttonVariants } from "@/components/ui/button";
+import { usePathname, useRouter } from "next/navigation";
+import { Bell, LogOut } from "lucide-react";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { WorkspaceAccountMenu } from "@/components/layout/workspace-account-menu";
 import { toast } from "@/components/ui/toast";
-import { accountSubtitleForRole, ACCOUNT_MENU_GLOBAL_EXTRAS, getAccountMenuItemsForRole } from "@/lib/account-menu-by-role";
+import {
+  accountSubtitleForRole,
+  ACCOUNT_MENU_GLOBAL_EXTRAS,
+  getAccountMenuItemsForRole,
+  notificationHubHref,
+} from "@/lib/account-menu-by-role";
 import { PUBLIC_AUTH_NAV } from "@/lib/public-site";
 import { useAuth } from "@/lib/use-auth";
 import { cn } from "@/lib/utils";
 
 const [loginItem, signupItem] = PUBLIC_AUTH_NAV;
 
+export type PublicAuthSurface = "landing" | "public";
+
 /**
- * Login / Sign up vs name + avatar for public surfaces (marketing header, hero).
- * Reads the same persisted auth store as the rest of the app.
+ * Login / Sign up vs avatar (+ optional notifications + sign out) for marketing surfaces.
  */
 export function PublicAuthDesktopCluster({
   className,
-  /** Sticky marketing header: signed-in user sees only the profile image on the trigger. */
-  avatarOnlyTrigger,
+  surface = "public",
 }: {
   className?: string;
-  avatarOnlyTrigger?: boolean;
+  /** `landing`: avatar only. `public`: notifications + sign out + avatar (menu). */
+  surface?: PublicAuthSurface;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { user, isAuthenticated, hydrated, clear } = useAuth();
 
   function handleSignOut() {
@@ -33,23 +41,50 @@ export function PublicAuthDesktopCluster({
     router.replace("/login");
   }
 
+  const notifHref = user ? notificationHubHref(user.role) : null;
+
   return (
-    <div className={cn("flex items-center gap-2", className)}>
+    <div className={cn("flex items-center gap-1 sm:gap-1.5", className)}>
       {!hydrated ? (
         <div className="h-9 w-44 shrink-0 rounded-none bg-muted/30" aria-hidden />
       ) : isAuthenticated && user ? (
-        <WorkspaceAccountMenu
-          fullName={user.fullName}
-          email={user.email}
-          accountSubtitle={accountSubtitleForRole(user.role)}
-          menuItems={getAccountMenuItemsForRole(user.role)}
-          extraLinks={ACCOUNT_MENU_GLOBAL_EXTRAS}
-          onSignOut={handleSignOut}
-          triggerVariant="desktop"
-          avatarVariant="person"
-          personAvatarSize={36}
-          showTriggerName={!avatarOnlyTrigger}
-        />
+        <>
+          {surface === "public" && notifHref ? (
+            <Link
+              href={notifHref}
+              className={cn(
+                buttonVariants({ variant: "ghost", size: "icon" }),
+                "h-9 w-9 shrink-0 sm:h-10 sm:w-10",
+                pathname.startsWith(notifHref) && "bg-secondary text-foreground",
+              )}
+              aria-label="Notifications"
+            >
+              <Bell className="h-4 w-4" aria-hidden />
+            </Link>
+          ) : null}
+          {surface === "public" ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 shrink-0 sm:h-10 sm:w-10"
+              aria-label="Sign out"
+              onClick={handleSignOut}
+            >
+              <LogOut className="h-4 w-4" aria-hidden />
+            </Button>
+          ) : null}
+          <WorkspaceAccountMenu
+            fullName={user.fullName}
+            email={user.email}
+            accountSubtitle={accountSubtitleForRole(user.role)}
+            menuItems={getAccountMenuItemsForRole(user.role)}
+            extraLinks={ACCOUNT_MENU_GLOBAL_EXTRAS}
+            onSignOut={handleSignOut}
+            triggerVariant="desktop"
+            photoUrl={user.profileImageUrl}
+          />
+        </>
       ) : (
         <>
           <Link href={loginItem.href} className={buttonVariants({ variant: "ghost", size: "sm" })}>
@@ -67,15 +102,15 @@ export function PublicAuthDesktopCluster({
 export function PublicAuthMobileCluster({
   onNavigate,
   variant,
-  avatarOnlyTrigger,
+  surface = "public",
 }: {
   onNavigate?: () => void;
-  /** `header`: compact row of sm buttons. `hero`: stacked md buttons in the landing drawer. */
+  /** `header`: compact row. `hero`: stacked controls in the landing drawer. */
   variant: "header" | "hero";
-  /** When set (e.g. sticky header drawer), signed-in trigger is avatar-only. */
-  avatarOnlyTrigger?: boolean;
+  surface?: PublicAuthSurface;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { user, isAuthenticated, hydrated, clear } = useAuth();
   const isHero = variant === "hero";
 
@@ -85,6 +120,8 @@ export function PublicAuthMobileCluster({
     router.replace("/login");
     onNavigate?.();
   }
+
+  const notifHref = user ? notificationHubHref(user.role) : null;
 
   if (!hydrated) {
     return (
@@ -100,7 +137,36 @@ export function PublicAuthMobileCluster({
 
   if (isAuthenticated && user) {
     return (
-      <div onClick={(e) => e.stopPropagation()}>
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className={cn("flex items-center gap-2", isHero && "w-full flex-wrap justify-end gap-2")}
+      >
+        {surface === "public" && notifHref ? (
+          <Link
+            href={notifHref}
+            onClick={onNavigate}
+            className={cn(
+              buttonVariants({ variant: "ghost", size: "icon" }),
+              "h-10 w-10 shrink-0",
+              pathname.startsWith(notifHref) && "bg-secondary text-foreground",
+            )}
+            aria-label="Notifications"
+          >
+            <Bell className="h-4 w-4" aria-hidden />
+          </Link>
+        ) : null}
+        {surface === "public" ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-10 w-10 shrink-0"
+            aria-label="Sign out"
+            onClick={handleSignOut}
+          >
+            <LogOut className="h-4 w-4" aria-hidden />
+          </Button>
+        ) : null}
         <WorkspaceAccountMenu
           fullName={user.fullName}
           email={user.email}
@@ -110,9 +176,8 @@ export function PublicAuthMobileCluster({
           onSignOut={handleSignOut}
           onItemNavigate={onNavigate}
           triggerVariant="mobile"
-          avatarVariant="person"
+          photoUrl={user.profileImageUrl}
           personAvatarSize={isHero ? 44 : 40}
-          showTriggerName={!avatarOnlyTrigger}
         />
       </div>
     );

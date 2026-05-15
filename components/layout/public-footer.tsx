@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Bebas_Neue } from "next/font/google";
-import { Mail } from "lucide-react";
+import { AtSign, Camera, Mail, MessageCircle } from "lucide-react";
 import { LogoMark } from "@/components/logo";
 import { MoniepointMark } from "@/components/partners/moniepoint-mark";
 import { PUBLIC_FOOTER_LINKS, PUBLIC_PRIMARY_NAV } from "@/lib/public-site";
@@ -14,13 +14,10 @@ const partnerBannerDisplay = Bebas_Neue({
   display: "swap",
 });
 
-/**
- * Social links sit deliberately empty until real handles are live.
- * Adding `href="#"` placeholders would (a) lie to screen readers and (b) get
- * sucked into Google's `sameAs` index via the JSON-LD in `app/layout.tsx`.
- * The email is the only contact we can stand behind today.
- */
 const SOCIAL = [
+  { href: "#", label: "Follow on X", icon: AtSign },
+  { href: "#", label: "Follow on Instagram", icon: Camera },
+  { href: "#", label: "Follow on Threads", icon: MessageCircle },
   { href: "mailto:hello@dreamhomes.today", label: "Email us", icon: Mail },
 ] as const;
 
@@ -116,17 +113,12 @@ export function PublicFooter() {
 
       <div className="container grid grid-cols-1 gap-8 py-8 sm:grid-cols-2">
         <div className="flex flex-col gap-1">
-          <span className="text-xs uppercase tracking-eyebrow text-muted-foreground">Email</span>
-          <a
-            href="mailto:hello@dreamhomes.today"
-            className="text-sm text-foreground transition-colors hover:text-accent"
-          >
-            hello@dreamhomes.today
-          </a>
+          <span className="text-xs uppercase tracking-eyebrow text-muted-foreground">Phone</span>
+          <span className="text-sm text-foreground">+234 (0) 800 0000 000</span>
         </div>
         <div className="flex flex-col gap-1 sm:items-end sm:text-right">
-          <span className="text-xs uppercase tracking-eyebrow text-muted-foreground">Markets</span>
-          <span className="text-sm text-foreground">Lagos · Abuja, Nigeria</span>
+          <span className="text-xs uppercase tracking-eyebrow text-muted-foreground">Address</span>
+          <span className="text-sm text-foreground">23 Admiralty Way, Lekki Phase 1, Lagos</span>
         </div>
       </div>
 

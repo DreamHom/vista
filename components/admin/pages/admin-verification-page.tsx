@@ -1,38 +1,16 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, ExternalLink, ShieldAlert } from "lucide-react";
 import {
-  approveListing,
   approveVerification,
-  clearAdminCommentFlag,
-  DEFAULT_ADMIN_ADS_STATE,
-  DEFAULT_ADMIN_PLATFORM_SETTINGS,
-  deleteComment,
-  dismissListingReport,
-  getAdminAnalyticsWorkspace,
-  getAdminDashboardOverview,
-  listAdminAuditLogs,
-  listAdminListings,
-  listAdminModerationComments,
-  listAdminReports,
-  listAdminUsers,
   listAdminVerifications,
-  readAdminAdsState,
-  readAdminPlatformSettings,
-  reactivateUser,
   rejectVerification,
-  resolveListingReport,
-  saveAdminAdsState,
-  saveAdminPlatformSettings,
-  suspendUser,
-  takeDownListing,
+  type VerificationAdminView,
   type VerificationQueueType,
 } from "@/lib/admin-dashboard";
-import { DashboardPageIntro, EmptyPanel, ErrorPanel, LoadingPanel, MetricCard, SectionCard, SettingsToggle, StatusBadge } from "@/components/dashboard/applicant-ui";
-import { formatDate, formatDateTime } from "@/components/dashboard/utils";
+import { DashboardPageIntro, EmptyPanel, ErrorPanel, LoadingPanel, StatusBadge } from "@/components/dashboard/applicant-ui";
+import { formatDateTime } from "@/components/dashboard/utils";
 import {
   Dialog,
   DialogClose,
@@ -41,21 +19,36 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
-import { cn } from "@/lib/utils";
+import { VerificationDocumentRefsDetail } from "@/components/admin/verification-submission-details";
 import { FilterPills } from "./admin-page-primitives";
+
+function defaultMoreInfoMessage(item: VerificationAdminView) {
+  const typeLabel = item.type.replaceAll("_", " ").toLowerCase();
+  return `DreamHomes Trust — more information needed (verification #${item.id}, ${typeLabel})
+
+We reviewed your submission dated ${formatDateTime(item.submittedAt)} and need a few more details before we can complete this check.
+
+Please reply with:
+• 
+
+Reference: verification id ${item.id} · submitter user #${item.submitterUserId}${item.targetPropertyId != null ? ` · property #${item.targetPropertyId}` : ""}.
+
+Thank you,
+DreamHomes Trust Operations`;
+}
 
 export function AdminVerificationPage() {
   const queryClient = useQueryClient();
   const [queueType, setQueueType] = useState<VerificationQueueType>("OWNER_IDENTITY");
   const [status, setStatus] = useState<"PENDING" | "APPROVED" | "REJECTED">("PENDING");
   const [reasons, setReasons] = useState<Record<number, string>>({});
+  const [moreInfoItem, setMoreInfoItem] = useState<VerificationAdminView | null>(null);
+  const [moreInfoMessage, setMoreInfoMessage] = useState("");
   const query = useQuery({
     queryKey: ["admin-verifications", queueType, status],
     queryFn: () => listAdminVerifications({ type: queueType, status }),
@@ -135,10 +128,7 @@ export function AdminVerificationPage() {
 
                 <div className="grid gap-4 xl:grid-cols-[1fr_300px]">
                   <div className="space-y-3">
-                    <div className="border border-border bg-secondary/40 px-4 py-4">
-                      <p className="text-xs uppercase tracking-eyebrow text-muted-foreground">Submission detail</p>
-                      <p className="mt-2 text-sm leading-6 text-foreground">{item.documentRefs || "Document metadata is not attached in this payload."}</p>
-                    </div>
+                    <VerificationDocumentRefsDetail documentRefs={item.documentRefs} />
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="border border-border bg-white px-4 py-4">
                         <p className="text-xs uppercase tracking-eyebrow text-muted-foreground">Target user</p>
@@ -181,7 +171,10 @@ export function AdminVerificationPage() {
                       <Button
                         variant="outline"
                         disabled={item.status !== "PENDING"}
-                        onClick={() => toast.success("Request-more-info flow staged for the next backend iteration.")}
+                        onClick={() => {
+                          setMoreInfoItem(item);
+                          setMoreInfoMessage(defaultMoreInfoMessage(item));
+                        }}
                       >
                         Request more info
                       </Button>
@@ -193,6 +186,51 @@ export function AdminVerificationPage() {
           ))}
         </div>
       )}
+
+      <Dialog
+        open={moreInfoItem !== null}
+        onOpenChange={(open) => {
+          if (!open) setMoreInfoItem(null);
+        }}
+      >
+        <DialogContent className="max-w-lg gap-0 p-0 sm:max-w-xl">
+          <DialogHeader className="border-b border-border px-6 py-4">
+            <DialogTitle>Request more information</DialogTitle>
+            <DialogDescription>
+              There is no automated request loop in the API yet. Copy the draft below and send it through your support channel or CRM, then track the thread outside this console.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 px-6 py-4">
+            <Textarea
+              rows={12}
+              value={moreInfoMessage}
+              onChange={(event) => setMoreInfoMessage(event.target.value)}
+              className="font-mono text-sm"
+            />
+          </div>
+          <DialogFooter className="flex flex-col gap-2 border-t border-border px-6 py-4 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(moreInfoMessage);
+                  toast.success("Message copied to clipboard.");
+                } catch {
+                  toast.error("Could not copy — select the text manually.");
+                }
+              }}
+            >
+              Copy message
+            </Button>
+            <DialogClose asChild>
+              <Button type="button" variant="primary">
+                Done
+              </Button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

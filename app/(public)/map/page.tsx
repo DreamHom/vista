@@ -11,6 +11,12 @@ import { cn } from "@/lib/utils";
 export const metadata: Metadata = {
   title: "Map View",
   description: "Explore DreamHomes listings through a map-first discovery surface with quick filters and listing previews.",
+  alternates: { canonical: "/map" },
+  openGraph: {
+    title: "Map view · DreamHomes",
+    description: "Explore DreamHomes listings through a map-first discovery surface with quick filters and listing previews.",
+    url: "/map",
+  },
 };
 
 interface MapSearchParams extends ListingSearchInput {

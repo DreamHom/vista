@@ -36,7 +36,7 @@ export function PublicHeader() {
           ))}
         </nav>
 
-        <PublicAuthDesktopCluster className="hidden md:flex" avatarOnlyTrigger />
+        <PublicAuthDesktopCluster className="hidden md:flex" />
 
         <button
           type="button"
@@ -64,7 +64,7 @@ export function PublicHeader() {
               ))}
             </nav>
             <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
-              <PublicAuthMobileCluster variant="header" avatarOnlyTrigger onNavigate={() => setOpen(false)} />
+              <PublicAuthMobileCluster variant="header" onNavigate={() => setOpen(false)} />
             </div>
           </div>
         </div>

@@ -1,25 +1,23 @@
 /**
- * Optional looping clips for the landing “Shorts” section (one per topic tab).
- * Self-host files under `/public/landing/` for reliable playback (hotlinking
- * Pexels/Mixkit from the server often returns 403).
+ * Looping clips for the landing “Shorts” section (one per topic tab, order matches
+ * `dictionary.shorts.topics`).
  *
- * **Replace with on-brand footage:** download MP4s from e.g.
- * [Pexels house interior](https://www.pexels.com/search/videos/house%20interior/),
- * [Pexels Lagos skyline](https://www.pexels.com/search/videos/lagos/),
- * or [Coverr architecture](https://coverr.co/stock-video-footage/architecture),
- * then drop them here as `topic-0.mp4` … `topic-4.mp4` and update the paths.
+ * Source masters live in `design-reference/videos/`. Shipped assets are
+ * **web-optimized** under `/public/landing/topic-{0..4}.mp4` (H.264, yuv420p,
+ * max width **1280** by default, CRF 26, `faststart`, no audio — re-encode from
+ * masters when they change). Use **960** width for longer sources if size blows up.
  *
- * Keep clips **5–20s**, **muted**, **H.264 + AAC**, and aim for **under ~5MB**
- * each on mobile. The first frame should roughly match the poster still so the
- * cross-fade feels intentional.
+ *   ffmpeg -y -i design-reference/videos/the-home-view.MP4 -vf "scale='min(1280,iw)':-2" \
+ *     -c:v libx264 -profile:v high -pix_fmt yuv420p -crf 26 -preset medium \
+ *     -movflags +faststart -an -map_metadata -1 public/landing/topic-0.mp4
  *
- * Current entries point at a tiny generic sample so the `<video>` path is
- * wired end-to-end before you swap in real estate clips.
+ * Tab order: Inside the home → home view; Neighbourhood → balcony; Rental process →
+ * stairs; Owner’s insight → dining; Living experience → living room.
  */
 export const LANDING_TOPIC_VIDEO_SRC: readonly string[] = [
-  "/landing/sample-360p.mp4",
-  "/landing/sample-360p.mp4",
-  "/landing/sample-360p.mp4",
-  "/landing/sample-360p.mp4",
-  "/landing/sample-360p.mp4",
+  "/landing/topic-0.mp4",
+  "/landing/topic-1.mp4",
+  "/landing/topic-2.mp4",
+  "/landing/topic-3.mp4",
+  "/landing/topic-4.mp4",
 ];

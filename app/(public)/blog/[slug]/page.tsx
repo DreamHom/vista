@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArticleCard } from "@/components/public/article-card";
 import { BLOG_ARTICLES, getBlogArticle, getRelatedArticles } from "@/lib/content/blog";
+import { truncateMetaDescription } from "@/lib/seo-metadata";
 
 export async function generateStaticParams() {
   return BLOG_ARTICLES.map((article) => ({ slug: article.slug }));
@@ -15,10 +16,23 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const article = getBlogArticle(slug);
-  if (!article) return {};
+  if (!article) return { title: "Blog", robots: { index: false, follow: true } };
+  const description = truncateMetaDescription(article.excerpt);
   return {
     title: article.title,
-    description: article.excerpt,
+    description,
+    alternates: { canonical: `/blog/${slug}` },
+    openGraph: {
+      title: article.title,
+      description,
+      url: `/blog/${slug}`,
+      type: "article",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: article.title,
+      description,
+    },
   };
 }
 

@@ -16,9 +16,9 @@ import {
   View,
 } from "lucide-react";
 import { WorkspaceAccountMenu } from "@/components/layout/workspace-account-menu";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { LogoMark } from "@/components/logo";
-import { ACCOUNT_MENU_GLOBAL_EXTRAS } from "@/lib/account-menu-by-role";
+import { ACCOUNT_MENU_GLOBAL_EXTRAS, notificationHubHref } from "@/lib/account-menu-by-role";
 import { useAuth } from "@/lib/use-auth";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
@@ -41,6 +41,7 @@ export function AgentShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, clear } = useAuth();
+  const notifHref = user ? notificationHubHref(user.role) : null;
 
   function handleLogout() {
     clear();
@@ -119,6 +120,30 @@ export function AgentShell({ children }: { children: React.ReactNode }) {
                 <Link href="/agent/dashboard" className="inline-flex">
                   <LogoMark size="sm" />
                 </Link>
+              <div className="flex items-center gap-1.5">
+                {notifHref ? (
+                  <Link
+                    href={notifHref}
+                    className={cn(
+                      buttonVariants({ variant: "ghost", size: "icon" }),
+                      "h-9 w-9",
+                      pathname.startsWith(notifHref) && "bg-secondary text-foreground",
+                    )}
+                    aria-label="Notifications"
+                  >
+                    <Bell className="h-4 w-4" aria-hidden />
+                  </Link>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9"
+                  aria-label="Sign out"
+                  onClick={handleLogout}
+                >
+                  <LogOut className="h-4 w-4" aria-hidden />
+                </Button>
                 <WorkspaceAccountMenu
                   fullName={user?.fullName ?? "Agent"}
                   email={user?.email}
@@ -127,11 +152,35 @@ export function AgentShell({ children }: { children: React.ReactNode }) {
                   extraLinks={ACCOUNT_MENU_GLOBAL_EXTRAS}
                   onSignOut={handleLogout}
                   triggerVariant="mobile"
-                  avatarVariant="initials"
+                  photoUrl={user?.profileImageUrl}
                 />
               </div>
+              </div>
 
-              <div className="hidden justify-end lg:flex">
+              <div className="hidden items-center justify-end gap-1.5 lg:flex">
+                {notifHref ? (
+                  <Link
+                    href={notifHref}
+                    className={cn(
+                      buttonVariants({ variant: "ghost", size: "icon" }),
+                      "h-9 w-9",
+                      pathname.startsWith(notifHref) && "bg-secondary text-foreground",
+                    )}
+                    aria-label="Notifications"
+                  >
+                    <Bell className="h-4 w-4" aria-hidden />
+                  </Link>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9"
+                  aria-label="Sign out"
+                  onClick={handleLogout}
+                >
+                  <LogOut className="h-4 w-4" aria-hidden />
+                </Button>
                 <WorkspaceAccountMenu
                   fullName={user?.fullName ?? "Agent"}
                   email={user?.email}
@@ -140,7 +189,7 @@ export function AgentShell({ children }: { children: React.ReactNode }) {
                   extraLinks={ACCOUNT_MENU_GLOBAL_EXTRAS}
                   onSignOut={handleLogout}
                   triggerVariant="desktop"
-                  avatarVariant="initials"
+                  photoUrl={user?.profileImageUrl}
                 />
               </div>
 

@@ -19,9 +19,9 @@ import {
   Plus,
 } from "lucide-react";
 import { WorkspaceAccountMenu } from "@/components/layout/workspace-account-menu";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { LogoMark } from "@/components/logo";
-import { ACCOUNT_MENU_GLOBAL_EXTRAS } from "@/lib/account-menu-by-role";
+import { ACCOUNT_MENU_GLOBAL_EXTRAS, notificationHubHref } from "@/lib/account-menu-by-role";
 import { useAuth } from "@/lib/use-auth";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
@@ -44,6 +44,7 @@ export function OwnerShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, clear } = useAuth();
+  const notifHref = user ? notificationHubHref(user.role) : null;
 
   function handleLogout() {
     clear();
@@ -56,7 +57,7 @@ export function OwnerShell({ children }: { children: React.ReactNode }) {
       <div className="grid min-h-screen w-full lg:grid-cols-[248px_minmax(0,1fr)]">
         <aside className="hidden border-r border-border bg-white text-foreground lg:sticky lg:top-0 lg:flex lg:h-svh lg:max-h-svh lg:flex-col lg:overflow-hidden">
           <div className="shrink-0 border-b border-border px-6 py-5">
-            <Link href="/owner/dashboard" className="inline-flex">
+            <Link href="/" className="inline-flex" aria-label="DreamHomes home">
               <LogoMark size="md" />
             </Link>
           </div>
@@ -119,9 +120,33 @@ export function OwnerShell({ children }: { children: React.ReactNode }) {
           <header className="sticky top-0 z-30 border-b border-border bg-background">
             <div className="flex flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
               <div className="flex items-center justify-between gap-4 lg:hidden">
-                <Link href="/owner/dashboard" className="inline-flex">
+                <Link href="/" className="inline-flex" aria-label="DreamHomes home">
                   <LogoMark size="sm" />
                 </Link>
+              <div className="flex items-center gap-1.5">
+                {notifHref ? (
+                  <Link
+                    href={notifHref}
+                    className={cn(
+                      buttonVariants({ variant: "ghost", size: "icon" }),
+                      "h-9 w-9",
+                      pathname.startsWith(notifHref) && "bg-secondary text-foreground",
+                    )}
+                    aria-label="Notifications"
+                  >
+                    <Bell className="h-4 w-4" aria-hidden />
+                  </Link>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9"
+                  aria-label="Sign out"
+                  onClick={handleLogout}
+                >
+                  <LogOut className="h-4 w-4" aria-hidden />
+                </Button>
                 <WorkspaceAccountMenu
                   fullName={user?.fullName ?? "Owner"}
                   email={user?.email}
@@ -130,11 +155,35 @@ export function OwnerShell({ children }: { children: React.ReactNode }) {
                   extraLinks={ACCOUNT_MENU_GLOBAL_EXTRAS}
                   onSignOut={handleLogout}
                   triggerVariant="mobile"
-                  avatarVariant="initials"
+                  photoUrl={user?.profileImageUrl}
                 />
               </div>
+              </div>
 
-              <div className="hidden justify-end lg:flex">
+              <div className="hidden items-center justify-end gap-1.5 lg:flex">
+                {notifHref ? (
+                  <Link
+                    href={notifHref}
+                    className={cn(
+                      buttonVariants({ variant: "ghost", size: "icon" }),
+                      "h-9 w-9",
+                      pathname.startsWith(notifHref) && "bg-secondary text-foreground",
+                    )}
+                    aria-label="Notifications"
+                  >
+                    <Bell className="h-4 w-4" aria-hidden />
+                  </Link>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9"
+                  aria-label="Sign out"
+                  onClick={handleLogout}
+                >
+                  <LogOut className="h-4 w-4" aria-hidden />
+                </Button>
                 <WorkspaceAccountMenu
                   fullName={user?.fullName ?? "Owner"}
                   email={user?.email}
@@ -143,7 +192,7 @@ export function OwnerShell({ children }: { children: React.ReactNode }) {
                   extraLinks={ACCOUNT_MENU_GLOBAL_EXTRAS}
                   onSignOut={handleLogout}
                   triggerVariant="desktop"
-                  avatarVariant="initials"
+                  photoUrl={user?.profileImageUrl}
                 />
               </div>
 

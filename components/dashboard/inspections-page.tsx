@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -16,8 +16,13 @@ import {
 } from "@/components/dashboard/applicant-ui";
 import {
   cancelInspection,
+  fetchListingBookingPhotos,
+  fetchListingBookingSlots,
+  fetchListingBookingSummary,
   listInspections,
+  requestInspection,
   type EnrichedInspection,
+  type SlotResponse,
 } from "@/lib/applicant-dashboard";
 import {
   buildCalendarHref,
@@ -26,7 +31,13 @@ import {
   inspectionTabFor,
 } from "@/components/dashboard/utils";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { ApiError } from "@/lib/api";
+import { formatNaira } from "@/lib/format";
+import { normalizeListingRouteId } from "@/lib/seed/public-data";
 import { useAuth } from "@/lib/use-auth";
+import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
 import { fallbackListingPhoto } from "@/lib/seed/photos";
 
@@ -64,6 +75,233 @@ function EmptyInspectionState({ tab }: { tab: InspectionTab }) {
       title="No cancelled inspections"
       body="If a booking is cancelled or declined, DreamHomes keeps it here so you can rebook quickly."
     />
+  );
+}
+
+function InspectionBookingFromListing({ listingId, userId }: { listingId: string; userId: number }) {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const [selectedSlotId, setSelectedSlotId] = useState<number | null>(null);
+  const [notes, setNotes] = useState("");
+
+  const listingQuery = useQuery({
+    queryKey: ["inspection-booking-listing", listingId],
+    queryFn: () => fetchListingBookingSummary(listingId),
+  });
+
+  const slotsQuery = useQuery({
+    queryKey: ["inspection-booking-slots", listingId],
+    queryFn: () => fetchListingBookingSlots(listingId),
+  });
+
+  const photosQuery = useQuery({
+    queryKey: ["inspection-booking-photos", listingId],
+    queryFn: () => fetchListingBookingPhotos(listingId),
+  });
+
+  const openSlots = useMemo(() => {
+    const cutoff = Date.now() - 5 * 60 * 1000;
+    return (slotsQuery.data ?? [])
+      .filter((slot) => new Date(slot.startsAt).getTime() >= cutoff)
+      .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
+  }, [slotsQuery.data]);
+
+  const slotsByDay = useMemo(() => {
+    const map = new Map<string, SlotResponse[]>();
+    for (const slot of openSlots) {
+      const day = slot.startsAt.slice(0, 10);
+      const list = map.get(day) ?? [];
+      list.push(slot);
+      map.set(day, list);
+    }
+    return [...map.entries()].sort(([left], [right]) => left.localeCompare(right));
+  }, [openSlots]);
+
+  const dayHeading = useMemo(
+    () =>
+      new Intl.DateTimeFormat("en-NG", {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      }),
+    [],
+  );
+
+  const timeFormatter = useMemo(
+    () => new Intl.DateTimeFormat("en-NG", { hour: "numeric", minute: "2-digit" }),
+    [],
+  );
+
+  const bookMutation = useMutation({
+    mutationFn: () => requestInspection({ slotId: selectedSlotId!, notes: notes.trim() || undefined }),
+    onSuccess: () => {
+      toast.success("Inspection requested.");
+      void queryClient.invalidateQueries({ queryKey: ["applicant-inspections", userId] });
+      void queryClient.invalidateQueries({ queryKey: ["applicant-dashboard-overview", userId] });
+      setSelectedSlotId(null);
+      setNotes("");
+      router.replace("/dashboard/inspections");
+    },
+    onError: (error) => {
+      if (error instanceof ApiError) {
+        if (error.status === 409) {
+          toast.error("That slot was just taken. Pick another time.");
+          void slotsQuery.refetch();
+          setSelectedSlotId(null);
+          return;
+        }
+        if (error.status === 403) {
+          toast.error("This action is only available for applicant accounts.");
+          return;
+        }
+        if (error.status === 401) {
+          toast.error("Please sign in again to complete booking.");
+          return;
+        }
+      }
+      toast.error(error instanceof Error ? error.message : "We couldn't book this slot.");
+    },
+  });
+
+  const listing = listingQuery.data;
+  const sortedPhotos = (photosQuery.data ?? []).slice().sort((a, b) => a.displayOrder - b.displayOrder);
+  const heroPhoto = sortedPhotos[0]?.url ?? null;
+  const fallbackHero = fallbackListingPhoto(`${listingId}-${listing?.title ?? "listing"}`, { w: 720, ratio: "4:3" });
+
+  if (listingQuery.isLoading) {
+    return (
+      <SectionCard title="Book an inspection" description="Loading listing and available times…">
+        <LoadingPanel label="Loading…" />
+      </SectionCard>
+    );
+  }
+
+  if (listingQuery.isError || !listing) {
+    return (
+      <SectionCard title="Book an inspection" description="We couldn't load this listing from Haven.">
+        <ErrorPanel
+          body={listingQuery.error instanceof Error ? listingQuery.error.message : "Listing unavailable."}
+          onRetry={() => void listingQuery.refetch()}
+        />
+        <Link href="/listings" className={cn(buttonVariants({ variant: "outline", size: "md" }), "mt-4 inline-flex")}>
+          Browse listings
+        </Link>
+      </SectionCard>
+    );
+  }
+
+  return (
+    <SectionCard
+      title="Book an inspection"
+      description="Choose one of the owner's published slots. Your request is recorded immediately; the slot stops showing to other applicants once it is yours."
+    >
+      <div className="rounded-2xl border border-border bg-muted/30 p-4 md:p-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+          <div className="shrink-0 overflow-hidden rounded-xl border border-border bg-muted sm:w-[200px]">
+            <img
+              src={heroPhoto ?? fallbackHero.url}
+              alt={listing.title ?? "Listing"}
+              className="aspect-[4/3] h-full w-full object-cover"
+            />
+          </div>
+          <div className="min-w-0 flex-1 space-y-2">
+            <p className="text-lg font-semibold tracking-tight text-foreground">{listing.title ?? "Untitled listing"}</p>
+            <p className="text-sm text-muted-foreground">{listing.property.address}</p>
+            <p className="text-base font-medium text-foreground">
+              {formatNaira(listing.askingPrice)}
+              {listing.listingType === "RENT" ? (
+                <span className="text-sm font-normal text-muted-foreground"> / year</span>
+              ) : null}
+            </p>
+            <Link href={`/listings/${listingId}`} className="inline-flex text-sm font-medium text-primary hover:text-primary/80">
+              View full listing
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      {slotsQuery.isLoading ? (
+        <div className="mt-6">
+          <LoadingPanel label="Loading available slots…" />
+        </div>
+      ) : slotsQuery.isError ? (
+        <div className="mt-6">
+          <ErrorPanel
+            body={slotsQuery.error instanceof Error ? slotsQuery.error.message : "Could not load slots."}
+            onRetry={() => void slotsQuery.refetch()}
+          />
+        </div>
+      ) : openSlots.length === 0 ? (
+        <div className="mt-6">
+          <EmptyPanel
+            title="No open slots right now"
+            body="Ask the owner to publish new times, or check back later."
+            ctaLabel="Open listing"
+            ctaHref={`/listings/${listingId}`}
+          />
+        </div>
+      ) : (
+        <div className="mt-6 space-y-6">
+          <p className="text-sm font-medium text-foreground">Choose a time</p>
+          {slotsByDay.map(([day, slots]) => (
+            <div key={day}>
+              <p className="text-xs font-semibold uppercase tracking-eyebrow text-muted-foreground">
+                {dayHeading.format(new Date(`${day}T12:00:00`))}
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {slots.map((slot) => {
+                  const active = selectedSlotId === slot.id;
+                  return (
+                    <button
+                      key={slot.id}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => setSelectedSlotId(slot.id)}
+                      className={cn(
+                        "rounded-full border px-4 py-2 text-sm font-medium transition-colors",
+                        active
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border bg-background text-foreground hover:border-primary/50",
+                      )}
+                    >
+                      {timeFormatter.format(new Date(slot.startsAt))}
+                      {" – "}
+                      {timeFormatter.format(new Date(slot.endsAt))}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-6 space-y-2">
+        <Label htmlFor="inspection-notes">Notes for the host (optional)</Label>
+        <Textarea
+          id="inspection-notes"
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          maxLength={5000}
+          placeholder="e.g. two people attending, approximate arrival"
+          rows={3}
+        />
+      </div>
+
+      <div className="mt-6 flex flex-wrap gap-3">
+        <Button
+          variant="primary"
+          disabled={selectedSlotId == null || bookMutation.isPending}
+          onClick={() => bookMutation.mutate()}
+        >
+          {bookMutation.isPending ? "Booking…" : "Confirm inspection"}
+        </Button>
+        <Link href={`/listings/${listingId}`} className={buttonVariants({ variant: "outline", size: "md" })}>
+          Back to listing
+        </Link>
+      </div>
+    </SectionCard>
   );
 }
 
@@ -175,11 +413,36 @@ function InspectionCard({
 }
 
 export function ApplicantInspectionsPage() {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const searchParams = useSearchParams();
   const fromListingId = searchParams.get("listingId");
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<InspectionTab>("upcoming");
+
+  const normalizedFromListing =
+    fromListingId != null && fromListingId.trim() !== "" ? normalizeListingRouteId(fromListingId) : null;
+
+  const bookingHeader =
+    normalizedFromListing && role === "APPLICANT" && user?.id ? (
+      <InspectionBookingFromListing listingId={normalizedFromListing} userId={user.id} />
+    ) : normalizedFromListing ? (
+      <SectionCard
+        title="Book on the listing"
+        description="Sign in as an applicant to pick an open inspection slot for this property."
+      >
+        <div className="flex flex-wrap gap-3">
+          <Link href={`/listings/${normalizedFromListing}`} className={buttonVariants({ variant: "outline", size: "md" })}>
+            View listing
+          </Link>
+          <Link
+            href={`/login?next=${encodeURIComponent(`/dashboard/inspections?listingId=${encodeURIComponent(normalizedFromListing)}`)}`}
+            className={buttonVariants({ variant: "primary", size: "md" })}
+          >
+            Sign in
+          </Link>
+        </div>
+      </SectionCard>
+    ) : null;
 
   const inspectionsQuery = useQuery({
     queryKey: ["applicant-inspections", user?.id],
@@ -208,22 +471,10 @@ export function ApplicantInspectionsPage() {
     };
   }, [inspectionsQuery.data?.items]);
 
-  const continuationCard =
-    fromListingId != null && fromListingId !== "" ? (
-      <SectionCard
-        title="Finish booking on the listing"
-        description="Choose a published slot or request a time from the property page. Messages and host details stay on that flow."
-      >
-        <Link href={`/listings/${fromListingId}`} className={buttonVariants({ variant: "primary", size: "md" })}>
-          Open listing
-        </Link>
-      </SectionCard>
-    ) : null;
-
   if (inspectionsQuery.isLoading) {
     return (
       <div className="space-y-6">
-        {continuationCard}
+        {bookingHeader}
         <LoadingPanel label="Loading your inspections..." />
       </div>
     );
@@ -232,7 +483,7 @@ export function ApplicantInspectionsPage() {
   if (inspectionsQuery.isError) {
     return (
       <div className="space-y-6">
-        {continuationCard}
+        {bookingHeader}
         <ErrorPanel
           body={inspectionsQuery.error instanceof Error ? inspectionsQuery.error.message : "We couldn't load your inspections."}
           onRetry={() => void inspectionsQuery.refetch()}
@@ -245,7 +496,7 @@ export function ApplicantInspectionsPage() {
 
   return (
     <div className="space-y-6">
-      {continuationCard}
+      {bookingHeader}
 
       <DashboardPageIntro
         eyebrow="Inspections"

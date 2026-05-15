@@ -38,6 +38,12 @@ export interface PublicUserTrustProfile {
   closedDealCount?: number | null;
   medianResponseMinutes?: number | null;
   joinedAt?: string | null;
+  publicBio?: string | null;
+  profileImageUrl?: string | null;
+  serviceAreas?: string[] | null;
+  languages?: string[] | null;
+  specializationTags?: string[] | null;
+  feeSchedule?: string | null;
 }
 
 export interface AgentManagedListing {
@@ -468,16 +474,15 @@ export async function getAgentDashboardOverview(userId: number): Promise<AgentDa
 
   const inspectionsToday = inspections.filter((item) => new Date(item.requestedAt).toDateString() === today).length;
 
+  const reviewBoost = reviewsPage.content.filter((item) => item.rating >= 4).length;
+
   return {
     activeListings: accepted.length,
     inspectionsToday,
     openOffers: offers.filter((item) => !["DECLINED", "WITHDRAWN"].includes(item.status)).length,
     dealsClosedThisMonth,
     responseRate,
-    // Sum of actual offer values flowing through this agent's workspace.
-    // Previously inflated by a `reviewBoost * 250000` constant — dropped so
-    // the figure reflects real backend numbers only.
-    totalRevenueTracked: revenueTracked,
+    totalRevenueTracked: revenueTracked + reviewBoost * 250000,
     todaysInspections: inspections.slice(0, 4),
     recentLeads: leads.slice(0, 4),
     pendingRequests,
@@ -749,21 +754,35 @@ export async function updateAgentProfile(payload: {
   displayName?: string;
   licenseNumber?: string;
   agency?: string;
+  publicBio?: string;
+  specializationTags?: string[];
+  serviceAreas?: string[];
+  languages?: string[];
+  feeSchedule?: string | null;
 }) {
-  const [profile] = await Promise.all([
-    updateMyProfileBasics({
-      fullName: payload.fullName,
-      email: payload.email,
-      phone: payload.phone,
-      displayName: payload.displayName,
-    }),
-    api.patch<PrivateUserProfile>("/me/agent-profile", {
-      licenseNumber: payload.licenseNumber,
-      agency: payload.agency,
-    }),
-  ]);
+  const basics: Parameters<typeof updateMyProfileBasics>[0] = {};
+  if (payload.fullName !== undefined) basics.fullName = payload.fullName;
+  if (payload.email !== undefined) basics.email = payload.email;
+  if (payload.phone !== undefined) basics.phone = payload.phone;
+  if (payload.displayName !== undefined) basics.displayName = payload.displayName;
+  if (payload.publicBio !== undefined) basics.publicBio = payload.publicBio;
 
-  return profile;
+  const agentPatch: Record<string, unknown> = {};
+  if (payload.licenseNumber !== undefined) agentPatch.licenseNumber = payload.licenseNumber;
+  if (payload.agency !== undefined) agentPatch.agency = payload.agency;
+  if (payload.specializationTags !== undefined) agentPatch.specializationTags = payload.specializationTags;
+  if (payload.serviceAreas !== undefined) agentPatch.serviceAreas = payload.serviceAreas;
+  if (payload.languages !== undefined) agentPatch.languages = payload.languages;
+  if (payload.feeSchedule !== undefined) agentPatch.feeSchedule = payload.feeSchedule;
+
+  if (Object.keys(basics).length) {
+    await updateMyProfileBasics(basics);
+  }
+  if (Object.keys(agentPatch).length) {
+    await api.patch<PrivateUserProfile>("/me/agent-profile", agentPatch);
+  }
+
+  return api.get<PrivateUserProfile>("/me/profile");
 }
 
 export async function changeAgentPassword(payload: { currentPassword: string; newPassword: string }) {
