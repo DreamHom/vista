@@ -84,7 +84,7 @@ export function Services() {
             <h3 className="text-lg font-medium tracking-tight text-foreground">
               {t.services.servicesLabel}
             </h3>
-            <div className="flex flex-col gap-8">
+            <div className="flex flex-col gap-10">
               {items.map((service, i) => (
                 <NumberedStep
                   key={NUMBERS[i]}

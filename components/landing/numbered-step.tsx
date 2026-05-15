@@ -12,59 +12,48 @@ export interface NumberedStepProps {
   body: string;
   className?: string;
   /**
-   * When set (e.g. a Lucide icon), the step renders as a card: square illustration
-   * on top, step index + title + body below. Omit for the compact horizontal layout.
+   * Optional small icon, rendered inline next to the title (≈ 16px). Sits as
+   * a quiet trust mark beside the copy — the *numeral* is what carries the
+   * flow, the icon just hints at the step's topic. Pass `null` (or omit) to
+   * skip the icon entirely.
    */
   visual?: ReactNode;
 }
 
 /**
- * Numbered step: either a compact horizontal row (numeral + copy) or a card
- * with a square illustration frame and copy underneath.
+ * Editorial step block.
+ *
+ * Layout: a big decorative numeral takes the visual lead, with a hairline
+ * rule, then title (with optional inline icon) and body. Sized to read at
+ * a glance in a 2×2 grid (`ValueProposition`) or stacked in a column
+ * (`Services` services list).
  */
 export function NumberedStep({ number, title, body, className, visual }: NumberedStepProps) {
-  if (visual) {
-    return (
-      <article className={cn("flex flex-col gap-5", className)}>
-        <div
-          aria-hidden
-          className={cn(
-            "relative flex aspect-square w-full max-w-[min(100%,15.5rem)] shrink-0 items-center justify-center overflow-hidden",
-            "border border-border bg-muted",
-            "before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(ellipse_at_30%_18%,hsl(var(--background)/0.45),transparent_58%)]",
-          )}
-        >
-          <span
-            className={cn(
-              "relative z-[1] text-primary",
-              "[&>svg]:size-11 [&>svg]:shrink-0 [&>svg]:stroke-[1.45]",
-            )}
-          >
-            {visual}
-          </span>
-        </div>
-
-        <div className="flex min-w-0 flex-col gap-2">
-          <p className="text-xs font-medium uppercase tracking-eyebrow text-muted-foreground tabular-nums">{number}</p>
-          <h3 className="text-lg font-medium tracking-tight text-foreground md:text-xl">{title}</h3>
-          <p className="text-pretty text-sm leading-relaxed text-muted-foreground">{body}</p>
-        </div>
-      </article>
-    );
-  }
-
   return (
-    <div className={cn("flex items-start gap-6", className)}>
-      <span
+    <article className={cn("flex min-w-0 flex-col gap-4", className)}>
+      <p
         aria-hidden
-        className="text-5xl font-semibold leading-[0.9] tracking-tight text-muted-foreground/40 tabular-nums md:text-6xl"
+        className="text-6xl font-semibold leading-none tracking-tight text-foreground tabular-nums md:text-7xl lg:text-8xl"
       >
         {number}
-      </span>
-      <div className="flex min-w-0 flex-col gap-2 pt-1.5">
-        <h3 className="text-lg font-medium tracking-tight text-foreground md:text-xl">{title}</h3>
-        <p className="max-w-md text-sm leading-relaxed text-muted-foreground">{body}</p>
+      </p>
+
+      <span aria-hidden className="block h-px w-10 bg-foreground" />
+
+      <div className="flex min-w-0 flex-col gap-2">
+        <h3 className="flex items-center gap-2 text-lg font-medium tracking-tight text-foreground md:text-xl">
+          {visual ? (
+            <span
+              aria-hidden
+              className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-accent [&>svg]:h-4 [&>svg]:w-4 [&>svg]:shrink-0 [&>svg]:stroke-[1.75]"
+            >
+              {visual}
+            </span>
+          ) : null}
+          <span className="min-w-0">{title}</span>
+        </h3>
+        <p className="text-pretty text-sm leading-relaxed text-muted-foreground">{body}</p>
       </div>
-    </div>
+    </article>
   );
 }

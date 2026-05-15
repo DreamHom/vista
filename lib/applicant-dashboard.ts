@@ -553,6 +553,20 @@ export function requestInspection(payload: { slotId: number; notes?: string }) {
   return api.post<InspectionResponse>("/inspections", payload);
 }
 
+/**
+ * Post a public comment on a listing. Signed-in users only. Used as the
+ * "ping the owner" fallback when a listing has no open inspection slots —
+ * the applicant can request a custom time and the owner sees it surface in
+ * `/owner/comments` for follow-up. Returns the persisted comment so the UI
+ * can confirm with the timestamp.
+ */
+export function postListingComment(listingId: string | number, body: string) {
+  return api.post<{ id: number; body: string; createdAt: string }>(
+    `/listings/${listingId}/comments`,
+    { body },
+  );
+}
+
 export async function submitApplicantVerification(file: File) {
   const formData = new FormData();
   formData.set("file", file);

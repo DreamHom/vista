@@ -15,17 +15,19 @@ import { ListingGallery } from "@/components/public/listing-gallery";
 import { ListingDetailMap } from "@/components/public/listing-detail-map";
 import {
   CompactListingTile,
-  ListingScheduleInspectionLink,
   MetricCard,
   RatingRow,
   VerificationBadgeWithPopover,
 } from "@/components/public/public-components";
+import { AdjacentListingNav } from "@/components/public/widgets/adjacent-listing-nav";
+import { ListingSlotPicker } from "@/components/public/widgets/listing-slot-picker";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { formatNaira } from "@/lib/format";
 import { fallbackListingPhoto } from "@/lib/seed/photos";
 import {
   formatAvailability,
+  getAdjacentListings,
   getListingById,
   getSimilarListings,
   normalizeListingRouteId,
@@ -85,7 +87,12 @@ export default async function ListingDetailPage({
   const listing = await getListingById(id);
   if (!listing) notFound();
 
-  const similar = await getSimilarListings(id, 3);
+  // Adjacent + similar fetched in parallel — both walk the same listManyListings
+  // cache, so this is effectively a single network round trip.
+  const [similar, adjacent] = await Promise.all([
+    getSimilarListings(id, 3),
+    getAdjacentListings(id),
+  ]);
   const galleryPhotos = listing.photos.length
     ? listing.photos
     : Array.from({ length: 4 }, (_, index) =>
@@ -99,8 +106,12 @@ export default async function ListingDetailPage({
   ].filter(Boolean);
 
   return (
-    <div className="container py-10 md:py-14">
-      <section className="grid gap-8 xl:grid-cols-[minmax(0,1.45fr)_minmax(280px,0.52fr)] xl:items-start xl:gap-10">
+    <div className="container py-6 md:py-10">
+      {/* Adjacent listing nav — flips through the catalogue without losing
+          the visitor's place. Hidden when there's nothing to either side. */}
+      <AdjacentListingNav previous={adjacent.previous} next={adjacent.next} />
+
+      <section className="mt-6 grid gap-8 xl:grid-cols-[minmax(0,1.45fr)_minmax(280px,0.52fr)] xl:items-start xl:gap-10">
         <div className="min-w-0 space-y-8">
           <ListingGallery photos={galleryPhotos} title={listing.title} />
 
@@ -153,18 +164,21 @@ export default async function ListingDetailPage({
               <Stat icon={<ShieldCheck className="h-4 w-4" aria-hidden />} label="Status" value={listing.status} />
             </div>
 
-            <div className="mt-8 border-t border-border pt-8">
-              <ListingScheduleInspectionLink
-                listingId={listing.id}
-                variant="primary"
-                size="lg"
-                className="flex h-14 w-full items-center justify-center gap-2 text-base font-semibold tracking-tight"
+            <div className="mt-8 border-t border-border pt-6">
+              <Link
+                href="#schedule-inspection"
+                className={cn(
+                  buttonVariants({ variant: "primary", size: "lg" }),
+                  "flex h-14 w-full items-center justify-center gap-2 text-base font-semibold tracking-tight",
+                )}
               >
                 <CalendarClock className="h-5 w-5 shrink-0" aria-hidden />
-                Schedule inspection
-              </ListingScheduleInspectionLink>
+                {listing.slots.length > 0
+                  ? `Schedule a visit · ${listing.slots.length} open slot${listing.slots.length === 1 ? "" : "s"}`
+                  : "Schedule a visit"}
+              </Link>
               <p className="mt-3 text-center text-xs leading-relaxed text-muted-foreground md:text-sm">
-                Signed-in applicants pick an open slot on My Inspections (or here in the sidebar). Everyone else can create an account first.
+                Pick a published time below, or request a custom slot if none of the existing ones work.
               </p>
             </div>
           </article>
@@ -201,6 +215,40 @@ export default async function ListingDetailPage({
               </div>
             </section>
           </div>
+
+          {/* Inline schedule-a-visit picker — primary booking surface.
+              Replaces the old deep-link CTA that bounced applicants out to
+              the inspections workspace. Guests still see slots as a preview;
+              applicants book directly here. */}
+          <ListingSlotPicker
+            listingId={listing.id}
+            slots={listing.slots}
+            ownerId={listing.ownerId}
+            agentId={listing.agentId}
+          />
+
+          {/* Similar listings — moved up so pivoting between properties
+              happens before the long-tail Q&A and reviews sections. */}
+          <section className="border border-border bg-card p-6 md:p-7">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-x-6 sm:gap-y-0">
+              <h2 className="min-w-0 text-pretty text-xl font-semibold tracking-tight">
+                Similar listings
+              </h2>
+              <Link
+                href="/compare"
+                className="inline-flex shrink-0 self-start text-sm font-medium text-primary hover:text-primary/80 sm:self-auto sm:whitespace-nowrap"
+              >
+                Compare options →
+              </Link>
+            </div>
+            <ul className="mt-5 grid list-none gap-4 p-0 [grid-template-columns:repeat(auto-fit,minmax(min(100%,17.5rem),1fr))]">
+              {similar.map((item) => (
+                <li key={item.id} className="min-w-0">
+                  <CompactListingTile listing={item} ctaLabel="View full listing" />
+                </li>
+              ))}
+            </ul>
+          </section>
 
           <section className="border border-border bg-card p-6 md:p-7">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -250,24 +298,6 @@ export default async function ListingDetailPage({
             </div>
           </section>
 
-          <section className="border border-border bg-card p-6 md:p-7">
-            <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-x-6 sm:gap-y-0">
-              <h2 className="min-w-0 text-pretty text-xl font-semibold tracking-tight">Similar listings</h2>
-              <Link
-                href="/compare"
-                className="inline-flex shrink-0 self-start text-sm font-medium text-primary hover:text-primary/80 sm:self-auto sm:whitespace-nowrap"
-              >
-                Compare options
-              </Link>
-            </div>
-            <ul className="mt-5 grid list-none gap-4 p-0 [grid-template-columns:repeat(auto-fit,minmax(min(100%,17.5rem),1fr))]">
-              {similar.map((item) => (
-                <li key={item.id} className="min-w-0">
-                  <CompactListingTile listing={item} ctaLabel="View full listing" />
-                </li>
-              ))}
-            </ul>
-          </section>
         </div>
 
         <aside className="min-w-0 space-y-5 border border-border bg-card p-5 md:p-6 xl:sticky xl:top-24 xl:self-start">
@@ -330,31 +360,31 @@ export default async function ListingDetailPage({
           </div>
 
           <div>
-            <p className="text-xs font-semibold uppercase tracking-eyebrow text-muted-foreground">Open inspection slots</p>
-            <div className="mt-3 space-y-2">
-              {listing.slots.length ? (
-                listing.slots.slice(0, 5).map((slot) => (
-                  <div key={slot.id} className="border border-border bg-secondary/20 px-3 py-2.5 text-sm text-foreground">
-                    {new Intl.DateTimeFormat("en-NG", {
-                      dateStyle: "medium",
-                      timeStyle: "short",
-                    }).format(new Date(slot.startsAt))}
-                  </div>
-                ))
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  No public slots right now. Use schedule inspection after sign-in to request a time.
-                </p>
-              )}
+            <div className="flex items-baseline justify-between gap-2">
+              <p className="text-xs font-semibold uppercase tracking-eyebrow text-muted-foreground">
+                Quick book
+              </p>
+              <Link
+                href="#schedule-inspection"
+                className="text-xs font-medium text-primary hover:text-primary/80"
+              >
+                See all slots ↓
+              </Link>
             </div>
-            <ListingScheduleInspectionLink
-              listingId={listing.id}
-              variant="outline"
-              size="sm"
-              className="mt-4 w-full justify-center"
+            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+              {listing.slots.length === 0
+                ? "No public slots yet. Use the Schedule a visit panel to request a custom time."
+                : `${listing.slots.length} open ${listing.slots.length === 1 ? "slot" : "slots"} available. Tap to jump to the picker.`}
+            </p>
+            <Link
+              href="#schedule-inspection"
+              className={cn(
+                buttonVariants({ variant: listing.slots.length > 0 ? "primary" : "outline", size: "sm" }),
+                "mt-3 w-full justify-center",
+              )}
             >
-              Request a slot
-            </ListingScheduleInspectionLink>
+              {listing.slots.length > 0 ? "Pick a time" : "Request a time"}
+            </Link>
           </div>
 
           <div>

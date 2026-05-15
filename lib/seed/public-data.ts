@@ -731,6 +731,28 @@ export async function getListingById(id: string): Promise<PublicListingDetail | 
   return listing ?? undefined;
 }
 
+/**
+ * Sequential neighbours in the public catalogue for prev / next pivoting on
+ * the listing detail page. Sort order matches the default `/listings` index
+ * (newest-first), so walking with the arrows feels like flipping through the
+ * same shortlist the user landed from. Returns `null` for either end when
+ * the current listing is at a boundary or absent from the inventory.
+ */
+export async function getAdjacentListings(
+  listingId: string,
+): Promise<{ previous: PublicListing | null; next: PublicListing | null }> {
+  const listings = await listManyListings(60);
+  const ordered = [...listings].sort(
+    (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime(),
+  );
+  const index = ordered.findIndex((item) => item.id === listingId);
+  if (index === -1) return { previous: null, next: null };
+  return {
+    previous: index > 0 ? ordered[index - 1] : null,
+    next: index < ordered.length - 1 ? ordered[index + 1] : null,
+  };
+}
+
 export async function getSimilarListings(listingId: string, limit = 3) {
   const current = await getListingById(listingId);
   if (!current) return [];
