@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { Bell, CalendarClock, HandCoins, Sparkles } from "lucide-react";
+import { Bell, CalendarClock, HandCoins } from "lucide-react";
+import { DreamAiDashboardCard } from "@/components/dashboard/dream-ai-dashboard-card";
 import { CompactListingTile } from "@/components/public/public-components";
 import {
   DashboardPageIntro,
@@ -117,36 +118,7 @@ export function ApplicantDashboardHome() {
           )}
         </SectionCard>
 
-        <div className="rounded-3xl bg-[#0c1b2a] p-6 text-white">
-          <p className="text-xs uppercase tracking-eyebrow text-slate-400">Dream AI</p>
-          <h2 className="mt-3 text-2xl font-semibold tracking-tight">
-            Continue your property search with Dream AI
-          </h2>
-          <p className="mt-3 text-sm leading-7 text-slate-300">
-            Ask for better neighbourhood fits, inspection questions, or budget guidance without starting over.
-          </p>
-          <div className="mt-6 space-y-3">
-            {[
-              "Find me a 2 bedroom in Yaba under ₦2.5m",
-              "Show safer rent options around Lekki Phase 1",
-              "What should I verify before paying agency fees?",
-            ].map((prompt) => (
-              <div
-                key={prompt}
-                className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200"
-              >
-                {prompt}
-              </div>
-            ))}
-          </div>
-          <Link
-            href="/dream-ai"
-            className={cn(buttonVariants({ variant: "accent", size: "lg" }), "mt-6 w-full")}
-          >
-            Open Dream AI
-            <Sparkles className="h-4 w-4" aria-hidden />
-          </Link>
-        </div>
+        <DreamAiDashboardCard />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
