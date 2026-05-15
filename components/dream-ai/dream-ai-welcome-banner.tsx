@@ -15,22 +15,12 @@ export function DreamAiWelcomeBanner({
   return (
     <div
       className={cn(
-        "relative isolate w-full overflow-hidden border-b border-border/60 px-4 py-10 text-center sm:px-8 sm:py-12 md:py-14",
-        "bg-[radial-gradient(circle_at_50%_0%,hsl(var(--primary)/0.22)_0%,transparent_55%),radial-gradient(circle_at_100%_100%,hsl(var(--accent)/0.12)_0%,transparent_45%),linear-gradient(180deg,hsl(var(--muted)/0.35)_0%,hsl(var(--background))_100%)]",
+        "w-full border-b border-border bg-background px-4 py-10 text-center sm:px-8 sm:py-12 md:py-14",
         className,
       )}
     >
-      <span
-        className="pointer-events-none absolute -right-12 -top-16 h-48 w-48 rounded-full bg-primary/15 blur-3xl"
-        aria-hidden
-      />
-      <span
-        className="pointer-events-none absolute -bottom-20 -left-10 h-56 w-56 rounded-full bg-accent/10 blur-3xl"
-        aria-hidden
-      />
-
-      <div className="relative mx-auto flex max-w-xl flex-col items-center gap-4">
-        <span className="inline-flex items-center gap-1.5 border border-border/80 bg-background/70 px-3 py-1 text-[11px] uppercase tracking-eyebrow text-muted-foreground backdrop-blur-sm">
+      <div className="mx-auto flex max-w-xl flex-col items-center gap-4">
+        <span className="inline-flex items-center gap-1.5 border border-border px-3 py-1 text-[11px] uppercase tracking-eyebrow text-muted-foreground">
           <Sparkles className="h-3 w-3 text-accent" aria-hidden />
           Dream AI · Beta
         </span>
