@@ -39,6 +39,14 @@ function buildRequestHeaders(request: NextRequest) {
     headers.set(key, value);
   });
 
+  // Defensive: if the incoming request has no User-Agent (curl, server-side
+  // callers, some automated tests), Cloudflare's bot-fight on haven returns
+  // 403 (error 1010). Browser callers already supply their UA — this only
+  // fills the gap for headless callers.
+  if (!headers.has("User-Agent")) {
+    headers.set("User-Agent", "dreamhomes-vista/1.0 (+https://www.dreamhomes.today)");
+  }
+
   return headers;
 }
 

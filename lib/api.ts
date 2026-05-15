@@ -94,6 +94,14 @@ async function request<T>(method: Method, path: string, options: RequestOptions 
 
   const finalHeaders = new Headers(headers);
   finalHeaders.set("Accept", "application/json");
+  // Server-side fetches: undici sends no default User-Agent when only Accept
+  // is set, which Cloudflare's bot-fight in front of haven treats as a bot
+  // and returns 403 (error 1010). Force a stable, identifiable UA so haven
+  // logs can attribute the traffic and Cloudflare lets us through.
+  // Skipped in the browser — Chrome's UA is already enforced and immutable.
+  if (typeof window === "undefined" && !finalHeaders.has("User-Agent")) {
+    finalHeaders.set("User-Agent", "dreamhomes-vista/1.0 (+https://www.dreamhomes.today)");
+  }
   const bodyToSend = serializeBody(body, finalHeaders);
 
   if (!skipAuth) {

@@ -1,6 +1,5 @@
 export const PUBLIC_PRIMARY_NAV = [
   { href: "/listings", label: "Browse Listings" },
-  { href: "/agents", label: "Find an Agent" },
   { href: "/dream-ai", label: "Dream AI" },
   { href: "/list-your-property", label: "List Your Property" },
   { href: "/become-an-agent", label: "Become an Agent" },

@@ -280,12 +280,25 @@ function makeUrl(path: string, query?: Record<string, string | number | boolean 
   return url;
 }
 
+/**
+ * Cloudflare bot-fight in front of haven returns 403 (error 1010) when the
+ * request has no User-Agent — which is exactly what Node 18+/undici sends
+ * by default when you only set `Accept`. Forcing a UA gets us through.
+ *
+ * Format follows the RFC 7231 hint: `product/version (+url)` so haven logs
+ * can attribute traffic and ops can contact us if anything's wrong.
+ */
+const SERVER_UA = "dreamhomes-vista/1.0 (+https://www.dreamhomes.today)";
+
 async function publicFetch<T>(
   path: string,
   query?: Record<string, string | number | boolean | undefined | null>,
 ): Promise<T> {
   const response = await fetch(makeUrl(path, query), {
-    headers: { Accept: "application/json" },
+    headers: {
+      Accept: "application/json",
+      "User-Agent": SERVER_UA,
+    },
     cache: "no-store",
   });
 
@@ -610,7 +623,18 @@ async function listManyListings(limit = 100) {
 }
 
 export async function getDreamAiInventory(limit = 60) {
-  return listManyListings(limit);
+  // Resilient by design: a Dream AI page that 500s because of a transient
+  // backend hiccup is worse than one that loads with no inventory. The chat
+  // shell already handles empty `listings` (falls back to local heuristics
+  // for guests, and the authenticated path goes straight to Haven anyway).
+  try {
+    return await listManyListings(limit);
+  } catch (error) {
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("[dream-ai] inventory fetch failed, rendering empty state:", error);
+    }
+    return [];
+  }
 }
 
 /**
@@ -738,7 +762,10 @@ export async function searchAgents(input: AgentSearchInput) {
     url.searchParams.set("q", input.q?.trim() ?? "");
 
     const response = await fetch(url, {
-      headers: { Accept: "application/json" },
+      headers: {
+        Accept: "application/json",
+        "User-Agent": SERVER_UA,
+      },
       cache: "no-store",
     });
     if (!response.ok) {

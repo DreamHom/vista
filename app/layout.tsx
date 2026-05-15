@@ -173,7 +173,12 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
       </head>
-      <body className="font-sans antialiased">
+      {/* `suppressHydrationWarning` on body: browser extensions (Grammarly,
+          ColorZilla, LastPass, ...) inject attributes like `cz-shortcut-listen`
+          or `data-gr-ext-installed` onto <body> after first paint. Without
+          this flag React flags a hydration mismatch on every page load for
+          any user with those extensions — noise, not a real bug. */}
+      <body className="font-sans antialiased" suppressHydrationWarning>
         <AppProviders>{children}</AppProviders>
       </body>
     </html>
