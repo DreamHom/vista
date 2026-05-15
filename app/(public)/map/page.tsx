@@ -114,7 +114,7 @@ export default async function MapPage({
             <div className="relative z-10">
               <PublicApiNotice>
                 {backendUnavailable
-                  ? `Haven listing browse is unavailable at ${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080/api"}.`
+                  ? `Haven listing browse is unavailable at ${process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://haven.dreamhomes.today/api"}.`
                   : "Pins use approximate Lagos / Abuja coordinates for discovery until Haven publishes exact map geometry."}
               </PublicApiNotice>
             </div>

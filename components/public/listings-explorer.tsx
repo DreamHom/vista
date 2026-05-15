@@ -36,7 +36,7 @@ export async function ListingsExplorer({
       <section className="mt-8 space-y-6">
           {backendUnavailable ? (
             <PublicApiNotice>
-              Haven public endpoints are unavailable at `{process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080/api"}` right now, so this screen is rendering its empty backend state instead of local mock listings.
+              Haven public endpoints are unavailable at `{process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://haven.dreamhomes.today/api"}` right now, so this screen is rendering its empty backend state instead of local mock listings.
             </PublicApiNotice>
           ) : null}
           <div className="flex flex-col gap-4 border border-border bg-card p-4 sm:p-5 lg:flex-row lg:items-end lg:justify-between lg:gap-6">

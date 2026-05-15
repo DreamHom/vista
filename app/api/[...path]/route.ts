@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 
-const BACKEND_API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080/api";
+const BACKEND_API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://haven.dreamhomes.today/api";
 
 const HOP_BY_HOP_REQUEST_HEADERS = new Set([
   "connection",

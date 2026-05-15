@@ -56,7 +56,7 @@ export function DreamAiPageShell({ listings }: DreamAiPageShellProps) {
       {listings.length === 0 ? (
         <div className={cn("mb-6", immersive && "mb-3")}>
           <PublicApiNotice>
-            Haven listing browse is unavailable at `{process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080/api"}` right now, so Dream AI has no live inventory to rank against.
+            Haven listing browse is unavailable at `{process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://haven.dreamhomes.today/api"}` right now, so Dream AI has no live inventory to rank against.
           </PublicApiNotice>
         </div>
       ) : null}

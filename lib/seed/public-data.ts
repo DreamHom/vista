@@ -1,7 +1,7 @@
 import { getListingCoordinates } from "@/lib/seed/listing-map-points";
 
 const DEFAULT_PUBLIC_API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? process.env.DREAMHOMES_PUBLIC_API_BASE_URL ?? "http://localhost:8080/api";
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? process.env.DREAMHOMES_PUBLIC_API_BASE_URL ?? "https://haven.dreamhomes.today/api";
 
 export type AvailabilityKey = "NOW" | "THIRTY_DAYS" | "NEXT_QUARTER";
 export type AgentSort = "highest-rated" | "most-deals" | "newest" | "most-active";

@@ -91,7 +91,7 @@ export default async function ComparePage({
         <div className="space-y-6">
           {suggestions.length === 0 && listings.length === 0 ? (
             <PublicApiNotice>
-              Haven compare suggestions are empty at `{process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080/api"}` right now.
+              Haven compare suggestions are empty at `{process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://haven.dreamhomes.today/api"}` right now.
             </PublicApiNotice>
           ) : null}
           {listings.length === 0 ? (

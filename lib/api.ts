@@ -10,7 +10,7 @@ import type { ProblemDetail } from "./types";
  *  - Surfaces network failures as {@link NetworkError}.
  */
 
-const SERVER_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080/api";
+const SERVER_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://haven.dreamhomes.today/api";
 
 function getBaseUrl() {
   // Browser requests go through Next rewrites so the app and API share one origin.
