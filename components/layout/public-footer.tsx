@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { motion } from "motion/react";
 import { Bebas_Neue } from "next/font/google";
 import { AtSign, Camera, Mail, MessageCircle } from "lucide-react";
 import { LogoMark } from "@/components/logo";
 import { MoniepointMark } from "@/components/partners/moniepoint-mark";
 import { PUBLIC_FOOTER_LINKS, PUBLIC_PRIMARY_NAV } from "@/lib/public-site";
+import { useLandingScrollReveal } from "@/lib/landing-motion";
 import { cn } from "@/lib/utils";
 
 const partnerBannerDisplay = Bebas_Neue({
@@ -23,10 +25,13 @@ const SOCIAL = [
 
 /**
  * Section 08: Public footer.
+ *
+ * @param landingStoryStep — When set (e.g. home `6`), footer eases in as the last beat of the landing story.
  */
-export function PublicFooter() {
+export function PublicFooter({ landingStoryStep = -1 }: { landingStoryStep?: number }) {
+  const motionProps = useLandingScrollReveal(landingStoryStep);
   return (
-    <footer className="font-sans">
+    <motion.footer className="font-sans" {...motionProps}>
       <div className="container grid gap-10 py-12 md:grid-cols-[1.2fr_0.8fr] md:py-16">
         <div className="space-y-4">
           <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
@@ -141,6 +146,6 @@ export function PublicFooter() {
           </nav>
         </div>
       </div>
-    </footer>
+    </motion.footer>
   );
 }

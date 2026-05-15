@@ -16,7 +16,14 @@ const [loginItem, signupItem] = PUBLIC_AUTH_NAV;
  * Login / Sign up vs name + avatar for public surfaces (marketing header, hero).
  * Reads the same persisted auth store as the rest of the app.
  */
-export function PublicAuthDesktopCluster({ className }: { className?: string }) {
+export function PublicAuthDesktopCluster({
+  className,
+  /** Sticky marketing header: signed-in user sees only the profile image on the trigger. */
+  avatarOnlyTrigger,
+}: {
+  className?: string;
+  avatarOnlyTrigger?: boolean;
+}) {
   const router = useRouter();
   const { user, isAuthenticated, hydrated, clear } = useAuth();
 
@@ -41,6 +48,7 @@ export function PublicAuthDesktopCluster({ className }: { className?: string }) 
           triggerVariant="desktop"
           avatarVariant="person"
           personAvatarSize={36}
+          showTriggerName={!avatarOnlyTrigger}
         />
       ) : (
         <>
@@ -59,10 +67,13 @@ export function PublicAuthDesktopCluster({ className }: { className?: string }) 
 export function PublicAuthMobileCluster({
   onNavigate,
   variant,
+  avatarOnlyTrigger,
 }: {
   onNavigate?: () => void;
   /** `header`: compact row of sm buttons. `hero`: stacked md buttons in the landing drawer. */
   variant: "header" | "hero";
+  /** When set (e.g. sticky header drawer), signed-in trigger is avatar-only. */
+  avatarOnlyTrigger?: boolean;
 }) {
   const router = useRouter();
   const { user, isAuthenticated, hydrated, clear } = useAuth();
@@ -101,6 +112,7 @@ export function PublicAuthMobileCluster({
           triggerVariant="mobile"
           avatarVariant="person"
           personAvatarSize={isHero ? 44 : 40}
+          showTriggerName={!avatarOnlyTrigger}
         />
       </div>
     );

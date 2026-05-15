@@ -42,6 +42,11 @@ type WorkspaceAccountMenuProps = {
   avatarVariant: "person" | "initials";
   /** Used when `avatarVariant` is `person` (public header). */
   personAvatarSize?: number;
+  /**
+   * When false with `avatarVariant="person"`, the menu trigger is only the avatar
+   * (no visible name or chevron). Identity stays in the opened menu.
+   */
+  showTriggerName?: boolean;
 };
 
 /**
@@ -59,8 +64,10 @@ export function WorkspaceAccountMenu({
   triggerVariant,
   avatarVariant,
   personAvatarSize = 36,
+  showTriggerName = true,
 }: WorkspaceAccountMenuProps) {
   const isDesktop = triggerVariant === "desktop";
+  const personAvatarOnly = avatarVariant === "person" && !showTriggerName;
 
   return (
     <DropdownMenu>
@@ -68,43 +75,51 @@ export function WorkspaceAccountMenu({
         asChild
         className={cn(
           "outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-          isDesktop ? "pr-2" : "pr-0",
+          isDesktop && !personAvatarOnly ? "pr-2" : "pr-0",
         )}
       >
         <button
           type="button"
           className={cn(
             "group flex items-center gap-2 text-left transition-colors",
-            isDesktop
-              ? "max-w-[min(100%,18rem)] gap-3 border border-border bg-background px-3 py-2.5 hover:bg-secondary/40 sm:px-4 sm:py-3"
-              : "rounded-full border border-border bg-background p-0.5 pr-1 hover:bg-secondary/40",
-            avatarVariant === "person" &&
+            personAvatarOnly && "inline-flex shrink-0 rounded-full border border-border bg-background p-0.5 hover:bg-secondary/60",
+            !personAvatarOnly &&
+              isDesktop &&
+              "max-w-[min(100%,18rem)] gap-3 border border-border bg-background px-3 py-2.5 hover:bg-secondary/40 sm:px-4 sm:py-3",
+            !personAvatarOnly && !isDesktop && "rounded-full border border-border bg-background p-0.5 pr-1 hover:bg-secondary/40",
+            !personAvatarOnly &&
+              avatarVariant === "person" &&
               isDesktop &&
               "max-w-[min(100%,16rem)] rounded-none border-transparent py-1 pl-1 pr-2 hover:border-border hover:bg-secondary/60",
-            avatarVariant === "person" && !isDesktop && "w-full border border-border bg-secondary/15 px-3 py-3 hover:bg-secondary/25",
+            !personAvatarOnly &&
+              avatarVariant === "person" &&
+              !isDesktop &&
+              "w-full border border-border bg-secondary/15 px-3 py-3 hover:bg-secondary/25",
           )}
           aria-label={`Account menu for ${fullName}`}
         >
           {avatarVariant === "person" ? (
             <>
               <PersonAvatar name={fullName} size={personAvatarSize} className="shrink-0 text-xs" />
-              {isDesktop ? (
-                <>
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{fullName}</span>
-                  <ChevronDown
-                    className="h-4 w-4 shrink-0 text-muted-foreground opacity-70 transition-transform group-data-[state=open]:rotate-180"
-                    aria-hidden
-                  />
-                </>
-              ) : (
-                <>
-                  <span className="min-w-0 flex-1 truncate text-left text-sm font-medium text-foreground">{fullName}</span>
-                  <ChevronDown
-                    className="h-4 w-4 shrink-0 text-muted-foreground opacity-70 transition-transform group-data-[state=open]:rotate-180"
-                    aria-hidden
-                  />
-                </>
-              )}
+              {showTriggerName ? (
+                isDesktop ? (
+                  <>
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{fullName}</span>
+                    <ChevronDown
+                      className="h-4 w-4 shrink-0 text-muted-foreground opacity-70 transition-transform group-data-[state=open]:rotate-180"
+                      aria-hidden
+                    />
+                  </>
+                ) : (
+                  <>
+                    <span className="min-w-0 flex-1 truncate text-left text-sm font-medium text-foreground">{fullName}</span>
+                    <ChevronDown
+                      className="h-4 w-4 shrink-0 text-muted-foreground opacity-70 transition-transform group-data-[state=open]:rotate-180"
+                      aria-hidden
+                    />
+                  </>
+                )
+              ) : null}
             </>
           ) : (
             <>

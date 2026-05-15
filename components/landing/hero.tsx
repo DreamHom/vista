@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Menu, X } from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
   collection,
   FEATURED_COLLECTION_ID,
@@ -14,6 +14,7 @@ import { useTranslations } from "@/lib/i18n/provider";
 import { LogoMark } from "@/components/logo";
 import { PublicAuthDesktopCluster, PublicAuthMobileCluster } from "@/components/layout/public-auth-cluster";
 import { PUBLIC_PRIMARY_NAV } from "@/lib/public-site";
+import { LANDING_EASE, useLandingHeroRootMotion } from "@/lib/landing-motion";
 import { cn } from "@/lib/utils";
 import { LanguageToggle } from "./language-toggle";
 import { HeroCarousel } from "./hero-carousel";
@@ -21,6 +22,8 @@ import { LocationTime } from "./location-time";
 
 /**
  * Section 01: Hero. See `docs/collections.md` for the curation model.
+ *
+ * Motion is a short story: frame → wayfinding → promise → context → proof strip.
  */
 export function Hero() {
   const { t } = useTranslations();
@@ -29,21 +32,36 @@ export function Hero() {
   const thumbStreams = photoStreams(featured, 3);
 
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const reduceMotion = useReducedMotion();
+  const heroRoot = useLandingHeroRootMotion();
+
+  const beat = (delay: number) =>
+    reduceMotion
+      ? { initial: { opacity: 1, y: 0 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0 } }
+      : {
+          initial: { opacity: 0, y: 26 },
+          animate: { opacity: 1, y: 0 },
+          transition: { duration: 0.58, delay, ease: LANDING_EASE },
+        };
 
   return (
-    <section>
+    <motion.section {...heroRoot}>
       <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[9fr_11fr]">
-        {/* Left: cycling hero photo: desktop only */}
-        <div className="hidden lg:block lg:p-1.5">
+        {/* Beat 1 — editorial frame: hero stills (desktop). */}
+        <motion.div className="hidden lg:block lg:p-1.5" {...beat(reduceMotion ? 0 : 0.06)}>
           <div className="relative h-full overflow-hidden">
             <HeroCarousel photos={heroPhotos} />
           </div>
-        </div>
+        </motion.div>
 
         {/* Right column: `min-w-0` so flex children don't push the column
             wider than the grid track on narrow viewports. */}
         <div className="flex min-w-0 flex-col px-[9px] pb-1.5 pt-[9px] lg:pl-1.5">
-          <header className="flex items-center justify-between gap-6 px-2 py-3 md:px-3 md:py-5">
+          {/* Beat 2 — wayfinding: who we are + where to go. */}
+          <motion.header
+            className="flex items-center justify-between gap-6 px-2 py-3 md:px-3 md:py-5"
+            {...beat(reduceMotion ? 0 : 0.12)}
+          >
             <Link href="/" aria-label="DreamHomes home">
               <LogoMark size="xl" className="md:hidden" />
               <LogoMark size="md" className="hidden md:inline-flex" />
@@ -76,16 +94,21 @@ export function Hero() {
             >
               <Menu className="h-6 w-6" aria-hidden />
             </button>
-          </header>
+          </motion.header>
 
-          <div className="flex flex-1 flex-col justify-center px-2 md:px-3">
+          {/* Beat 3 — promise: headline holds the value prop. */}
+          <motion.div className="flex flex-1 flex-col justify-center px-2 md:px-3" {...beat(reduceMotion ? 0 : 0.22)}>
             <h1 className="text-balance text-3xl font-semibold leading-[1.05] tracking-tight sm:text-5xl md:text-6xl lg:text-6xl xl:text-7xl 2xl:text-8xl">
               {t.hero.headline}{" "}
               <span className="text-accent">{t.hero.headlineAccent}</span>
             </h1>
-          </div>
+          </motion.div>
 
-          <div className="mb-3 flex items-center justify-between gap-3 px-2 md:px-3">
+          {/* Beat 4 — context: place + language (trust / locality). */}
+          <motion.div
+            className="mb-3 flex items-center justify-between gap-3 px-2 md:px-3"
+            {...beat(reduceMotion ? 0 : 0.32)}
+          >
             <LocationTime
               country={t.hero.country}
               state={featured.state}
@@ -93,11 +116,16 @@ export function Hero() {
               className="shrink-0"
             />
             <LanguageToggle className="shrink-0 self-center" />
-          </div>
+          </motion.div>
 
+          {/* Beat 5 — proof texture: three frames pull you toward inventory. */}
           <div className="grid grid-cols-3 gap-3">
             {thumbStreams.map((photos, i) => (
-              <div key={i} className="relative aspect-[4/5] overflow-hidden">
+              <motion.div
+                key={i}
+                className="relative aspect-[4/5] overflow-hidden"
+                {...beat(reduceMotion ? 0 : 0.4 + i * 0.07)}
+              >
                 <HeroCarousel
                   photos={photos}
                   intervalMs={9000}
@@ -106,7 +134,7 @@ export function Hero() {
                   ratio="4:5"
                   priorityFirst={false}
                 />
-              </div>
+              </motion.div>
             ))}
           </div>
         </div>
@@ -172,6 +200,6 @@ export function Hero() {
           </>
         )}
       </AnimatePresence>
-    </section>
+    </motion.section>
   );
 }

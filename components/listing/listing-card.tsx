@@ -4,9 +4,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { type SeedListing } from "@/lib/seed/listings";
 import { photoUrl } from "@/lib/seed/photos";
-import { formatNaira } from "@/lib/format";
-import { useTranslations } from "@/lib/i18n/provider";
-import { iconForListingType, iconForPropertyType } from "@/components/public/listing-pill-defs";
 import { cn } from "@/lib/utils";
 
 const RATIO_CLASS = {
@@ -24,8 +21,8 @@ const RATIO_PARAM = {
 export interface ListingCardProps {
   listing: SeedListing;
   /**
-   * `overlay`: chromeless card with a top meta bar (icons + type/term + price)
-   * on the photo and a description paragraph below. Used in the landing grid.
+   * `overlay`: chromeless card with title on a bottom gradient over the photo
+   * and a description paragraph below. Used in the landing grid.
    *
    * `thumb`: bare aspect-cropped photo only. Used in mini-galleries and
    * hero strips.
@@ -40,9 +37,8 @@ export interface ListingCardProps {
 }
 
 /**
- * Chromeless card: the photo is the canvas. Overlay variant uses a compact
- * top bar (backdrop + border) for type + term icons/labels and price; title
- * sits bottom-left on a gradient. Thumb variant is photo-only.
+ * Chromeless card: the photo is the canvas. Overlay variant uses a bottom
+ * gradient with the title; thumb variant is photo-only.
  */
 export function ListingCard({
   listing,
@@ -52,7 +48,6 @@ export function ListingCard({
   width = 800,
   className,
 }: ListingCardProps) {
-  const { t } = useTranslations();
   const photo = listing.photos[0];
   const href = `/listings/${listing.id}`;
 
@@ -78,13 +73,6 @@ export function ListingCard({
       </Link>
     );
   }
-
-  const priceText = formatNaira(listing.priceNgn, { compact: true });
-  const periodText = listing.term === "RENT" ? t.perYear : "";
-  const PropertyIcon = iconForPropertyType(listing.type);
-  const TermIcon = iconForListingType(listing.term);
-  const termLabel =
-    listing.term === "RENT" ? t.listingsPreview.filters.rent : t.listingsPreview.filters.sale;
 
   return (
     <article className={cn("group flex flex-col gap-3", className)}>
@@ -112,27 +100,6 @@ export function ListingCard({
           className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-black/10"
           aria-hidden
         />
-
-        {/* Top meta bar: property + listing term as icons + labels, price right */}
-        <div className="absolute inset-x-3 top-3 z-10 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/20 bg-black/50 px-3 py-2 shadow-sm backdrop-blur-md">
-          <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 sm:gap-x-3">
-            <span className="inline-flex max-w-[55%] items-center gap-1.5 text-white sm:max-w-none">
-              <PropertyIcon className="h-4 w-4 shrink-0 text-white/90" aria-hidden />
-              <span className="truncate text-xs font-medium leading-none tracking-tight">
-                {t.listingTypes[listing.type]}
-              </span>
-            </span>
-            <span className="h-3.5 w-px shrink-0 bg-white/25" aria-hidden />
-            <span className="inline-flex items-center gap-1.5 text-white">
-              <TermIcon className="h-4 w-4 shrink-0 text-white/90" aria-hidden />
-              <span className="whitespace-nowrap text-xs font-medium leading-none">{termLabel}</span>
-            </span>
-          </div>
-          <span className="shrink-0 text-xs font-semibold tabular-nums tracking-tight text-white">
-            {priceText}
-            {periodText}
-          </span>
-        </div>
 
         {/* Bottom-left title: reference shows only the title here. Location
             lives in the descriptive text below the image. */}

@@ -53,7 +53,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       <div className="grid min-h-screen w-full lg:grid-cols-[256px_minmax(0,1fr)]">
         <aside className="hidden border-r border-border bg-white text-foreground lg:sticky lg:top-0 lg:flex lg:h-svh lg:max-h-svh lg:flex-col lg:overflow-hidden">
           <div className="shrink-0 border-b border-border px-6 py-5">
-            <Link href="/admin/dashboard" className="inline-flex">
+            <Link href="/" className="inline-flex" aria-label="DreamHomes home">
               <LogoMark size="md" />
             </Link>
           </div>
@@ -116,7 +116,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           <header className="sticky top-0 z-30 border-b border-border bg-background">
             <div className="flex flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
               <div className="flex items-center justify-between gap-4 lg:hidden">
-                <Link href="/admin/dashboard" className="inline-flex">
+                <Link href="/" className="inline-flex" aria-label="DreamHomes home">
                   <LogoMark size="sm" />
                 </Link>
                 <WorkspaceAccountMenu

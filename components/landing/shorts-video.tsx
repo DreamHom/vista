@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { Play } from "lucide-react";
 import { motion } from "motion/react";
+import { useLandingScrollReveal } from "@/lib/landing-motion";
 import { useEffect, useRef, useState } from "react";
 import { LISTINGS } from "@/lib/seed/listings";
 import { photoUrl } from "@/lib/seed/photos";
@@ -29,6 +30,7 @@ const TOPIC_PHOTOS = [
 
 export function ShortsVideo() {
   const { t } = useTranslations();
+  const story = useLandingScrollReveal(3);
   const [activeIndex, setActiveIndex] = useState(0);
   const videoRefs = useRef<(HTMLVideoElement | null)[]>([]);
 
@@ -49,7 +51,7 @@ export function ShortsVideo() {
   }, [activeIndex]);
 
   return (
-    <section className="bg-foreground text-background">
+    <motion.section className="bg-foreground text-background" {...story}>
       <div className="container py-20 md:py-28">
         <div className="grid grid-cols-1 gap-12 lg:grid-cols-[1fr_minmax(0,520px)] lg:gap-16">
           <div className="flex flex-col gap-8">
@@ -141,6 +143,6 @@ export function ShortsVideo() {
           </div>
         </div>
       </div>
-    </section>
+    </motion.section>
   );
 }

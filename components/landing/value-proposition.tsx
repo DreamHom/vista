@@ -1,6 +1,8 @@
 "use client";
 
+import { motion } from "motion/react";
 import { useTranslations } from "@/lib/i18n/provider";
+import { useLandingScrollReveal } from "@/lib/landing-motion";
 import { NumberedStep } from "./numbered-step";
 
 const NUMBERS = ["01", "02", "03", "04"] as const;
@@ -25,9 +27,10 @@ const NUMBERS = ["01", "02", "03", "04"] as const;
 export function ValueProposition() {
   const { t } = useTranslations();
   const [s1, s2, s3, s4] = t.valueProp.steps;
+  const story = useLandingScrollReveal(2);
 
   return (
-    <section className="container pt-10 pb-20 md:pt-14 md:pb-28">
+    <motion.section className="container pt-10 pb-20 md:pt-14 md:pb-28" {...story}>
       <div className="mx-2 grid grid-cols-1 border border-border sm:grid-cols-2 sm:grid-flow-col sm:grid-rows-2">
         {/* 01: top-left */}
         <div className="border-b border-border px-6 py-10 sm:border-r sm:px-10 sm:py-14 lg:px-14 lg:py-16">
@@ -46,6 +49,6 @@ export function ValueProposition() {
           <NumberedStep number={NUMBERS[3]} title={s4.title} body={s4.body} />
         </div>
       </div>
-    </section>
+    </motion.section>
   );
 }

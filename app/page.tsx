@@ -19,6 +19,10 @@ import { I18nProvider } from "@/lib/i18n/provider";
  * the hero's right column carries the brand mark + nav inline, matching the
  * editorial reference. Inner public routes (/listings, etc.) use the
  * standalone header.
+ *
+ * Motion: sequential story — hero mount beats, then scroll-revealed sections
+ * (listings → value prop → shorts → featured → services) and a closing footer
+ * beat on the home page only (`landingStoryStep` on `PublicFooter`).
  */
 export default function HomePage() {
   return (
@@ -31,7 +35,7 @@ export default function HomePage() {
         <FeaturedListing />
         <Services />
       </main>
-      <PublicFooter />
+      <PublicFooter landingStoryStep={6} />
     </I18nProvider>
   );
 }
