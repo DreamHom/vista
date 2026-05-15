@@ -14,9 +14,8 @@ type DreamAiPageShellProps = {
 };
 
 /**
- * Wraps Dream AI marketing hero + chat card. When the user sends their first
- * message, the hero collapses and the chat panel animates to fill the main
- * column below the site header (navbar stays visible).
+ * Marketing hero + chat card. First message collapses the hero and expands the
+ * card to fill the viewport below the site header; only the message thread scrolls.
  */
 export function DreamAiPageShell({ listings }: DreamAiPageShellProps) {
   const [immersive, setImmersive] = React.useState(false);
@@ -25,7 +24,7 @@ export function DreamAiPageShell({ listings }: DreamAiPageShellProps) {
     <div
       className={cn(
         "flex min-h-0 flex-1 flex-col motion-reduce:transition-none",
-        immersive ? "overflow-hidden px-3 py-2 md:px-4 md:py-3" : "overflow-y-auto py-6 md:py-8 container",
+        immersive ? "overflow-hidden px-3 py-2 md:px-4 md:py-3" : "container overflow-y-auto py-6 md:py-8",
         "transition-[padding] duration-500",
       )}
       style={{ transitionTimingFunction: shellEase }}
@@ -53,8 +52,8 @@ export function DreamAiPageShell({ listings }: DreamAiPageShellProps) {
         </div>
       </div>
 
-      {listings.length === 0 ? (
-        <div className={cn("mb-6", immersive && "mb-3")}>
+      {listings.length === 0 && !immersive ? (
+        <div className="mb-6 max-w-3xl">
           <PublicApiNotice>
             Haven listing browse is unavailable at `{process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://haven.dreamhomes.today/api"}` right now, so Dream AI has no live inventory to rank against.
           </PublicApiNotice>
@@ -63,15 +62,11 @@ export function DreamAiPageShell({ listings }: DreamAiPageShellProps) {
 
       <div
         className={cn(
-          "flex min-h-0 flex-col overflow-hidden border border-border bg-card motion-reduce:transition-none",
-          "transition-[transform,box-shadow,border-radius,margin] duration-500",
+          "flex flex-col overflow-hidden border border-border bg-card motion-reduce:transition-none",
+          "transition-[box-shadow,border-radius] duration-500",
           immersive
-            ? cn(
-                "h-full min-h-0 flex-1 origin-top scale-100 shadow-2xl ring-1 ring-border/40",
-                "max-md:rounded-none md:mx-auto md:max-w-5xl md:rounded-lg",
-                "motion-reduce:scale-100",
-              )
-            : "min-h-0 shrink-0 origin-top scale-[0.992] shadow-none motion-reduce:scale-100",
+            ? "min-h-0 flex-1 shadow-2xl ring-1 ring-border/40 md:mx-auto md:max-w-5xl md:rounded-lg"
+            : "w-full max-w-3xl shrink-0 shadow-none",
         )}
         style={{ transitionTimingFunction: shellEase }}
       >

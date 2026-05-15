@@ -51,7 +51,7 @@ export const MONIEPOINT_FINANCING = {
   },
   caseStudies: {
     heading: "Brief voices from the field",
-    disclaimer: "Composite vignettes — not testimonials, guarantees, or loan offers.",
+    disclaimer: "Composite vignettes; not testimonials, guarantees, or loan offers.",
     items: [
       {
         name: "Amaka",
@@ -72,7 +72,7 @@ export const MONIEPOINT_FINANCING = {
   },
   cta: {
     heading: "Get started today",
-    body: "Your dream home does not need a perfect spreadsheet first — it needs a clear next step. Browse listings on DreamHomes, or talk to us if you want a human sounding board before you move.",
+    body: "Your dream home does not need a perfect spreadsheet first; it needs a clear next step. Browse listings on DreamHomes, or talk to us if you want a human sounding board before you move.",
     primaryHref: "/listings",
     primaryLabel: "Get your dream home today",
     heroHint: "Free to browse · Save favourites · No obligation",

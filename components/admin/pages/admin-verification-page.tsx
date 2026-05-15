@@ -29,7 +29,7 @@ import { FilterPills } from "./admin-page-primitives";
 
 function defaultMoreInfoMessage(item: VerificationAdminView) {
   const typeLabel = item.type.replaceAll("_", " ").toLowerCase();
-  return `DreamHomes Trust — more information needed (verification #${item.id}, ${typeLabel})
+  return `DreamHomes Trust: more information needed (verification #${item.id}, ${typeLabel})
 
 We reviewed your submission dated ${formatDateTime(item.submittedAt)} and need a few more details before we can complete this check.
 
@@ -217,7 +217,7 @@ export function AdminVerificationPage() {
                   await navigator.clipboard.writeText(moreInfoMessage);
                   toast.success("Message copied to clipboard.");
                 } catch {
-                  toast.error("Could not copy — select the text manually.");
+                  toast.error("Could not copy; select the text manually.");
                 }
               }}
             >

@@ -136,7 +136,7 @@ export function AdminAdsPage() {
                       </Button>
                     ) : null}
                     {row.status === "DRAFT" ? (
-                      <p className="text-xs text-muted-foreground">Draft — waiting for sponsor to submit for review.</p>
+                      <p className="text-xs text-muted-foreground">Draft: waiting for sponsor to submit for review.</p>
                     ) : null}
                   </div>
                 </div>

@@ -55,7 +55,7 @@ export function AssistantTurnPanel({
         <p className="text-xs text-muted-foreground">
           {meta.inventoryEmpty
             ? "Nothing in the live catalogue matched that yet."
-            : "Your filters may be tight—try widening budget or area."}
+            : "Your filters may be tight; try widening budget or area."}
         </p>
       ) : null}
       {meta?.degraded && !streaming ? (

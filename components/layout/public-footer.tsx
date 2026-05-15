@@ -61,7 +61,7 @@ export function PublicFooter() {
       <div className="container border-t border-border py-8">
         <Link
           href="/moniepoint-financing"
-          aria-label="Strong Partners with Moniepoint — read about DreamHomes financing"
+          aria-label="Strong Partners with Moniepoint; read about DreamHomes financing"
           className="group relative isolate block w-full min-h-[11.5rem] overflow-hidden border-2 border-foreground/10 bg-muted/15 transition-colors hover:border-foreground/20 hover:bg-muted/25 md:min-h-[15rem]"
         >
           {/* Poster-style ground + shapes (banner graphic) */}

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Menu, X } from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
   collection,
   FEATURED_COLLECTION_ID,
@@ -14,6 +14,12 @@ import { useTranslations } from "@/lib/i18n/provider";
 import { LogoMark } from "@/components/logo";
 import { PublicAuthDesktopCluster, PublicAuthMobileCluster } from "@/components/layout/public-auth-cluster";
 import { PUBLIC_PRIMARY_NAV } from "@/lib/public-site";
+import {
+  heroLeftPanelMotion,
+  heroTextStackMotion,
+  heroThumbCardMotion,
+  useLandingHeroRootMotion,
+} from "@/lib/landing-motion";
 import { cn } from "@/lib/utils";
 import { LanguageToggle } from "./language-toggle";
 import { HeroCarousel } from "./hero-carousel";
@@ -21,6 +27,9 @@ import { LocationTime } from "./location-time";
 
 /**
  * Section 01: Hero. See `docs/collections.md` for the curation model.
+ *
+ * Mount choreography (hero only): left frame L→R, thumbs stagger R→L while it
+ * moves, then headline + locale rise bottom→up — cubic-bezier eases in `landing-motion`.
  */
 export function Hero() {
   const { t } = useTranslations();
@@ -29,20 +38,24 @@ export function Hero() {
   const thumbStreams = photoStreams(featured, 3);
 
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const reduceMotion = useReducedMotion();
+  const rm = Boolean(reduceMotion);
+  const heroRoot = useLandingHeroRootMotion();
+  const leftPanel = heroLeftPanelMotion(rm);
+  const textStack = heroTextStackMotion(rm);
 
   return (
-    <section>
+    <motion.section className="overflow-x-clip" {...heroRoot}>
       <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[9fr_11fr]">
-        {/* Left: cycling hero photo: desktop only */}
-        <div className="hidden lg:block lg:p-1.5">
+        {/* Left editorial frame — enters from the left (desktop). */}
+        <motion.div className="hidden lg:block lg:p-1.5" {...leftPanel}>
           <div className="relative h-full overflow-hidden">
             <HeroCarousel photos={heroPhotos} />
           </div>
-        </div>
+        </motion.div>
 
-        {/* Right column: `min-w-0` so flex children don't push the column
-            wider than the grid track on narrow viewports. */}
-        <div className="flex min-w-0 flex-col px-[9px] pb-1.5 pt-[9px] lg:pl-1.5">
+        {/* Right column: `min-w-0` so flex children don't push the column wider than the grid track. */}
+        <div className="flex min-h-0 min-w-0 flex-col px-[9px] pb-1.5 pt-[9px] lg:pl-1.5">
           <header className="flex items-center justify-between gap-6 px-2 py-3 md:px-3 md:py-5">
             <Link href="/" aria-label="DreamHomes home">
               <LogoMark size="xl" className="md:hidden" />
@@ -63,10 +76,6 @@ export function Hero() {
               ))}
             </nav>
             <PublicAuthDesktopCluster surface="landing" className="hidden shrink-0 2xl:flex [&_a]:whitespace-nowrap" />
-            {/* Mobile/tab hamburger: opens the drawer. 44×44 tap target
-                (Apple HIG minimum) with `touch-manipulation` to kill the
-                300ms tap delay some mobile browsers add. `cursor-pointer`
-                so even hover-capable phones get the affordance. */}
             <button
               type="button"
               onClick={() => setDrawerOpen(true)}
@@ -78,26 +87,30 @@ export function Hero() {
             </button>
           </header>
 
-          <div className="flex flex-1 flex-col justify-center px-2 md:px-3">
-            <h1 className="text-balance text-3xl font-semibold leading-[1.05] tracking-tight sm:text-5xl md:text-6xl lg:text-6xl xl:text-7xl 2xl:text-8xl">
-              {t.hero.headline}{" "}
-              <span className="text-accent">{t.hero.headlineAccent}</span>
-            </h1>
-          </div>
+          {/* Headline + locale — rise after thumbs start (nav stays visible). */}
+          <motion.div className="flex min-w-0 flex-1 flex-col" {...textStack}>
+            <div className="flex flex-1 flex-col justify-center px-2 md:px-3">
+              <h1 className="text-balance text-3xl font-semibold leading-[1.05] tracking-tight sm:text-5xl md:text-6xl lg:text-6xl xl:text-7xl 2xl:text-8xl">
+                {t.hero.headline}{" "}
+                <span className="text-accent">{t.hero.headlineAccent}</span>
+              </h1>
+            </div>
 
-          <div className="mb-3 flex items-center justify-between gap-3 px-2 md:px-3">
-            <LocationTime
-              country={t.hero.country}
-              state={featured.state}
-              timezone={featured.timezone}
-              className="shrink-0"
-            />
-            <LanguageToggle className="shrink-0 self-center" />
-          </div>
+            <div className="mb-3 flex items-center justify-between gap-3 px-2 md:px-3">
+              <LocationTime
+                country={t.hero.country}
+                state={featured.state}
+                timezone={featured.timezone}
+                className="shrink-0"
+              />
+              <LanguageToggle className="shrink-0 self-center" />
+            </div>
+          </motion.div>
 
+          {/* Three proof cards — stagger in from the right while the left panel moves. */}
           <div className="grid grid-cols-3 gap-3">
             {thumbStreams.map((photos, i) => (
-              <div key={i} className="relative aspect-[4/5] overflow-hidden">
+              <motion.div key={i} className="relative aspect-[4/5] overflow-hidden" {...heroThumbCardMotion(rm, i)}>
                 <HeroCarousel
                   photos={photos}
                   intervalMs={9000}
@@ -106,18 +119,15 @@ export function Hero() {
                   ratio="4:5"
                   priorityFirst={false}
                 />
-              </div>
+              </motion.div>
             ))}
           </div>
         </div>
       </div>
 
-      {/* Mobile/tab drawer: full-height sheet from the right with large
-          nav links. Hidden on lg+ where the inline nav is sufficient. */}
       <AnimatePresence>
         {drawerOpen && (
           <>
-            {/* Backdrop */}
             <motion.button
               type="button"
               aria-label="Close menu"
@@ -128,7 +138,6 @@ export function Hero() {
               transition={{ duration: 0.2 }}
               className="fixed inset-0 z-50 cursor-pointer touch-manipulation bg-foreground/30 backdrop-blur-sm 2xl:hidden"
             />
-            {/* Drawer panel: slides in from the right */}
             <motion.div
               role="dialog"
               aria-modal="true"
@@ -176,6 +185,6 @@ export function Hero() {
           </>
         )}
       </AnimatePresence>
-    </section>
+    </motion.section>
   );
 }

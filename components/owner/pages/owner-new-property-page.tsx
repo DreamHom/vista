@@ -488,7 +488,7 @@ export function OwnerNewPropertyPage() {
                 <div>
                   <p className="text-sm font-semibold text-foreground">Add listing photos</p>
                   <p className="text-sm text-muted-foreground">
-                    JPG, PNG, or WEBP. Choose one or many — you can come back and add more. Remove any thumbnail before submit if you change your mind.
+                    JPG, PNG, or WEBP. Choose one or many; you can come back and add more. Remove any thumbnail before submit if you change your mind.
                   </p>
                 </div>
                 <input

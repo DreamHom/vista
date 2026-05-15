@@ -68,7 +68,7 @@ export function MoniepointFinancingView() {
                 <p className="text-xs font-medium uppercase tracking-eyebrow">Their north star</p>
               </div>
               <blockquote className="mt-6 text-xl font-medium leading-snug tracking-tight text-foreground md:text-2xl">
-                &ldquo;Simplified credit for business growth&rdquo; — the promise is emotional before it is financial:
+                &ldquo;Simplified credit for business growth&rdquo;; the promise is emotional before it is financial:
                 momentum without humiliation.
               </blockquote>
               <p className="mt-5 text-sm leading-relaxed text-muted-foreground">

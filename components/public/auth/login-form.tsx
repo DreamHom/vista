@@ -5,7 +5,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Lock, Mail } from "lucide-react";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorMessage } from "@/lib/api-error-message";
 import { loadSessionUserWithAvatar } from "@/lib/auth-hydrate-user";
 import { useAuthStore } from "@/lib/auth-store";
 import type { LoginResponse } from "@/lib/types";
@@ -71,11 +72,9 @@ export function LoginForm({ next }: { next?: string }) {
       toast.success("Signed in successfully.");
       router.push(next ?? getDefaultDashboardPath(response.role));
     } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError("We could not log you in right now.");
-      }
+      const message = apiErrorMessage(err, "We could not log you in right now.");
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }

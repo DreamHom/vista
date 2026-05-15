@@ -171,7 +171,7 @@ export function ListingSlotPicker({
           </p>
           <h2 className="mt-1 text-xl font-semibold tracking-tight md:text-2xl">
             {upcomingCount === 0
-              ? "No slots yet — ask for a time"
+              ? "No slots yet; ask for a time"
               : upcomingCount === 1
                 ? "1 open inspection slot"
                 : `${upcomingCount} open inspection slots`}
@@ -254,7 +254,7 @@ export function ListingSlotPicker({
                 <Textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Anything they should know — pets, group size, accessibility needs."
+                  placeholder="Anything they should know: pets, group size, accessibility needs."
                   rows={3}
                   className="mt-2"
                 />
@@ -318,7 +318,7 @@ export function ListingSlotPicker({
         <div className="mt-6 space-y-4">
           <p className="text-sm leading-relaxed text-muted-foreground">
             The owner hasn't published inspection slots yet. You can drop a public
-            note with your preferred time — they'll create a matching slot and
+            note with your preferred time; they'll create a matching slot and
             confirm.
           </p>
 

@@ -391,11 +391,19 @@ export function DreamAiChat({
     </Button>
   ) : null;
 
+  const compactEmbeddedIdle = embedded && !occupyFullHeight && !hasConversation;
+
   return (
     <div
       className={cn(
         "flex flex-col bg-background text-foreground",
-        occupyFullHeight ? "h-full min-h-0 flex-1 overflow-hidden" : embedded ? "min-h-0 flex-1" : "min-h-full",
+        occupyFullHeight && hasConversation
+          ? "h-full min-h-0 flex-1 overflow-hidden"
+          : compactEmbeddedIdle
+            ? "shrink-0"
+            : embedded
+              ? "min-h-0"
+              : "min-h-full",
       )}
     >
       {!embedded ? (
@@ -520,7 +528,7 @@ export function DreamAiChat({
             <ThreadScrollToBottom />
           </Thread>
 
-          <div className="sticky bottom-0 border-t border-border bg-background/95 backdrop-blur">
+          <div className="shrink-0 border-t border-border bg-background/95 backdrop-blur">
             <div className="mx-auto w-full max-w-3xl px-4 py-4 md:px-6">
               {userMessageCount >= 3 && !signedIn ? (
                 <div className="mb-4 border border-accent/20 bg-accent/5 p-4">
@@ -541,11 +549,27 @@ export function DreamAiChat({
               ) : null}
               <ChatPromptInput input={input} setInput={setInput} onSubmit={submit} busy={busy} />
               <p className="mt-2 text-center text-[11px] text-muted-foreground">
-                Dream AI ranks over a curated Lagos &amp; Abuja slice—suggestions, not exhaustive search. Verify with the
+                Dream AI ranks over a curated Lagos &amp; Abuja slice, suggestions, not exhaustive search. Verify with the
                 lister before signing.
               </p>
             </div>
           </div>
+        </main>
+      ) : compactEmbeddedIdle ? (
+        <main className="flex shrink-0 flex-col gap-4 px-4 py-5 md:px-5 md:py-6">
+          <ChatPromptInput input={input} setInput={setInput} onSubmit={submit} busy={busy} />
+          <Suggestions onSelect={(value) => submit(value)}>
+            <SuggestionList className="flex flex-wrap gap-2">
+              {STARTER_PROMPTS.map((s) => (
+                <Suggestion key={s} variant="outline">
+                  {s}
+                </Suggestion>
+              ))}
+            </SuggestionList>
+          </Suggestions>
+          <p className="text-center text-[11px] leading-relaxed text-muted-foreground">
+            Dream AI ranks over a curated Lagos &amp; Abuja slice, suggestions, not exhaustive search.
+          </p>
         </main>
       ) : (
         <main className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto">
@@ -563,7 +587,7 @@ export function DreamAiChat({
                 .
               </h1>
               <p className="max-w-xl text-balance text-base text-muted-foreground md:text-lg">
-                Describe the home you want. {signedIn ? "We&apos;ll stream picks from Haven&apos;s live matcher." : "We&apos;ll match locally—sign in for saved threads and the live engine."}
+                Describe the home you want. {signedIn ? "We&apos;ll stream picks from Haven&apos;s live matcher." : "We&apos;ll match locally; sign in for saved threads and the live engine."}
               </p>
             </div>
 

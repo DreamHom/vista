@@ -13,19 +13,19 @@ import { fallbackListingPhoto } from "@/lib/seed/photos";
 /** Home uses an absolute title so the root `title.template` is not applied twice in SERPs. */
 export const metadata: Metadata = {
   title: {
-    absolute: "DreamHomes — verified homes for rent & sale in Lagos & Abuja",
+    absolute: "DreamHomes: verified homes for rent & sale in Lagos & Abuja",
   },
   description:
     "Browse verified rentals and sales, compare listings on a map, meet rated agents, and use Dream AI to narrow your search across Lagos, Abuja, and nearby corridors.",
   alternates: { canonical: "/" },
   openGraph: {
-    title: "DreamHomes — verified homes for rent & sale in Lagos & Abuja",
+    title: "DreamHomes: verified homes for rent & sale in Lagos & Abuja",
     description:
       "Browse verified rentals and sales, compare listings, and use Dream AI across Lagos and Abuja.",
     url: "/",
   },
   twitter: {
-    title: "DreamHomes — verified homes for rent & sale in Lagos & Abuja",
+    title: "DreamHomes: verified homes for rent & sale in Lagos & Abuja",
     description: "Browse verified rentals and sales across Lagos and Abuja.",
   },
 };

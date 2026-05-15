@@ -137,7 +137,7 @@ export function AgentProfileEngagementAside({ agentId, agentName }: { agentId: s
       <AsideShell
         eyebrow="Hire this agent"
         title={`Invite ${firstName} to your listing`}
-        body="From your owner workspace you can request agent coverage on a property you publish. They accept or decline in-app—no cold DMs required."
+        body="From your owner workspace you can request agent coverage on a property you publish. They accept or decline in-app; no cold DMs required."
       >
         <div className="flex flex-col gap-3">
           <Link

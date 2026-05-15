@@ -6,6 +6,12 @@
   "functions": {
     "app/api/[...path]/route.ts": {
       "maxDuration": 60
+    },
+    "app/api/auth/register/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/auth/login/route.ts": {
+      "maxDuration": 60
     }
   }
 }
