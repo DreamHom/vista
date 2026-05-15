@@ -1,0 +1,158 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * DreamHomes design tokens.
+ *
+ * The reference vibe is editorial real estate: black + white + a single
+ * brand blue. Tokens are HSL component triplets so utilities like
+ * `bg-primary/10` work, and so every color can be re-tuned in one place
+ * without touching components.
+ *
+ * Naming follows the shadcn convention deliberately: `--primary` is the
+ * "action" color (filled buttons, segmented controls), `--accent` is the
+ * brand highlight (links, "Schedule a tour" CTA, the logo glyph). Semantic
+ * names mean components don't care what the brand color *is*; they just
+ * call `text-accent` or `bg-primary`.
+ *
+ * Light mode is the front-door experience (landing + listings index).
+ * Dark mode powers the listing detail and the authenticated dashboards.
+ * Both palettes are designed to feel native, not "flipped".
+ */
+@layer base {
+  :root {
+    /* Surfaces */
+    --background: 0 0% 100%; /* pure white */
+    --foreground: 0 0% 7%; /* near-black, slightly warm */
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 7%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 7%;
+
+    /* Action: solid black-ish for filled buttons and selected pills */
+    --primary: 0 0% 7%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Quiet surfaces */
+    --secondary: 0 0% 97%;
+    --secondary-foreground: 0 0% 7%;
+
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 45%;
+
+    /* Brand blue: from the logo (#2B7CC9). Used for links, CTAs, the
+       brand glyph. Use SPARINGLY: it earns impact by being rare. */
+    --accent: 207 64% 48%;
+    --accent-foreground: 0 0% 100%;
+
+    /* Status */
+    --destructive: 0 75% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 145 55% 38%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 35 90% 50%;
+    --warning-foreground: 0 0% 7%;
+
+    /* Hairlines + form chrome */
+    --border: 0 0% 90%;
+    --input: 0 0% 90%;
+    --ring: 207 64% 48%;
+
+    /* Zero radius: sharp rectangular surfaces everywhere. The design
+       language is editorial, not bubbly: cards, buttons, inputs, pills
+       all square. Tailwind's rounded-lg/md/sm derive from this. */
+    --radius: 0;
+  }
+
+  .dark {
+    /* Surfaces: near-black to match the listing detail reference */
+    --background: 0 0% 7%;
+    --foreground: 0 0% 96%;
+
+    --card: 0 0% 10%;
+    --card-foreground: 0 0% 96%;
+
+    --popover: 0 0% 10%;
+    --popover-foreground: 0 0% 96%;
+
+    /* Action in dark mode → bright surface */
+    --primary: 0 0% 96%;
+    --primary-foreground: 0 0% 7%;
+
+    --secondary: 0 0% 14%;
+    --secondary-foreground: 0 0% 96%;
+
+    --muted: 0 0% 14%;
+    --muted-foreground: 0 0% 60%;
+
+    /* Brand blue stays brand blue, slightly brightened for dark backgrounds */
+    --accent: 207 70% 58%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 70% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 145 50% 48%;
+    --success-foreground: 0 0% 7%;
+
+    --warning: 35 88% 58%;
+    --warning-foreground: 0 0% 7%;
+
+    --border: 0 0% 18%;
+    --input: 0 0% 18%;
+    --ring: 207 70% 58%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply overflow-x-hidden bg-background text-foreground antialiased;
+    font-family:
+      var(--font-sans),
+      ui-sans-serif,
+      system-ui,
+      -apple-system,
+      BlinkMacSystemFont,
+      "Segoe UI",
+      Inter,
+      Roboto,
+      "Helvetica Neue",
+      Helvetica,
+      Arial,
+      "Noto Sans",
+      sans-serif;
+    font-feature-settings:
+      "rlig" 1,
+      "calt" 1;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+}
+
+@layer utilities {
+  /* Sweep sharp-corner consistency across older surfaces that still carry
+     explicit large radii from earlier iterations of the UI. */
+  .rounded-full,
+  .rounded-3xl,
+  .rounded-2xl,
+  .rounded-xl {
+    border-radius: 0;
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+}
