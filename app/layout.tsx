@@ -131,11 +131,9 @@ const jsonLd = {
       name: "DreamHomes",
       url: SITE_URL,
       logo: `${SITE_URL}/logo.png`,
-      sameAs: [
-        // social handles: placeholders until they exist
-        "https://twitter.com/dreamhomes",
-        "https://instagram.com/dreamhomes",
-      ],
+      // `sameAs` intentionally omitted: Google would happily index any URL
+      // listed here and surface it as our brand handle. Add it back the day
+      // real social accounts go live.
     },
     {
       "@type": "WebSite",

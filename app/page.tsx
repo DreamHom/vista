@@ -20,9 +20,7 @@ import { I18nProvider } from "@/lib/i18n/provider";
  * editorial reference. Inner public routes (/listings, etc.) use the
  * standalone header.
  *
- * Motion: sequential story — hero mount beats, then scroll-revealed sections
- * (listings → value prop → shorts → featured → services) and a closing footer
- * beat on the home page only (`landingStoryStep` on `PublicFooter`).
+ * Motion: slow mount sequence on `<Hero />` only; sections below are static.
  */
 export default function HomePage() {
   return (
@@ -35,7 +33,7 @@ export default function HomePage() {
         <FeaturedListing />
         <Services />
       </main>
-      <PublicFooter landingStoryStep={6} />
+      <PublicFooter />
     </I18nProvider>
   );
 }

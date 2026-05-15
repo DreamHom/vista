@@ -1,13 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { motion } from "motion/react";
 import { ArrowRight } from "lucide-react";
 import { LISTINGS } from "@/lib/seed/listings";
 import { useTranslations } from "@/lib/i18n/provider";
 import { ListingCard } from "@/components/listing/listing-card";
 import { iconForListingType, iconForPropertyType } from "@/components/public/listing-pill-defs";
-import { useLandingScrollReveal } from "@/lib/landing-motion";
 import { SectionHeading } from "./section-heading";
 import { FilterPills } from "./filter-pills";
 
@@ -17,7 +15,6 @@ import { FilterPills } from "./filter-pills";
 export function ListingsPreview() {
   const { t } = useTranslations();
   const featured = LISTINGS.slice(0, 6);
-  const story = useLandingScrollReveal(1);
 
   const termPills = [
     {
@@ -80,7 +77,7 @@ export function ListingsPreview() {
   ];
 
   return (
-    <motion.section className="container py-20 md:py-28" {...story}>
+    <section className="container py-20 md:py-28">
       <SectionHeading
         title={t.listingsPreview.title}
         supporting={t.listingsPreview.supporting}
@@ -105,6 +102,6 @@ export function ListingsPreview() {
           <ListingCard key={listing.id} listing={listing} variant="overlay" />
         ))}
       </div>
-    </motion.section>
+    </section>
   );
 }

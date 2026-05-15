@@ -2,21 +2,17 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { motion, useReducedMotion } from "motion/react";
 import { ArrowRight, MapPin, Star } from "lucide-react";
 import { LISTINGS } from "@/lib/seed/listings";
 import { photoUrl } from "@/lib/seed/photos";
 import { useTranslations } from "@/lib/i18n/provider";
 import { interpolate } from "@/lib/i18n/dictionary";
-import { LANDING_EASE, useLandingScrollReveal } from "@/lib/landing-motion";
 
 /**
  * Section 05: Featured listing (side-by-side asymmetric).
  */
 export function FeaturedListing() {
   const { t } = useTranslations();
-  const story = useLandingScrollReveal(4);
-  const reduceMotion = useReducedMotion();
   const listing = LISTINGS[0];
   const heroPhoto = listing.photos[0];
   const thumbs = Array.from(
@@ -25,7 +21,7 @@ export function FeaturedListing() {
   );
 
   return (
-    <motion.section className="container py-20 md:py-28" {...story}>
+    <section className="container py-20 md:py-28">
       <div className="relative overflow-hidden border border-border">
         <div className="relative overflow-hidden">
           <Image
@@ -38,12 +34,8 @@ export function FeaturedListing() {
           />
 
           <div className="relative z-10 flex min-h-[42rem] items-end p-4 md:min-h-[46rem] md:p-6 lg:items-center lg:p-8 xl:min-h-[50rem] xl:p-10">
-            <motion.div
+            <div
               className="w-full max-w-[34rem] border border-border bg-white p-6 text-foreground md:p-8 lg:p-10"
-              initial={reduceMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: 36 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, amount: 0.35 }}
-              transition={{ duration: reduceMotion ? 0 : 0.65, delay: reduceMotion ? 0 : 0.12, ease: LANDING_EASE }}
             >
               <div className="flex flex-col gap-7">
                 <span className="text-xs font-medium uppercase tracking-eyebrow text-muted-foreground">
@@ -95,10 +87,10 @@ export function FeaturedListing() {
                   <ArrowRight className="h-4 w-4" aria-hidden />
                 </Link>
               </div>
-            </motion.div>
+            </div>
           </div>
         </div>
       </div>
-    </motion.section>
+    </section>
   );
 }

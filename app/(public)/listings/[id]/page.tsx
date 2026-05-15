@@ -17,7 +17,6 @@ import {
   CompactListingTile,
   ListingScheduleInspectionLink,
   MetricCard,
-  PublicApiNotice,
   RatingRow,
   VerificationBadgeWithPopover,
 } from "@/components/public/public-components";
@@ -250,10 +249,6 @@ export default async function ListingDetailPage({
         </div>
 
         <aside className="min-w-0 space-y-5 border border-border bg-card p-5 md:p-6 xl:sticky xl:top-24 xl:self-start">
-          <PublicApiNotice>
-            This page is backend-driven. Pet rules and utilities are not in Haven v1.0.1 yet. The map shows an approximate Lagos / Abuja pin until the API exposes real coordinates.
-          </PublicApiNotice>
-
           <div>
             <p className="text-xs font-semibold uppercase tracking-eyebrow text-muted-foreground">At a glance</p>
             <div className="mt-1 divide-y divide-border">

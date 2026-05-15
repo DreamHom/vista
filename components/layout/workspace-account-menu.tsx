@@ -82,7 +82,8 @@ export function WorkspaceAccountMenu({
           type="button"
           className={cn(
             "group flex items-center gap-2 text-left transition-colors",
-            personAvatarOnly && "inline-flex shrink-0 rounded-full border border-border bg-background p-0.5 hover:bg-secondary/60",
+            personAvatarOnly &&
+              "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-background p-0.5 hover:bg-secondary/60",
             !personAvatarOnly &&
               isDesktop &&
               "max-w-[min(100%,18rem)] gap-3 border border-border bg-background px-3 py-2.5 hover:bg-secondary/40 sm:px-4 sm:py-3",

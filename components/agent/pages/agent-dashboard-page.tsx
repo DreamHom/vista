@@ -116,7 +116,7 @@ export function AgentDashboardPage() {
         <MetricCard label="Open Offers" value={String(overview.openOffers)} hint="Offer threads across your managed inventory." />
         <MetricCard label="Deals Closed" value={String(overview.dealsClosedThisMonth)} hint="Accepted activity captured this month." />
         <MetricCard label="Response Rate" value={`${overview.responseRate}%`} hint="Decision rate on owner assignment requests." />
-        <MetricCard label="Revenue Tracked" value={formatNaira(overview.totalRevenueTracked)} hint="Offer value surfaced in this workspace." tone="accent" />
+        <MetricCard label="Revenue Tracked" value={formatNaira(overview.totalRevenueTracked)} hint="Sum of offer values across your managed inventory." tone="accent" />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.2fr_1fr]">

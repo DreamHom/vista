@@ -1,11 +1,9 @@
 "use client";
 
 import Image from "next/image";
-import { motion } from "motion/react";
 import { LISTINGS } from "@/lib/seed/listings";
 import { photoUrl } from "@/lib/seed/photos";
 import { useTranslations } from "@/lib/i18n/provider";
-import { useLandingScrollReveal } from "@/lib/landing-motion";
 import { NumberedStep } from "./numbered-step";
 
 const NUMBERS = ["01", "02", "03"] as const;
@@ -19,12 +17,11 @@ const HERO_LISTING = LISTINGS[10];
  */
 export function Services() {
   const { t } = useTranslations();
-  const story = useLandingScrollReveal(5);
   const heroPhoto = HERO_LISTING.photos[0];
   const items = t.services.items;
 
   return (
-    <motion.section className="container py-20 md:py-28" {...story}>
+    <section className="container py-20 md:py-28">
       <div className="grid grid-cols-1 gap-12 lg:grid-cols-[1.05fr_1fr] lg:gap-16">
         <div className="flex flex-col gap-8">
           <h2 className="text-balance text-3xl font-semibold leading-[1.05] tracking-tight md:text-5xl">
@@ -93,6 +90,6 @@ export function Services() {
           </div>
         </div>
       </div>
-    </motion.section>
+    </section>
   );
 }

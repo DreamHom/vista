@@ -468,15 +468,16 @@ export async function getAgentDashboardOverview(userId: number): Promise<AgentDa
 
   const inspectionsToday = inspections.filter((item) => new Date(item.requestedAt).toDateString() === today).length;
 
-  const reviewBoost = reviewsPage.content.filter((item) => item.rating >= 4).length;
-
   return {
     activeListings: accepted.length,
     inspectionsToday,
     openOffers: offers.filter((item) => !["DECLINED", "WITHDRAWN"].includes(item.status)).length,
     dealsClosedThisMonth,
     responseRate,
-    totalRevenueTracked: revenueTracked + reviewBoost * 250000,
+    // Sum of actual offer values flowing through this agent's workspace.
+    // Previously inflated by a `reviewBoost * 250000` constant — dropped so
+    // the figure reflects real backend numbers only.
+    totalRevenueTracked: revenueTracked,
     todaysInspections: inspections.slice(0, 4),
     recentLeads: leads.slice(0, 4),
     pendingRequests,
