@@ -1,5 +1,6 @@
 /**
  * Dream AI wire shapes aligned with Haven OpenAPI v1.0.3 (`docs/haven-api-docs-1.0.3.yaml`).
+ * Compare reasoning fields match the Dream AI compare integration brief.
  */
 
 export type DreamAiTurnKind = "reply" | "clarify" | "no_results" | "compare" | "error";
@@ -22,6 +23,20 @@ export interface ChipOption {
   sendText: string;
 }
 
+export interface PerListingNote {
+  id: number;
+  headline: string;
+  pros: string[];
+  cons: string[];
+  bestFor: string;
+}
+
+export interface CompareReasoning {
+  recommendedListingId: number | null;
+  summary: string;
+  perListing: PerListingNote[];
+}
+
 export type TurnBlockType = "listings" | "compare" | "chips";
 
 export interface TurnBlock {
@@ -29,6 +44,7 @@ export interface TurnBlock {
   options?: ChipOption[] | null;
   listingIds?: (number | null)[] | null;
   compareListingIds?: (number | null)[] | null;
+  compareReasoning?: CompareReasoning | null;
 }
 
 export interface TurnMeta {
@@ -50,7 +66,7 @@ export interface AssistantTurnV1 {
 }
 
 export interface DreamAiRunTurnResponse {
-  chatId: number;
+  chatId: number | null;
   traceId: string;
   turn: AssistantTurnV1;
   listingIds?: number[];
