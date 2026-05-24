@@ -2,41 +2,13 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import Link from "next/link";
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, ExternalLink, Flag, Sparkles } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   appendAgentOwnerMessage,
-  acceptAgentAssignment,
-  changeAgentPassword,
-  declineAgentAssignment,
-  DEFAULT_AGENT_NOTIFICATION_PREFERENCES,
-  DEFAULT_AGENT_PROFILE_DRAFT,
-  getAgentDashboardOverview,
-  getAgentListingWorkspace,
-  getAgentProfileWorkspace,
-  listAgentInspections,
-  listAgentLeads,
-  listAgentManagedListings,
-  listAgentNotifications,
-  listAgentOffers,
   listAgentOwnerRelationships,
-  readAgentNotificationPreferences,
-  readAgentProfileDraft,
-  readAgentPromotions,
-  saveAgentInspectionDecision,
-  saveAgentLeadState,
-  saveAgentNotificationPreferences,
-  saveAgentOfferState,
-  saveAgentProfileDraft,
-  saveAgentPromotions,
-  updateAgentProfile,
-  type AgentInspectionDecision,
-  type AgentNotificationFilter,
-  type AgentPromotionRecord,
-  type PipelineStage,
 } from "@/lib/agent-dashboard";
+import { AgentAssignmentInviteCard } from "@/components/assignments/agent-assignment-invite-card";
 import { markAllNotificationsRead, markNotificationRead } from "@/lib/applicant-dashboard";
 import { useAuth } from "@/lib/use-auth";
 import { formatNaira } from "@/lib/format";
@@ -143,33 +115,14 @@ export function AgentOwnersPage() {
                   <div className="space-y-3 border border-border bg-secondary/40 p-4">
                     <p className="text-sm font-medium text-foreground">Pending assignment requests</p>
                     {owner.pendingInvites.map((invite) => (
-                      <div key={invite.assignment.id} className="border border-border bg-white p-4">
-                        <p className="text-sm font-medium text-foreground">{invite.listing?.title ?? `Listing #${invite.assignment.listingId}`}</p>
-                        <div className="mt-3 grid gap-3 md:grid-cols-[1fr_auto_auto]">
-                          <Input
-                            value={declineReasons[invite.assignment.id] ?? ""}
-                            onChange={(event) =>
-                              setDeclineReasons((current) => ({
-                                ...current,
-                                [invite.assignment.id]: event.target.value,
-                              }))
-                            }
-                            placeholder="Optional decline reason"
-                          />
-                          <Button onClick={() => acceptMutation.mutate(invite.assignment.id)}>Accept</Button>
-                          <Button
-                            variant="outline"
-                            onClick={() =>
-                              declineMutation.mutate({
-                                assignmentId: invite.assignment.id,
-                                reason: declineReasons[invite.assignment.id] ?? "Not the right fit at the moment.",
-                              })
-                            }
-                          >
-                            Decline
-                          </Button>
-                        </div>
-                      </div>
+                      <AgentAssignmentInviteCard
+                        key={invite.assignment.id}
+                        assignmentId={invite.assignment.id}
+                        listingTitle={invite.listing?.title ?? `Listing #${invite.assignment.listingId}`}
+                        ownerName={owner.ownerProfile?.fullName}
+                        compact
+                        onSettled={() => queryClient.invalidateQueries({ queryKey: ["agent-owners", userId] })}
+                      />
                     ))}
                   </div>
                 ) : null}

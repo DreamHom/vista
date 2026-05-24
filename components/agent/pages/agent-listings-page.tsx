@@ -68,6 +68,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 
+import { AgentAssignmentInviteCard } from "@/components/assignments/agent-assignment-invite-card";
+import { AssignmentStatusBadge } from "@/components/assignments/assignment-status-badge";
+import { agentCanRespondToInvite } from "@/lib/assignment-lifecycle";
+
 import { NativeSelect, FilterPills, ListingThumbnail, listingImage } from "./agent-page-primitives";
 
 export function AgentListingsPage() {
@@ -140,7 +144,7 @@ export function AgentListingsPage() {
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <div className="flex flex-wrap gap-2">
-                        <StatusBadge label={item.assignment.status} variant={item.assignment.status === "ACCEPTED" ? "success" : "secondary"} />
+                        <AssignmentStatusBadge status={item.assignment.status} />
                         {item.listing ? <StatusBadge label={item.listing.status} variant="outline" /> : null}
                       </div>
                       <h3 className="mt-3 text-xl font-semibold tracking-tight text-foreground">
@@ -167,20 +171,29 @@ export function AgentListingsPage() {
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap gap-3">
-                    <Link href={`/agent/listings/${item.assignment.listingId}`}>
-                      <Button>View</Button>
-                    </Link>
-                    <Link href={`/agent/listings/${item.assignment.listingId}`}>
-                      <Button variant="outline">Edit on behalf</Button>
-                    </Link>
-                    <Link href="/agent/inspections">
-                      <Button variant="outline">Manage inspections</Button>
-                    </Link>
-                    <Link href="/agent/leads">
-                      <Button variant="outline">View leads</Button>
-                    </Link>
-                  </div>
+                  {agentCanRespondToInvite(item.assignment.status) ? (
+                    <AgentAssignmentInviteCard
+                      assignmentId={item.assignment.id}
+                      listingTitle={item.listing?.title ?? `Listing #${item.assignment.listingId}`}
+                      ownerName={item.ownerProfile?.fullName ?? item.listing?.owner?.name}
+                    />
+                  ) : (
+                    <div className="flex flex-wrap gap-3">
+                      <Link href={`/agent/listings/${item.assignment.listingId}`}>
+                        <Button>View workspace</Button>
+                      </Link>
+                      {item.assignment.status === "ACCEPTED" ? (
+                        <>
+                          <Link href="/agent/inspections">
+                            <Button variant="outline">Inspections</Button>
+                          </Link>
+                          <Link href="/agent/leads">
+                            <Button variant="outline">Leads</Button>
+                          </Link>
+                        </>
+                      ) : null}
+                    </div>
+                  )}
                 </CardContent>
               </div>
             </Card>
