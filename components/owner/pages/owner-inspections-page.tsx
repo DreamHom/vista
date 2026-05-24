@@ -4,7 +4,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CalendarPlus,
@@ -26,7 +26,6 @@ import {
 } from "@/lib/applicant-dashboard";
 import {
   counterOwnerOffer,
-  createInspectionSlot,
   createOwnerListing,
   createOwnerProperty,
   DEFAULT_NOTIFICATION_PREFERENCES,
@@ -90,32 +89,78 @@ import {
   offerStatusLabel,
   offerStatusVariant,
 } from "@/components/dashboard/utils";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { InspectionSlotCreateDialog } from "@/components/inspection/inspection-slot-create-dialog";
+import { OwnerInspectionRequestCard } from "@/components/owner/owner-inspection-request-card";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
-import { cn } from "@/lib/utils";
-
-import { NativeSelect, PrototypeNotice, FilterPills, FieldLabel } from "./owner-page-primitives";
+import {
+  inspectionOwnerDeclineErrorMessage,
+  inspectionOwnerNoShowErrorMessage,
+} from "@/lib/inspection-lifecycle";
+import { InspectionTabFilters } from "@/components/inspection/inspection-tab-filters";
+import { PrototypeNotice } from "./owner-page-primitives";
 
 export function OwnerInspectionsPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [slotDialogOpen, setSlotDialogOpen] = useState(false);
   const [tab, setTab] = useState("pending");
-  const [listingId, setListingId] = useState("");
-  const [startsAt, setStartsAt] = useState("");
-  const [endsAt, setEndsAt] = useState("");
   const [notes, setNotes] = useState<Record<number, string>>({});
+  const [actionNotificationId, setActionNotificationId] = useState<number | null>(null);
+
+  const ownerActionMutation = useMutation({
+    mutationFn: async (input: {
+      notificationId: number;
+      inspectionId: number | null;
+      action: "approve" | "decline" | "complete" | "no_show";
+    }) => {
+      if (!user) throw new Error("Sign in required.");
+      const { notificationId, inspectionId, action } = input;
+      setActionNotificationId(notificationId);
+
+      if (action === "approve") {
+        if (inspectionId) await ownerApproveInspectionRequest(inspectionId);
+        saveInspectionStatus(user.id, notificationId, "Approved");
+        return;
+      }
+      if (action === "decline") {
+        if (inspectionId) await ownerDeclineInspectionRequest(inspectionId);
+        saveInspectionStatus(user.id, notificationId, "Cancelled");
+        return;
+      }
+      if (action === "complete") {
+        saveInspectionStatus(user.id, notificationId, "Completed");
+        return;
+      }
+      if (action === "no_show") {
+        if (inspectionId) await ownerMarkInspectionNoShow(inspectionId);
+        saveInspectionStatus(user.id, notificationId, "No-show");
+      }
+    },
+    onSuccess: async (_, variables) => {
+      const messages = {
+        approve: "Visit approved on Haven.",
+        decline: "Request declined. Slot freed for other applicants.",
+        complete: "Marked complete.",
+        no_show: "No-show recorded.",
+      } as const;
+      toast.success(messages[variables.action]);
+      await queryClient.invalidateQueries({ queryKey: ["owner-inspections", user?.id] });
+      await queryClient.invalidateQueries({ queryKey: ["owner-notifications"] });
+    },
+    onError: (error, variables) => {
+      if (variables.action === "decline") {
+        toast.error(inspectionOwnerDeclineErrorMessage(error));
+        return;
+      }
+      if (variables.action === "no_show") {
+        toast.error(inspectionOwnerNoShowErrorMessage(error));
+        return;
+      }
+      toast.error("Could not update this inspection on the server.");
+    },
+    onSettled: () => setActionNotificationId(null),
+  });
 
   const inspectionsQuery = useQuery({
     queryKey: ["owner-inspections", user?.id],
@@ -135,17 +180,14 @@ export function OwnerInspectionsPage() {
     }
   }, [user]);
 
-  const slotMutation = useMutation({
-    mutationFn: async () => createInspectionSlot(Number(listingId), { startsAt, endsAt }),
-    onSuccess: async () => {
-      toast.success("Inspection slot added.");
-      setSlotDialogOpen(false);
-      await queryClient.invalidateQueries({ queryKey: ["owner-inspections"] });
-      await queryClient.invalidateQueries({ queryKey: ["owner-listings"] });
-      await queryClient.invalidateQueries({ queryKey: ["owner-property"] });
-    },
-    onError: () => toast.error("We couldn't create that inspection slot."),
-  });
+  const listingOptions = useMemo(
+    () =>
+      (listingsQuery.data?.items ?? []).map((item) => ({
+        id: item.listing.id,
+        title: item.listing.title ?? `Listing #${item.listing.id}`,
+      })),
+    [listingsQuery.data],
+  );
 
   if (inspectionsQuery.isLoading || listingsQuery.isLoading) {
     return <LoadingPanel label="Loading inspection activity..." />;
@@ -154,71 +196,21 @@ export function OwnerInspectionsPage() {
     return <ErrorPanel body="We couldn't load owner inspection activity." onRetry={() => void inspectionsQuery.refetch()} />;
   }
 
-  const items = inspectionsQuery.data!.filter((item) => item.localStatus === tab);
-  const listings = listingsQuery.data!.items;
-  const slotWindowInvalid =
-    Boolean(startsAt && endsAt && new Date(endsAt).getTime() <= new Date(startsAt).getTime());
+  const items = inspectionsQuery.data!.filter((item) => {
+    if (tab === "cancelled") {
+      return item.localStatus === "cancelled" || item.localStatus === "no_show";
+    }
+    return item.localStatus === tab;
+  });
 
   return (
     <div className="space-y-6">
-      <Dialog
+      <InspectionSlotCreateDialog
         open={slotDialogOpen}
-        onOpenChange={(open) => {
-          setSlotDialogOpen(open);
-          if (!open) {
-            setListingId("");
-            setStartsAt("");
-            setEndsAt("");
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Create inspection slot</DialogTitle>
-            <DialogDescription>
-              Pick one of your listings and the time window you want open for applicants. The slot appears on the public listing in upload order with your other slots.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-2">
-            <div className="space-y-2">
-              <FieldLabel>Listing</FieldLabel>
-              <NativeSelect value={listingId} onChange={(event) => setListingId(event.target.value)}>
-                <option value="">Select a listing</option>
-                {listings.map((item) => (
-                  <option key={item.listing.id} value={String(item.listing.id)}>
-                    {item.listing.title ?? `Listing #${item.listing.id}`}
-                  </option>
-                ))}
-              </NativeSelect>
-            </div>
-            <div className="space-y-2">
-              <FieldLabel>Starts</FieldLabel>
-              <Input type="datetime-local" value={startsAt} onChange={(event) => setStartsAt(event.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <FieldLabel>Ends</FieldLabel>
-              <Input type="datetime-local" value={endsAt} onChange={(event) => setEndsAt(event.target.value)} />
-            </div>
-            {slotWindowInvalid ? (
-              <p className="text-sm text-destructive">End time must be after the start time.</p>
-            ) : null}
-          </div>
-          <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
-            <Button type="button" variant="outline" onClick={() => setSlotDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={() => slotMutation.mutate()}
-              disabled={
-                slotMutation.isPending || !listingId || !startsAt || !endsAt || slotWindowInvalid
-              }
-            >
-              {slotMutation.isPending ? "Creating…" : "Create slot"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        onOpenChange={setSlotDialogOpen}
+        listings={listingOptions}
+        queryKeysToInvalidate={[["owner-inspections", user?.id], ["owner-listings", user?.id], ["owner-property"]]}
+      />
 
       <DashboardPageIntro
         eyebrow="Inspection operations"
@@ -233,130 +225,73 @@ export function OwnerInspectionsPage() {
 
       <SectionCard
         title="Inspection slots"
-        description="Open bookable windows on your listings so applicants can request a visit without endless back-and-forth."
+        description="Publish non-overlapping time windows per listing. Haven enforces this in Postgres; applicants race for a slot is also resolved in the database (first claim wins)."
         action={
           <Button type="button" onClick={() => setSlotDialogOpen(true)} className="shrink-0 gap-2">
             <CalendarPlus className="h-4 w-4" aria-hidden />
-            Create slot
+            Publish times
           </Button>
         }
       >
         <p className="text-sm text-muted-foreground">
-          Slots are created on Haven against the listing you choose. Use <span className="font-medium text-foreground">Create slot</span>{" "}
-          to open the form in a dialog.
+          Default to batch mode: pick a date, tap 10:00, 11:00, 14:00, and publish every window in one step. Overlaps
+          are blocked in the UI and in Postgres.
         </p>
       </SectionCard>
 
-      <FilterPills
+      <InspectionTabFilters
         value={tab}
         onChange={setTab}
         options={[
           { label: "Pending", value: "pending" },
-          { label: "Confirmed", value: "confirmed" },
+          { label: "Approved", value: "approved" },
           { label: "Completed", value: "completed" },
-          { label: "Cancelled", value: "cancelled" },
+          { label: "Declined / no-show", value: "cancelled" },
         ]}
       />
 
       {items.length > 0 ? (
         <div className="space-y-4">
           {items.map((item) => (
-            <Card key={item.notification.id} className="border-border/70 shadow-none">
-              <CardContent className="space-y-4 p-5">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <p className="text-lg font-semibold text-foreground">{item.applicantName}</p>
-                      <StatusBadge label={item.statusLabel} variant={item.statusLabel === "Confirmed" ? "success" : item.statusLabel === "Completed" ? "success" : item.statusLabel === "Cancelled" ? "outline" : "warning"} />
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      {item.listing?.title ?? "Listing activity"} · {item.listing?.property.address ?? "Notification-backed inspection request"}
-                    </p>
-                  </div>
-                  <StatusBadge label={formatDateTime(item.requestedAt)} variant="outline" />
-                </div>
-                <p className="text-sm leading-6 text-muted-foreground">{item.notification.body}</p>
-                <Textarea
-                  rows={3}
-                  value={notes[item.notification.id] ?? ""}
-                  onChange={(event) => {
-                    const next = { ...notes, [item.notification.id]: event.target.value };
-                    setNotes(next);
-                    if (user) saveInspectionNote(user.id, item.notification.id, event.target.value);
-                  }}
-                  placeholder="Add inspection notes or seriousness context"
-                />
-                <div className="flex flex-wrap gap-3">
-                  <Button
-                    variant="outline"
-                    onClick={async () => {
-                      if (!user) return;
-                      if (item.inspectionId) {
-                        try {
-                          await ownerApproveInspectionRequest(item.inspectionId);
-                          toast.success("Inspection approved on Haven.");
-                        } catch {
-                          toast.error("Could not approve on the server.");
-                          return;
-                        }
-                      }
-                      saveInspectionStatus(user.id, item.notification.id, "Confirmed");
-                      void queryClient.invalidateQueries({ queryKey: ["owner-inspections", user.id] });
-                    }}
-                  >
-                    Approve
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={async () => {
-                      if (!user) return;
-                      if (item.inspectionId) {
-                        try {
-                          await ownerDeclineInspectionRequest(item.inspectionId);
-                          toast.success("Inspection declined on Haven.");
-                        } catch {
-                          toast.error("Could not decline on the server.");
-                          return;
-                        }
-                      }
-                      saveInspectionStatus(user.id, item.notification.id, "Cancelled");
-                      void queryClient.invalidateQueries({ queryKey: ["owner-inspections", user.id] });
-                    }}
-                  >
-                    Decline
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      if (!user) return;
-                      saveInspectionStatus(user.id, item.notification.id, "Completed");
-                      void queryClient.invalidateQueries({ queryKey: ["owner-inspections", user.id] });
-                    }}
-                  >
-                    Mark completed
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={async () => {
-                      if (!user) return;
-                      if (item.inspectionId) {
-                        try {
-                          await ownerMarkInspectionNoShow(item.inspectionId);
-                          toast.success("Marked as no-show on Haven.");
-                        } catch {
-                          toast.error("Could not record no-show on the server.");
-                          return;
-                        }
-                      }
-                      saveInspectionStatus(user.id, item.notification.id, "Cancelled");
-                      void queryClient.invalidateQueries({ queryKey: ["owner-inspections", user.id] });
-                    }}
-                  >
-                    Mark no-show
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+            <OwnerInspectionRequestCard
+              key={item.notification.id}
+              item={item}
+              note={notes[item.notification.id] ?? ""}
+              onNoteChange={(value) => {
+                const next = { ...notes, [item.notification.id]: value };
+                setNotes(next);
+                if (user) saveInspectionNote(user.id, item.notification.id, value);
+              }}
+              pendingAction={ownerActionMutation.isPending && actionNotificationId === item.notification.id}
+              onApprove={() =>
+                ownerActionMutation.mutate({
+                  notificationId: item.notification.id,
+                  inspectionId: item.inspectionId,
+                  action: "approve",
+                })
+              }
+              onDecline={() =>
+                ownerActionMutation.mutate({
+                  notificationId: item.notification.id,
+                  inspectionId: item.inspectionId,
+                  action: "decline",
+                })
+              }
+              onMarkCompleted={() =>
+                ownerActionMutation.mutate({
+                  notificationId: item.notification.id,
+                  inspectionId: item.inspectionId,
+                  action: "complete",
+                })
+              }
+              onMarkNoShow={() =>
+                ownerActionMutation.mutate({
+                  notificationId: item.notification.id,
+                  inspectionId: item.inspectionId,
+                  action: "no_show",
+                })
+              }
+            />
           ))}
         </div>
       ) : (

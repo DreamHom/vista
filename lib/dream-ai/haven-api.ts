@@ -7,8 +7,10 @@ import type {
 } from "./contracts";
 
 /** Synchronous JSON turn — same orchestration as SSE `final`. */
-export function postDreamAiTurn(body: DreamAiRunTurnRequest) {
-  return api.post<DreamAiRunTurnResponse>("/dream-ai/suggestions", body);
+export function postDreamAiTurn(body: DreamAiRunTurnRequest, options?: { skipAuth?: boolean }) {
+  return api.post<DreamAiRunTurnResponse>("/dream-ai/suggestions", body, {
+    skipAuth: options?.skipAuth,
+  });
 }
 
 export function listDreamAiChats(page = 0, size = 20) {

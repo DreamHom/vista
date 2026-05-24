@@ -68,7 +68,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 
-import { NativeSelect, FilterPills, listingImage } from "./agent-page-primitives";
+import { AgentAssignmentInviteCard } from "@/components/assignments/agent-assignment-invite-card";
+import { AssignmentStatusBadge } from "@/components/assignments/assignment-status-badge";
+import { agentCanRespondToInvite, agentHasOperationalAccess, isTerminalAssignmentStatus } from "@/lib/assignment-lifecycle";
+
+import { NativeSelect, FilterPills, ListingThumbnail, listingImage } from "./agent-page-primitives";
 
 export function AgentListingsPage() {
   const query = useQuery({
@@ -131,17 +135,16 @@ export function AgentListingsPage() {
             <Card key={item.assignment.id} className="overflow-hidden border-border shadow-none">
               <div className="grid gap-0 md:grid-cols-[220px_minmax(0,1fr)]">
                 <div className="relative h-52 bg-secondary md:h-full">
-                  <img
-                    src={listingImage(item.listing?.photos?.[0]?.url)}
+                  <ListingThumbnail
+                    url={listingImage(item.listing?.photos?.[0]?.url)}
                     alt={item.listing?.title ?? "Listing photo"}
-                    className="h-full w-full object-cover"
                   />
                 </div>
                 <CardContent className="space-y-5 p-5">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <div className="flex flex-wrap gap-2">
-                        <StatusBadge label={item.assignment.status} variant={item.assignment.status === "ACCEPTED" ? "success" : "secondary"} />
+                        <AssignmentStatusBadge status={item.assignment.status} />
                         {item.listing ? <StatusBadge label={item.listing.status} variant="outline" /> : null}
                       </div>
                       <h3 className="mt-3 text-xl font-semibold tracking-tight text-foreground">
@@ -168,20 +171,37 @@ export function AgentListingsPage() {
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap gap-3">
-                    <Link href={`/agent/listings/${item.assignment.listingId}`}>
-                      <Button>View</Button>
-                    </Link>
-                    <Link href={`/agent/listings/${item.assignment.listingId}`}>
-                      <Button variant="outline">Edit on behalf</Button>
-                    </Link>
-                    <Link href="/agent/inspections">
-                      <Button variant="outline">Manage inspections</Button>
-                    </Link>
-                    <Link href="/agent/leads">
-                      <Button variant="outline">View leads</Button>
-                    </Link>
-                  </div>
+                  {agentCanRespondToInvite(item.assignment.status) ? (
+                    <AgentAssignmentInviteCard
+                      assignmentId={item.assignment.id}
+                      listingTitle={item.listing?.title ?? `Listing #${item.assignment.listingId}`}
+                      ownerName={item.ownerProfile?.fullName ?? item.listing?.owner?.name}
+                    />
+                  ) : (
+                    <div className="flex flex-wrap gap-3">
+                      {agentHasOperationalAccess(item.assignment.status) ? (
+                        <>
+                          <Link href={`/agent/listings/${item.assignment.listingId}`}>
+                            <Button>Manage listing</Button>
+                          </Link>
+                          <Link href="/agent/inspections">
+                            <Button variant="outline">Inspections</Button>
+                          </Link>
+                          <Link href="/agent/leads">
+                            <Button variant="outline">Leads</Button>
+                          </Link>
+                        </>
+                      ) : isTerminalAssignmentStatus(item.assignment.status) ? (
+                        <Link href={`/listings/${item.assignment.listingId}`} target="_blank">
+                          <Button variant="outline">Public listing</Button>
+                        </Link>
+                      ) : (
+                        <Link href={`/agent/listings/${item.assignment.listingId}`}>
+                          <Button variant="outline">View invite</Button>
+                        </Link>
+                      )}
+                    </div>
+                  )}
                 </CardContent>
               </div>
             </Card>

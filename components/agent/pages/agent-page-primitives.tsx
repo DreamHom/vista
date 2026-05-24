@@ -1,6 +1,6 @@
 "use client";
 
-import { Sparkles } from "lucide-react";
+import { ImageOff, Sparkles } from "lucide-react";
 
 import { StatusBadge } from "@/components/dashboard/applicant-ui";
 import { formatDate } from "@/components/dashboard/utils";
@@ -76,7 +76,34 @@ export function FilterPills({
 }
 
 export function listingImage(url?: string | null) {
-  return url ?? "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85";
+  return url ?? null;
+}
+
+export function ListingThumbnail({
+  url,
+  alt,
+  className,
+}: {
+  url?: string | null;
+  alt: string;
+  className?: string;
+}) {
+  if (url) {
+    return <img src={url} alt={alt} className={cn("h-full w-full object-cover", className)} />;
+  }
+  return (
+    <div
+      role="img"
+      aria-label={`${alt} — no photo uploaded yet`}
+      className={cn(
+        "flex h-full w-full flex-col items-center justify-center gap-2 border border-border bg-secondary/40 text-muted-foreground",
+        className,
+      )}
+    >
+      <ImageOff className="h-5 w-5" aria-hidden />
+      <span className="text-[10px] uppercase tracking-eyebrow">No photo yet</span>
+    </div>
+  );
 }
 
 export function PromotionCard({ promotion }: { promotion: AgentPromotionRecord }) {

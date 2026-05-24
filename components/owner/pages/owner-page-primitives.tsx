@@ -3,10 +3,11 @@
 /* eslint-disable @next/next/no-img-element */
 
 import Link from "next/link";
-import { MapPin, Sparkles } from "lucide-react";
+import { ImageOff, MapPin, Sparkles } from "lucide-react";
 
 import type { OwnerManagedProperty } from "@/lib/owner-dashboard";
 import { listOwnerOffers } from "@/lib/owner-dashboard";
+import { listingStatusLabel, listingStatusVariant } from "@/lib/listing-lifecycle";
 import { StatusBadge } from "@/components/dashboard/applicant-ui";
 import { formatNaira } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -35,7 +36,34 @@ export function NativeSelect(props: React.SelectHTMLAttributes<HTMLSelectElement
 }
 
 export function propertyImageUrl(item: OwnerManagedProperty | { listingDetail: OwnerManagedProperty["listingDetail"] }) {
-  return item.listingDetail?.photos?.[0]?.url ?? "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85";
+  return item.listingDetail?.photos?.[0]?.url ?? null;
+}
+
+export function PropertyThumbnail({
+  url,
+  alt,
+  className,
+}: {
+  url?: string | null;
+  alt: string;
+  className?: string;
+}) {
+  if (url) {
+    return <img src={url} alt={alt} className={cn("h-full w-full object-cover", className)} />;
+  }
+  return (
+    <div
+      role="img"
+      aria-label={`${alt} — no photo uploaded yet`}
+      className={cn(
+        "flex h-full w-full flex-col items-center justify-center gap-2 border border-border bg-secondary/40 text-muted-foreground",
+        className,
+      )}
+    >
+      <ImageOff className="h-5 w-5" aria-hidden />
+      <span className="text-[10px] uppercase tracking-eyebrow">No photo yet</span>
+    </div>
+  );
 }
 
 export function listingTitle(item: OwnerManagedProperty) {
@@ -103,15 +131,15 @@ export function OwnerPropertyCard({
     <Card className="overflow-hidden border-border/70 shadow-none">
       <div className="grid gap-0 lg:grid-cols-[220px_minmax(0,1fr)]">
         <div className="relative h-52 bg-secondary lg:h-full">
-          <img src={propertyImageUrl(item)} alt={listingTitle(item)} className="h-full w-full object-cover" />
+          <PropertyThumbnail url={propertyImageUrl(item)} alt={listingTitle(item)} />
         </div>
         <div className="space-y-5 p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-2">
                 <StatusBadge
-                  label={item.listing?.status ?? "Property only"}
-                  variant={item.listing?.status === "LIVE" ? "success" : "outline"}
+                  label={item.listing ? listingStatusLabel(item.listing.status) : "No listing"}
+                  variant={item.listing ? listingStatusVariant(item.listing.status) : "outline"}
                 />
                 <StatusBadge
                   label={item.property.type.replaceAll("_", " ")}
@@ -123,11 +151,18 @@ export function OwnerPropertyCard({
                   <StatusBadge label="Verification pending" variant="warning" />
                 )}
               </div>
-              <h3 className="text-xl font-semibold tracking-tight text-foreground">{listingTitle(item)}</h3>
+              <h3 className="text-xl font-semibold tracking-tight text-foreground">
+                {item.listing?.title ?? item.property.address}
+              </h3>
               <p className="flex items-center gap-2 text-sm text-muted-foreground">
                 <MapPin className="h-4 w-4" aria-hidden />
-                {listingLocation(item)}
+                {item.property.address}
               </p>
+              {item.pastListings && item.pastListings.length > 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  {item.pastListings.length} previous listing{item.pastListings.length === 1 ? "" : "s"} on this property
+                </p>
+              ) : null}
             </div>
 
             {item.listing ? (
@@ -162,14 +197,15 @@ export function OwnerPropertyCard({
             <Link href={`/owner/properties/${item.property.id}`} className="inline-flex">
               <Button variant="outline">Edit</Button>
             </Link>
-            <Link href="/owner/properties/new" className="inline-flex">
-              <Button variant="outline">Create Listing</Button>
-            </Link>
             {item.listing ? (
-              <Button variant="outline" onClick={onPause}>
+              <Button variant="outline" onClick={onPause} disabled={item.listing.status === "CLOSED" || item.listing.status === "TAKEN_DOWN"}>
                 {item.listing.status === "PAUSED" ? "Resume listing" : "Pause listing"}
               </Button>
-            ) : null}
+            ) : (
+              <Link href={`/owner/properties/new?propertyId=${item.property.id}`} className="inline-flex">
+                <Button variant="outline">Create listing</Button>
+              </Link>
+            )}
           </div>
         </div>
       </div>

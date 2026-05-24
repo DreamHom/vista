@@ -24,7 +24,7 @@ function inferEventFromJson(json: unknown): "trace" | "delta" | "final" | "probl
   if (typeof o.type === "string" && (typeof o.title === "string" || typeof o.detail === "string")) {
     return "problem";
   }
-  if (o.turn != null && typeof o.chatId === "number" && typeof o.traceId === "string") {
+  if (o.turn != null && typeof o.traceId === "string") {
     return "final";
   }
   if (typeof o.markdown === "string" && o.turn == null && o.chatId == null) {
@@ -87,16 +87,16 @@ export async function streamDreamAiTurn(
   }
 
   const token = getCurrentToken();
-  if (!token) throw new DreamAiStreamAbortedError("Not authenticated");
+  const headers: Record<string, string> = {
+    Accept: "text/event-stream",
+    "Content-Type": "application/json",
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
 
   const url = new URL("/api/dream-ai/turns/stream", window.location.origin);
   const res = await fetch(url.toString(), {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "text/event-stream",
-      "Content-Type": "application/json",
-    },
+    headers,
     body: JSON.stringify(body),
   });
 
@@ -171,7 +171,7 @@ export async function streamDreamAiTurn(
       }
       case "final": {
         const payload = parsed as DreamAiRunTurnResponse;
-        if (payload && typeof payload.chatId === "number" && payload.turn) {
+        if (payload?.turn && typeof payload.traceId === "string") {
           sawFinal = true;
           handlers.onFinal(payload);
         }

@@ -2,71 +2,23 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import Link from "next/link";
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, ExternalLink, Flag, Sparkles } from "lucide-react";
-import {
-  appendAgentOwnerMessage,
-  acceptAgentAssignment,
-  changeAgentPassword,
-  declineAgentAssignment,
-  DEFAULT_AGENT_NOTIFICATION_PREFERENCES,
-  DEFAULT_AGENT_PROFILE_DRAFT,
-  getAgentDashboardOverview,
-  getAgentListingWorkspace,
-  getAgentProfileWorkspace,
-  listAgentInspections,
-  listAgentLeads,
-  listAgentManagedListings,
-  listAgentNotifications,
-  listAgentOffers,
-  listAgentOwnerRelationships,
-  readAgentNotificationPreferences,
-  readAgentProfileDraft,
-  readAgentPromotions,
-  saveAgentInspectionDecision,
-  saveAgentLeadState,
-  saveAgentNotificationPreferences,
-  saveAgentOfferState,
-  saveAgentProfileDraft,
-  saveAgentPromotions,
-  updateAgentProfile,
-  type AgentInspectionDecision,
-  type AgentNotificationFilter,
-  type AgentPromotionRecord,
-  type PipelineStage,
-} from "@/lib/agent-dashboard";
-import { markAllNotificationsRead, markNotificationRead } from "@/lib/applicant-dashboard";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { AgentAssignmentInviteCard } from "@/components/assignments/agent-assignment-invite-card";
+import { appendAgentOwnerMessage, listAgentOwnerRelationships } from "@/lib/agent-dashboard";
 import { useAuth } from "@/lib/use-auth";
-import { formatNaira } from "@/lib/format";
 import {
   DashboardPageIntro,
   EmptyPanel,
   ErrorPanel,
   LoadingPanel,
-  MetricCard,
-  SectionCard,
-  SettingsToggle,
   StatusBadge,
 } from "@/components/dashboard/applicant-ui";
-import { firstName, formatDate, formatDateTime, getGreeting } from "@/components/dashboard/utils";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { formatDateTime } from "@/components/dashboard/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
-import { cn } from "@/lib/utils";
 
 export function AgentOwnersPage() {
   const { user } = useAuth();
@@ -77,28 +29,7 @@ export function AgentOwnersPage() {
     queryFn: () => listAgentOwnerRelationships(userId),
     enabled: userId > 0,
   });
-  const [declineReasons, setDeclineReasons] = useState<Record<number, string>>({});
   const [messages, setMessages] = useState<Record<number, string>>({});
-
-  const acceptMutation = useMutation({
-    mutationFn: acceptAgentAssignment,
-    onSuccess: async () => {
-      toast.success("Assignment accepted.");
-      await queryClient.invalidateQueries({ queryKey: ["agent-owners", userId] });
-      await queryClient.invalidateQueries({ queryKey: ["agent-managed-listings"] });
-    },
-    onError: () => toast.error("We couldn't accept that invite."),
-  });
-
-  const declineMutation = useMutation({
-    mutationFn: ({ assignmentId, reason }: { assignmentId: number; reason: string }) => declineAgentAssignment(assignmentId, reason),
-    onSuccess: async () => {
-      toast.success("Assignment declined.");
-      await queryClient.invalidateQueries({ queryKey: ["agent-owners", userId] });
-      await queryClient.invalidateQueries({ queryKey: ["agent-managed-listings"] });
-    },
-    onError: () => toast.error("We couldn't decline that invite."),
-  });
 
   if (ownersQuery.isLoading) return <LoadingPanel label="Loading owner relationships..." />;
   if (ownersQuery.isError || !ownersQuery.data) {
@@ -143,33 +74,14 @@ export function AgentOwnersPage() {
                   <div className="space-y-3 border border-border bg-secondary/40 p-4">
                     <p className="text-sm font-medium text-foreground">Pending assignment requests</p>
                     {owner.pendingInvites.map((invite) => (
-                      <div key={invite.assignment.id} className="border border-border bg-white p-4">
-                        <p className="text-sm font-medium text-foreground">{invite.listing?.title ?? `Listing #${invite.assignment.listingId}`}</p>
-                        <div className="mt-3 grid gap-3 md:grid-cols-[1fr_auto_auto]">
-                          <Input
-                            value={declineReasons[invite.assignment.id] ?? ""}
-                            onChange={(event) =>
-                              setDeclineReasons((current) => ({
-                                ...current,
-                                [invite.assignment.id]: event.target.value,
-                              }))
-                            }
-                            placeholder="Optional decline reason"
-                          />
-                          <Button onClick={() => acceptMutation.mutate(invite.assignment.id)}>Accept</Button>
-                          <Button
-                            variant="outline"
-                            onClick={() =>
-                              declineMutation.mutate({
-                                assignmentId: invite.assignment.id,
-                                reason: declineReasons[invite.assignment.id] ?? "Not the right fit at the moment.",
-                              })
-                            }
-                          >
-                            Decline
-                          </Button>
-                        </div>
-                      </div>
+                      <AgentAssignmentInviteCard
+                        key={invite.assignment.id}
+                        assignmentId={invite.assignment.id}
+                        listingTitle={invite.listing?.title ?? `Listing #${invite.assignment.listingId}`}
+                        ownerName={owner.ownerProfile?.fullName}
+                        compact
+                        onSettled={() => queryClient.invalidateQueries({ queryKey: ["agent-owners", userId] })}
+                      />
                     ))}
                   </div>
                 ) : null}

@@ -1,3 +1,4 @@
+import { fetchHavenListing, type HavenListingResponse } from "@/lib/haven-listing";
 import { getListingCoordinates } from "@/lib/seed/listing-map-points";
 
 const DEFAULT_PUBLIC_API_BASE_URL =
@@ -185,6 +186,7 @@ export interface ListingCommentReply {
 
 export interface ListingComment {
   id: string;
+  authorUserId: number;
   authorName: string;
   authorRole: "Applicant" | "Owner" | "Agent";
   body: string;
@@ -194,6 +196,8 @@ export interface ListingComment {
 
 export interface PublicReview {
   id: string;
+  reviewerUserId: number;
+  revieweeUserId: number;
   reviewerName: string;
   reviewerRole: "Owner" | "Agent" | "Applicant";
   rating: number;
@@ -210,6 +214,7 @@ export interface ListingSlot {
 
 export interface PublicListing {
   id: string;
+  propertyId: string;
   ownerId: string;
   agentId: string | null;
   title: string;
@@ -268,6 +273,11 @@ export interface ListingsResult {
 
 const profileCache = new Map<string, Promise<PublicUserProfileApi | null>>();
 const listingCache = new Map<string, Promise<PublicListingDetail | null>>();
+
+/** Bust SSR listing detail after engagement mutations from client components. */
+export function invalidatePublicListingCache(listingId: string) {
+  listingCache.delete(listingId);
+}
 
 function makeUrl(path: string, query?: Record<string, string | number | boolean | undefined | null>) {
   const url = new URL(path.startsWith("http") ? path : `${DEFAULT_PUBLIC_API_BASE_URL}${path}`);
@@ -338,24 +348,24 @@ function sentenceCase(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
-function fallbackTitle(listing: ListingResponse) {
+function fallbackTitle(listing: HavenListingResponse | ListingResponse) {
   const beds = listing.property.bedrooms ? `${listing.property.bedrooms}-bedroom ` : "";
-  const type = humanizePropertyType(listing.property.type);
+  const type = humanizePropertyType(listing.property.type as PropertySummary["type"]);
   return sentenceCase(`${beds}${type} in ${shortLocation(listing.property.address)}`);
 }
 
-function fallbackHeadline(listing: ListingResponse) {
+function fallbackHeadline(listing: HavenListingResponse | ListingResponse) {
   return `${listing.listingType === "RENT" ? "Rent" : "Sale"} opportunity in ${shortLocation(
     listing.property.address,
   )}`;
 }
 
-function fallbackDescription(listing: ListingResponse) {
+function fallbackDescription(listing: HavenListingResponse | ListingResponse) {
   const facts = [
     listing.property.bedrooms ? `${listing.property.bedrooms} bedroom` : undefined,
     listing.property.bathrooms ? `${listing.property.bathrooms} bathroom` : undefined,
     listing.property.sizeSqm ? `${listing.property.sizeSqm} sqm` : undefined,
-    humanizePropertyType(listing.property.type),
+    humanizePropertyType(listing.property.type as PropertySummary["type"]),
   ].filter(Boolean);
 
   return `${sentenceCase(facts.join(", "))} at ${listing.property.address}. Haven has not published a fuller marketing description for this listing yet.`;
@@ -441,7 +451,7 @@ async function getSlots(listingId: string | number): Promise<ListingSlot[]> {
 }
 
 async function enrichListing(
-  listing: ListingResponse,
+  listing: HavenListingResponse | ListingResponse,
   profiles?: Map<string, PublicUserProfileApi | null>,
   photos?: PublicPhoto[],
 ): Promise<PublicListing | null> {
@@ -472,11 +482,12 @@ async function enrichListing(
 
   return {
     id: String(listing.id),
+    propertyId: String(listing.propertyId),
     ownerId: String(listing.ownerId),
     agentId: listing.assignedAgentId ? String(listing.assignedAgentId) : null,
     title: listing.title?.trim() || fallbackTitle(listing),
     headline: listing.headline?.trim() || fallbackHeadline(listing),
-    type: listing.property.type,
+    type: listing.property.type as PropertySummary["type"],
     term: listing.listingType,
     location: shortLocation(listing.property.address),
     address: listing.property.address,
@@ -662,7 +673,7 @@ export async function getListingById(id: string): Promise<PublicListingDetail | 
     listingCache.set(
       id,
       (async () => {
-        const listing = await publicFetch<ListingResponse>(`/listings/${id}`).catch(() => null);
+        const listing = await fetchHavenListing(id, { skipAuth: typeof window === "undefined" }).catch(() => null);
         if (!listing) return null;
 
         const profiles = await getProfiles([
@@ -693,6 +704,7 @@ export async function getListingById(id: string): Promise<PublicListingDetail | 
           const profile = authorProfiles.get(String(comment.authorUserId));
           return {
             id: String(comment.id),
+            authorUserId: comment.authorUserId,
             authorName: profile ? toPublicPerson(profile).name : `User ${comment.authorUserId}`,
             authorRole:
               profile?.role === "AGENT" ? "Agent" : profile?.role === "OWNER" ? "Owner" : "Applicant",
@@ -706,6 +718,8 @@ export async function getListingById(id: string): Promise<PublicListingDetail | 
           const profile = authorProfiles.get(String(review.reviewerUserId));
           return {
             id: String(review.id),
+            reviewerUserId: review.reviewerUserId,
+            revieweeUserId: review.revieweeUserId,
             reviewerName: profile ? toPublicPerson(profile).name : `User ${review.reviewerUserId}`,
             reviewerRole:
               profile?.role === "AGENT" ? "Agent" : profile?.role === "OWNER" ? "Owner" : "Applicant",
@@ -851,6 +865,8 @@ export async function getAgentReviews(agentId: string) {
       const profile = profiles.get(String(review.reviewerUserId));
       return {
         id: String(review.id),
+        reviewerUserId: review.reviewerUserId,
+        revieweeUserId: review.revieweeUserId,
         reviewerName: profile ? toPublicPerson(profile).name : `User ${review.reviewerUserId}`,
         reviewerRole:
           profile?.role === "AGENT" ? "Agent" : profile?.role === "OWNER" ? "Owner" : "Applicant",

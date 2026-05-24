@@ -13,6 +13,7 @@ import {
   SectionCard,
 } from "@/components/dashboard/applicant-ui";
 import { listSavedListings, unsaveListing } from "@/lib/applicant-dashboard";
+import { SquareSelectField } from "@/components/public/square-select-field";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/use-auth";
 import { toast } from "@/components/ui/toast";
@@ -80,18 +81,11 @@ export function ApplicantSavedListingsPage() {
         title="Your shortlist"
         description="Review the homes you’ve favourited, compare them again, and remove anything that no longer fits."
         actions={
-          <label className="flex items-center gap-3 rounded-full border border-border bg-white px-4 py-3 text-sm text-muted-foreground">
-            Sort by
-            <select
-              value={sort}
-              onChange={(event) => setSort(event.target.value as SavedSort)}
-              className="bg-transparent pr-8 text-sm font-medium text-foreground focus:outline-none"
-            >
-              <option value="recent">Recently saved</option>
-              <option value="price">Price</option>
-              <option value="location">Location</option>
-            </select>
-          </label>
+          <SquareSelectField label="Sort by" value={sort} onChange={(value) => setSort(value as SavedSort)}>
+            <option value="recent">Recently saved</option>
+            <option value="price">Price</option>
+            <option value="location">Location</option>
+          </SquareSelectField>
         }
       />
 
@@ -108,7 +102,7 @@ export function ApplicantSavedListingsPage() {
             item.listing ? (
               <div key={item.save.listingId} className="space-y-3">
                 <ListingDiscoveryCard listing={item.listing} />
-                <SectionCard title="Saved action" className="rounded-3xl">
+                <SectionCard title="Saved action">
                   <div className="flex items-center justify-between gap-4">
                     <p className="text-sm text-muted-foreground">
                       Saved for easy comparison and inspection planning.
@@ -129,7 +123,7 @@ export function ApplicantSavedListingsPage() {
         </div>
       )}
 
-      <div className="rounded-3xl border border-border bg-white px-6 py-5 text-sm text-muted-foreground">
+      <div className="border border-border bg-white px-6 py-5 text-sm text-muted-foreground">
         Need a wider search again? <Link href="/compare" className="font-medium text-primary hover:text-primary/80">Compare saved homes</Link> or jump back into{" "}
         <Link href="/dream-ai" className="font-medium text-primary hover:text-primary/80">Dream AI</Link> for a refined shortlist.
       </div>

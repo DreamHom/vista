@@ -38,7 +38,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useAuthStore } from "@/lib/auth-store";
+import { getCurrentToken, useAuthStore } from "@/lib/auth-store";
 import type { AssistantTurnV1, ChipOption, DreamAiRunTurnRequest } from "@/lib/dream-ai/contracts";
 import { getDreamAiChat, listDreamAiChats, postDreamAiTurn } from "@/lib/dream-ai/haven-api";
 import { composeReply, parseQuery, rankMatches, type ScoredMatch } from "@/lib/dream-ai/match";
@@ -193,7 +193,7 @@ export function DreamAiChat({
   );
 
   const applyFinal = React.useCallback((slotId: string, res: import("@/lib/dream-ai/contracts").DreamAiRunTurnResponse) => {
-    setChatId(res.chatId);
+    if (typeof res.chatId === "number") setChatId(res.chatId);
     setMessages((prev) =>
       prev.map((m) =>
         m.id === slotId && m.role === "assistant" && m.source === "haven"
@@ -290,7 +290,7 @@ export function DreamAiChat({
           return;
         }
         try {
-          const res = await postDreamAiTurn(fullBody);
+          const res = await postDreamAiTurn(fullBody, { skipAuth: !getCurrentToken() });
           applyFinal(slotId, res);
         } catch (e2) {
           if (e2 instanceof ApiError) {
@@ -306,11 +306,11 @@ export function DreamAiChat({
 
   const runAssistant = React.useCallback(
     async (userText: string) => {
-      if (signedIn) {
+      setProviderIssue(false);
+      try {
         await runHavenTurn({ prompt: userText });
-      } else {
-        setProviderIssue(false);
-        await runGuestAssistant(userText);
+      } catch {
+        if (!signedIn) await runGuestAssistant(userText);
       }
     },
     [signedIn, runHavenTurn, runGuestAssistant],

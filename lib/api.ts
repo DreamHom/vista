@@ -49,6 +49,11 @@ export class ApiError extends Error {
   get isValidation(): boolean {
     return this.status === 400 || this.status === 422;
   }
+
+  /** True for 409: stale version, illegal state transition, or other conflict. */
+  get isConflict(): boolean {
+    return this.status === 409;
+  }
 }
 
 /** Thrown when the network request itself fails (offline, DNS, CORS, etc.). */

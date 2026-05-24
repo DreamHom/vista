@@ -1,4 +1,5 @@
 import type { EnrichedInspection, NotificationKind, OfferStatus } from "@/lib/applicant-dashboard";
+import { inspectionHavenStatusVariant } from "@/lib/inspection-lifecycle";
 
 export function firstName(fullName?: string | null) {
   if (!fullName) return "there";
@@ -48,10 +49,7 @@ export function inspectionTabFor(item: EnrichedInspection) {
 }
 
 export function inspectionStatusVariant(status: EnrichedInspection["inspection"]["status"]) {
-  if (status === "APPROVED") return "success" as const;
-  if (status === "PENDING") return "secondary" as const;
-  if (status === "DECLINED") return "warning" as const;
-  return "outline" as const;
+  return inspectionHavenStatusVariant(status);
 }
 
 export function offerStatusVariant(status: OfferStatus | "COUNTER_RECEIVED") {

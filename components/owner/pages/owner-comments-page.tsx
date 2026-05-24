@@ -117,10 +117,11 @@ export function OwnerCommentsPage() {
   });
 
   const replyMutation = useMutation({
-    mutationFn: ({ listingId, body }: { listingId: number; body: string }) => replyToListingComment(listingId, body),
+    mutationFn: ({ listingId, body }: { listingId: number; body: string; commentId: number }) =>
+      replyToListingComment(listingId, body),
     onSuccess: async (_, variables) => {
-      setReplyDrafts((state) => ({ ...state, [variables.listingId]: "" }));
-      toast.success("Reply posted.");
+      setReplyDrafts((state) => ({ ...state, [variables.commentId]: "" }));
+      toast.success("Answer posted on the listing.");
       await queryClient.invalidateQueries({ queryKey: ["owner-comments", user?.id] });
     },
     onError: () => toast.error("We couldn't post that reply."),
@@ -149,7 +150,7 @@ export function OwnerCommentsPage() {
       <DashboardPageIntro
         eyebrow="Public Q&A"
         title="Comments"
-        description="Reply publicly, keep the thread tidy, and show applicants there is a responsive owner behind the listing."
+        description="Answer each question with a new public post on that listing. Q&A is flat — not threaded replies."
       />
 
       <div className="max-w-xs space-y-2">
@@ -181,23 +182,24 @@ export function OwnerCommentsPage() {
                 <p className="text-sm leading-6 text-muted-foreground">{item.comment.body}</p>
                 <Textarea
                   rows={3}
-                  value={replyDrafts[item.comment.listingId] ?? ""}
+                  value={replyDrafts[item.comment.id] ?? ""}
                   onChange={(event) =>
-                    setReplyDrafts((state) => ({ ...state, [item.comment.listingId]: event.target.value }))
+                    setReplyDrafts((state) => ({ ...state, [item.comment.id]: event.target.value }))
                   }
-                  placeholder="Reply inline as the owner"
+                  placeholder="Post a public answer on the listing page"
                 />
                 <div className="flex flex-wrap gap-3">
                   <Button
                     onClick={() =>
                       replyMutation.mutate({
                         listingId: item.comment.listingId,
-                        body: replyDrafts[item.comment.listingId] ?? "",
+                        commentId: item.comment.id,
+                        body: replyDrafts[item.comment.id] ?? "",
                       })
                     }
-                    disabled={replyMutation.isPending || !(replyDrafts[item.comment.listingId] ?? "").trim()}
+                    disabled={replyMutation.isPending || !(replyDrafts[item.comment.id] ?? "").trim()}
                   >
-                    Reply
+                    Post answer
                   </Button>
                   <Button variant="outline" onClick={() => deleteMutation.mutate(item.comment)} disabled={deleteMutation.isPending}>
                     Delete

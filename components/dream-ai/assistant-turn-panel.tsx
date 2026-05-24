@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { AssistantTurnV1, ChipOption, TurnBlock } from "@/lib/dream-ai/contracts";
 import type { PublicListing } from "@/lib/seed/public-data";
+
+import { DreamAiCompareView } from "./dream-ai-compare-view";
 import { InlineListing } from "./inline-listing";
 
 function listingById(listings: PublicListing[], id: number): PublicListing | undefined {
@@ -43,22 +45,24 @@ export function AssistantTurnPanel({
   }
 
   const compareIds = (compareBlock?.compareListingIds ?? []).filter((x): x is number => x != null).map(Number);
+  const isCompare = turn.kind === "compare" && compareIds.length >= 2;
+  const showTopMarkdown = !isCompare || streaming;
 
   return (
     <div className="flex w-full flex-col gap-3">
       {meta?.staleIdsFiltered ? (
         <p className="text-[11px] text-muted-foreground">
-          Some saved picks are no longer on the market and were hidden from this thread.
+          Some results in this thread have changed — a few saved picks are no longer on the market.
         </p>
       ) : null}
-      {(meta?.inventoryEmpty || meta?.queryTooStrict) && !streaming ? (
+      {(meta?.inventoryEmpty || meta?.queryTooStrict) && !streaming && turn.kind === "no_results" ? (
         <p className="text-xs text-muted-foreground">
           {meta.inventoryEmpty
             ? "Nothing in the live catalogue matched that yet."
             : "Your filters may be tight; try widening budget or area."}
         </p>
       ) : null}
-      {meta?.degraded && !streaming ? (
+      {meta?.degraded && !streaming && !isCompare ? (
         <p className="text-[11px] text-muted-foreground">Ranking used a fallback path (live matcher degraded).</p>
       ) : null}
 
@@ -66,7 +70,7 @@ export function AssistantTurnPanel({
         <TextShimmer duration={1.4} className="text-sm text-muted-foreground">
           Thinking…
         </TextShimmer>
-      ) : md.trim() ? (
+      ) : showTopMarkdown && md.trim() ? (
         <MessageMarkdown>{md}</MessageMarkdown>
       ) : null}
 
@@ -89,24 +93,16 @@ export function AssistantTurnPanel({
       ) : null}
 
       {compareIds.length >= 2 ? (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {compareIds.slice(0, 2).map((id) => {
-            const listing = listingById(listings, id);
-            return listing ? (
-              <InlineListing key={id} listing={listing} />
-            ) : (
-              <div
-                key={id}
-                className="border border-dashed border-border bg-muted/40 px-4 py-6 text-center text-sm text-muted-foreground"
-              >
-                Listing #{id} isn&apos;t in the current browse snapshot.
-              </div>
-            );
-          })}
-        </div>
+        <DreamAiCompareView
+          compareListingIds={compareIds}
+          compareReasoning={compareBlock?.compareReasoning}
+          markdown={md}
+          catalog={listings}
+          streaming={streaming}
+        />
       ) : null}
 
-      {listingIdsForRail.length > 0 && turn.kind !== "compare" ? (
+      {listingIdsForRail.length > 0 && !isCompare ? (
         <div className="flex w-full flex-col gap-2">
           {listingIdsForRail.map((id) => {
             const listing = listingById(listings, id);
