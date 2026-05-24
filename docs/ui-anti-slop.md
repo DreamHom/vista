@@ -57,3 +57,12 @@ After Haven-backed owner inspection or offer actions, invalidate role notificati
 | Parallel invite race (409) | `assignmentInviteErrorMessage()` — friendly copy for pending vs active conflicts |
 | Revoke on pending invites | **Withdraw invite** on `REQUESTED`; **Revoke assignment** on `ACCEPTED` (same endpoint, reason required) |
 | “Reply” / threaded assignment UI | One row per invite; terminal rows in **Past assignments** |
+
+## Agent operational access (`ACCEPTED` only)
+
+| Avoid | Prefer |
+|-------|--------|
+| Offers / leads / inspections for `REQUESTED` or terminal rows | `acceptedManagedListings()` in `lib/agent-dashboard.ts` |
+| Full listing workspace before accept | `AgentOperationalGate` — invite flow or empty state, not edit/offer UI |
+| “Assigned listing” implying live access | Public bar copy: accept invite first; revocation is immediate |
+| Side-by-side Accept + Decline on invites | Accept primary; decline under **⋯** with required reason |

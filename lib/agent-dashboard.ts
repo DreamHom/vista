@@ -12,8 +12,13 @@ import {
 } from "@/lib/applicant-dashboard";
 import { getListingById, type PublicListingDetail, type PublicReview } from "@/lib/seed/public-data";
 import type { WorkspaceInspectionStatusLabel } from "@/lib/inspection-lifecycle";
+import { agentHasOperationalAccess } from "@/lib/assignment-lifecycle";
 import type { AgentListingResponse } from "@/lib/owner-dashboard";
 import type { Role } from "@/lib/types";
+
+function acceptedManagedListings(items: AgentManagedListing[]): AgentManagedListing[] {
+  return items.filter((item) => agentHasOperationalAccess(item.assignment.status));
+}
 
 export type AgentNotificationFilter =
   | "all"
@@ -516,12 +521,20 @@ export async function listAgentManagedListings() {
 export async function getAgentListingWorkspace(listingId: number, userId: number) {
   const managedListings = await listAgentManagedListings();
   const target = managedListings.find((item) => item.assignment.listingId === listingId) ?? null;
-  const offers = (await listAgentOffers(userId)).filter((item) => item.listingId === listingId);
-  const leads = (await listAgentLeads(userId)).filter((item) => item.listingId === listingId);
-  const ownerMessages = getOwnerMessages(userId).filter((item) => item.listingId === listingId);
+  const operational = target != null && agentHasOperationalAccess(target.assignment.status);
+  const offers = operational
+    ? (await listAgentOffers(userId)).filter((item) => item.listingId === listingId)
+    : [];
+  const leads = operational
+    ? (await listAgentLeads(userId)).filter((item) => item.listingId === listingId)
+    : [];
+  const ownerMessages = operational
+    ? getOwnerMessages(userId).filter((item) => item.listingId === listingId)
+    : [];
 
   return {
     managedListing: target,
+    operational,
     offers,
     leads,
     ownerMessages,
@@ -530,14 +543,17 @@ export async function getAgentListingWorkspace(listingId: number, userId: number
 
 export async function listAgentInspections(userId: number) {
   const { managedListings, notifications } = await listManagedContext();
+  const active = acceptedManagedListings(managedListings);
+  const acceptedListingIds = new Set(active.map((item) => item.assignment.listingId));
   const inspectionState = getInspectionStorage(userId);
-  const managedListingMap = new Map(managedListings.map((item) => [item.assignment.listingId, item.listing] as const));
+  const managedListingMap = new Map(active.map((item) => [item.assignment.listingId, item.listing] as const));
 
   return notifications
     .filter((notification) => notification.kind === "INSPECTION_REQUESTED")
     .map((notification) => {
       const payload = getNotificationPayload(notification);
       const listingId = readNumeric(payload?.listingId);
+      if (listingId != null && !acceptedListingIds.has(listingId)) return null;
       const state = inspectionState[String(notification.id)] ?? {
         status: "pending" as const,
         note: "",
@@ -559,11 +575,12 @@ export async function listAgentInspections(userId: number) {
         rescheduleAt: state.rescheduleAt,
       };
     })
+    .filter((row): row is NonNullable<typeof row> => row != null)
     .sort((left, right) => new Date(left.requestedAt).getTime() - new Date(right.requestedAt).getTime());
 }
 
 export async function listAgentLeads(userId: number) {
-  const managedListings = await listAgentManagedListings();
+  const managedListings = acceptedManagedListings(await listAgentManagedListings());
   const leadState = getLeadStorage(userId);
 
   const commentLeads = managedListings.flatMap((managed) =>
@@ -628,7 +645,7 @@ export async function listAgentLeads(userId: number) {
 }
 
 export async function listAgentOffers(userId: number) {
-  const managedListings = await listAgentManagedListings();
+  const managedListings = acceptedManagedListings(await listAgentManagedListings());
   const items = await listAgentOfferItems(managedListings, userId);
   return items.sort((left, right) => new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime());
 }
@@ -652,7 +669,7 @@ export async function listAgentOwnerRelationships(userId: number) {
 
     if (listing.assignment.status === "REQUESTED") {
       existing.pendingInvites.push(listing);
-    } else {
+    } else if (agentHasOperationalAccess(listing.assignment.status)) {
       existing.listingsManaged.push(listing);
     }
 

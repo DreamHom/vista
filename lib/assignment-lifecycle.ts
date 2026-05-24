@@ -43,6 +43,24 @@ export function agentCanRespondToInvite(status: AgentListingStatus): boolean {
   return status === "REQUESTED";
 }
 
+/** Haven checks `status = ACCEPTED` on every privileged listing action. */
+export function agentHasOperationalAccess(status: AgentListingStatus): boolean {
+  return status === "ACCEPTED";
+}
+
+export function agentOperationalBlockedMessage(status: AgentListingStatus): string | null {
+  switch (status) {
+    case "REQUESTED":
+      return "Accept the owner's invite before you can manage inspections, offers, slots, or listing updates on this property.";
+    case "DECLINED":
+      return "You declined this invite. This assignment row is closed — you cannot operate on this listing.";
+    case "REVOKED":
+      return "This assignment was revoked. Access ended immediately — you cannot act on this listing anymore.";
+    default:
+      return null;
+  }
+}
+
 export type ListingAssignmentBlockers = {
   pending: AgentListingResponse | null;
   active: AgentListingResponse | null;

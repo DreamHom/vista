@@ -69,7 +69,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 
-import { AgentAssignmentInviteCard } from "@/components/assignments/agent-assignment-invite-card";
+import { AgentOperationalGate } from "@/components/assignments/agent-operational-gate";
 import { AssignmentStatusBadge } from "@/components/assignments/assignment-status-badge";
 import { agentCanRespondToInvite } from "@/lib/assignment-lifecycle";
 
@@ -149,17 +149,16 @@ export function AgentListingManagementPage({ listingId }: { listingId: number })
         actions={<AssignmentStatusBadge status={managedListing.assignment.status} />}
       />
 
-      {pendingInvite ? (
-        <AgentAssignmentInviteCard
-          assignmentId={managedListing.assignment.id}
-          listingTitle={listing?.title ?? `Listing #${listingId}`}
-          ownerName={managedListing.ownerProfile?.fullName ?? listing?.owner?.name}
-          onSettled={async () => {
-            await workspaceQuery.refetch();
-          }}
-        />
-      ) : null}
-
+      <AgentOperationalGate
+        status={managedListing.assignment.status}
+        assignmentId={managedListing.assignment.id}
+        listingId={listingId}
+        listingTitle={listing?.title ?? `Listing #${listingId}`}
+        ownerName={managedListing.ownerProfile?.fullName ?? listing?.owner?.name}
+        onInviteSettled={async () => {
+          await workspaceQuery.refetch();
+        }}
+      >
       <PrototypeNotice
         title="Agent-side listing edits are still a product prototype"
         body="Haven v1.0.1 still limits PATCH listing mutations to the owner. This page keeps the full edit surface visible, but changes save as an internal working draft for owner coordination."
@@ -313,6 +312,7 @@ export function AgentListingManagementPage({ listingId }: { listingId: number })
           </div>
         </div>
       </SectionCard>
+      </AgentOperationalGate>
     </div>
   );
 }

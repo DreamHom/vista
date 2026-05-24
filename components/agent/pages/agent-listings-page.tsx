@@ -70,7 +70,7 @@ import { cn } from "@/lib/utils";
 
 import { AgentAssignmentInviteCard } from "@/components/assignments/agent-assignment-invite-card";
 import { AssignmentStatusBadge } from "@/components/assignments/assignment-status-badge";
-import { agentCanRespondToInvite } from "@/lib/assignment-lifecycle";
+import { agentCanRespondToInvite, agentHasOperationalAccess, isTerminalAssignmentStatus } from "@/lib/assignment-lifecycle";
 
 import { NativeSelect, FilterPills, ListingThumbnail, listingImage } from "./agent-page-primitives";
 
@@ -179,11 +179,11 @@ export function AgentListingsPage() {
                     />
                   ) : (
                     <div className="flex flex-wrap gap-3">
-                      <Link href={`/agent/listings/${item.assignment.listingId}`}>
-                        <Button>View workspace</Button>
-                      </Link>
-                      {item.assignment.status === "ACCEPTED" ? (
+                      {agentHasOperationalAccess(item.assignment.status) ? (
                         <>
+                          <Link href={`/agent/listings/${item.assignment.listingId}`}>
+                            <Button>Manage listing</Button>
+                          </Link>
                           <Link href="/agent/inspections">
                             <Button variant="outline">Inspections</Button>
                           </Link>
@@ -191,7 +191,15 @@ export function AgentListingsPage() {
                             <Button variant="outline">Leads</Button>
                           </Link>
                         </>
-                      ) : null}
+                      ) : isTerminalAssignmentStatus(item.assignment.status) ? (
+                        <Link href={`/listings/${item.assignment.listingId}`} target="_blank">
+                          <Button variant="outline">Public listing</Button>
+                        </Link>
+                      ) : (
+                        <Link href={`/agent/listings/${item.assignment.listingId}`}>
+                          <Button variant="outline">View invite</Button>
+                        </Link>
+                      )}
                     </div>
                   )}
                 </CardContent>

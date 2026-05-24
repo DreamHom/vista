@@ -95,9 +95,10 @@ export function ListingDetailViewerBar({ listingId, propertyId, ownerId, agentId
           </>
         ) : isAssignedAgent ? (
           <>
-            <p className="text-xs font-semibold uppercase tracking-eyebrow text-muted-foreground">Assigned listing</p>
+            <p className="text-xs font-semibold uppercase tracking-eyebrow text-muted-foreground">Agent assignment</p>
             <p className="text-sm text-muted-foreground">
-              Applicants see this page. Use your agent dashboard for assignments and inspections.
+              Management tools unlock after you accept the owner&apos;s invite. If access was revoked, actions on this
+              listing will fail until a new assignment is accepted.
             </p>
           </>
         ) : (
