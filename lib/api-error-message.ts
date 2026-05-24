@@ -58,6 +58,10 @@ export function apiErrorMessage(error: unknown, fallback = "Something went wrong
       return "Too many attempts. Please wait a moment and try again.";
     }
 
+    if (error.status === 409) {
+      return "This record changed or can't move to that state. Refresh and try again.";
+    }
+
     if (error.message && error.message !== "Forbidden") {
       return error.message;
     }

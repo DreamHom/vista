@@ -16,9 +16,11 @@ import { ListingDetailMap } from "@/components/public/listing-detail-map";
 import {
   CompactListingTile,
   MetricCard,
-  RatingRow,
   VerificationBadgeWithPopover,
 } from "@/components/public/public-components";
+import { ListingDetailViewerBar } from "@/components/public/listing-detail-viewer-bar";
+import { ListingQaSection } from "@/components/public/listing-qa-section";
+import { ListingReviewsSection } from "@/components/public/listing-reviews-section";
 import { AdjacentListingNav } from "@/components/public/widgets/adjacent-listing-nav";
 import { ListingSlotPicker } from "@/components/public/widgets/listing-slot-picker";
 import { Badge } from "@/components/ui/badge";
@@ -111,6 +113,13 @@ export default async function ListingDetailPage({
           the visitor's place. Hidden when there's nothing to either side. */}
       <AdjacentListingNav previous={adjacent.previous} next={adjacent.next} />
 
+      <ListingDetailViewerBar
+        listingId={listing.id}
+        propertyId={listing.propertyId}
+        ownerId={listing.ownerId}
+        agentId={listing.agentId}
+      />
+
       <section className="mt-6 grid gap-8 xl:grid-cols-[minmax(0,1.45fr)_minmax(280px,0.52fr)] xl:items-start xl:gap-10">
         <div className="min-w-0 space-y-8">
           <ListingGallery photos={galleryPhotos} title={listing.title} />
@@ -200,19 +209,13 @@ export default async function ListingDetailPage({
               </div>
               <div className="mt-5 flex flex-wrap gap-2">
                 <Badge variant="outline">No inspection fee in Haven flow</Badge>
-                {listing.pendingReportCount > 0 ? (
-                  <Badge variant="warning">{listing.pendingReportCount} open report(s)</Badge>
-                ) : null}
               </div>
             </section>
 
             <section className="border border-border bg-card p-6 md:p-7">
               <h2 className="text-xl font-semibold tracking-tight">About this property</h2>
               <p className="mt-4 text-sm leading-relaxed text-muted-foreground md:text-base">{listing.description}</p>
-              <div className="mt-6 grid gap-3 sm:grid-cols-2">
-                <MetricCard label="Views" value={String(listing.viewCount)} icon="eye" />
-                <MetricCard label="Reports" value={String(listing.pendingReportCount)} icon="flag" />
-              </div>
+              <MetricCard label="Views" value={String(listing.viewCount)} icon="eye" />
             </section>
           </div>
 
@@ -250,53 +253,19 @@ export default async function ListingDetailPage({
             </ul>
           </section>
 
-          <section className="border border-border bg-card p-6 md:p-7">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-xl font-semibold tracking-tight">Public Q&amp;A</h2>
-              <Link href={`/signup?next=/listings/${listing.id}`} className={buttonVariants({ variant: "outline", size: "sm" })}>
-                Sign up to ask a question
-              </Link>
-            </div>
-            <div className="mt-5 space-y-4">
-              {listing.comments.length ? (
-                listing.comments.map((comment) => (
-                  <article key={comment.id} className="border border-border p-4">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-medium text-foreground">{comment.authorName}</p>
-                      <Badge variant="outline">{comment.authorRole}</Badge>
-                      <span className="text-sm text-muted-foreground">{comment.date}</span>
-                    </div>
-                    <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{comment.body}</p>
-                  </article>
-                ))
-              ) : (
-                <p className="text-sm text-muted-foreground">No public questions yet on this listing.</p>
-              )}
-            </div>
-          </section>
+          <ListingQaSection
+            listingId={listing.id}
+            ownerId={listing.ownerId}
+            agentId={listing.agentId}
+            comments={listing.comments}
+          />
 
-          <section className="border border-border bg-card p-6 md:p-7">
-            <h2 className="text-xl font-semibold tracking-tight">Public reviews tied to this listing</h2>
-            <div className="mt-5 space-y-4">
-              {listing.reviews.length ? (
-                listing.reviews.map((review) => (
-                  <article key={review.id} className="border border-border p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <p className="font-medium text-foreground">{review.reviewerName}</p>
-                        <p className="text-sm text-muted-foreground">{review.reviewerRole}</p>
-                      </div>
-                      <RatingRow rating={review.rating} reviewCount={1} />
-                    </div>
-                    <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{review.body}</p>
-                    <p className="mt-2 text-xs uppercase tracking-eyebrow text-muted-foreground">{review.date}</p>
-                  </article>
-                ))
-              ) : (
-                <p className="text-sm text-muted-foreground">No public reviews are attached to this listing yet.</p>
-              )}
-            </div>
-          </section>
+          <ListingReviewsSection
+            listingId={listing.id}
+            ownerId={listing.ownerId}
+            agentId={listing.agentId}
+            reviews={listing.reviews}
+          />
 
         </div>
 

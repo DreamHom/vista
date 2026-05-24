@@ -67,6 +67,8 @@ import {
   type OwnerPropertyFormDraft,
 } from "@/lib/owner-dashboard";
 import { useAuth } from "@/lib/use-auth";
+import { nextStatusForOwnerAction } from "@/lib/listing-lifecycle";
+import { isListingStaleConflict, ownerListingErrorMessage } from "@/lib/owner-listing-errors";
 import { formatNaira } from "@/lib/format";
 import {
   DashboardPageIntro,
@@ -117,14 +119,24 @@ export function OwnerPropertiesPage() {
   const toggleListingMutation = useMutation({
     mutationFn: async (item: OwnerManagedProperty) => {
       if (!item.listing) return;
-      const nextStatus = item.listing.status === "PAUSED" ? "LIVE" : "PAUSED";
-      await updateOwnerListing(item.listing.id, { status: nextStatus });
+      const action = item.listing.status === "PAUSED" ? "resume" : "pause";
+      const nextStatus = nextStatusForOwnerAction(item.listing.status, action);
+      if (!nextStatus) return;
+      await updateOwnerListing(item.listing.id, {
+        status: nextStatus,
+        version: item.listing.version,
+      });
     },
     onSuccess: () => {
-      toast.success("Listing updated.");
+      toast.success("Listing availability updated.");
       void queryClient.invalidateQueries({ queryKey: ["owner-properties"] });
     },
-    onError: () => toast.error("We couldn't update that listing right now."),
+    onError: (error, item) => {
+      toast.error(ownerListingErrorMessage(error, "We couldn't update that listing right now."));
+      if (isListingStaleConflict(error)) {
+        void queryClient.invalidateQueries({ queryKey: ["owner-properties"] });
+      }
+    },
   });
 
   if (propertiesQuery.isLoading) return <LoadingPanel label="Loading your properties..." />;
@@ -139,7 +151,7 @@ export function OwnerPropertiesPage() {
       <DashboardPageIntro
         eyebrow="Property portfolio"
         title="My Properties"
-        description="Every address you own, the listing state it's in, and the quickest next action to take."
+        description="Each card is a property (the address). The badge shows this property's current listing offer when one exists."
         actions={
           <Link href="/owner/properties/new">
             <Button>

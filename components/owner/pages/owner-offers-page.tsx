@@ -4,7 +4,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   FileUp,
@@ -101,7 +101,16 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
-import { cn } from "@/lib/utils";
+import { InspectionMoreMenu } from "@/components/inspection/inspection-more-menu";
+import { OfferTurnBanner } from "@/components/offers/offer-turn-banner";
+import {
+  findAcceptedOfferOnListing,
+  offersOnListing,
+  offerNegotiationErrorMessage,
+  ownerCanRespondToOffer,
+  ownerOfferWaitingHint,
+} from "@/lib/offer-lifecycle";
+import { AcceptOfferDialog } from "@/components/owner/accept-offer-dialog";
 
 import { groupOffersByThread } from "./owner-page-primitives";
 
@@ -109,6 +118,12 @@ export function OwnerOffersPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [counterAmounts, setCounterAmounts] = useState<Record<number, string>>({});
+  const [acceptTarget, setAcceptTarget] = useState<{
+    offerId: number;
+    amount: number;
+    listingTitle: string;
+    applicantLabel: string;
+  } | null>(null);
   const offersQuery = useQuery({
     queryKey: ["owner-offers", user?.id],
     queryFn: () => listOwnerOffers(user!.id, 100),
@@ -118,20 +133,32 @@ export function OwnerOffersPage() {
   const respondMutation = useMutation({
     mutationFn: ({ offerId, status }: { offerId: number; status: "ACCEPTED" | "DECLINED" }) =>
       respondToOffer(offerId, status),
-    onSuccess: async () => {
-      toast.success("Offer updated.");
+    onSuccess: async (_data, variables) => {
+      setAcceptTarget(null);
+      if (variables.status === "ACCEPTED") {
+        toast.success(
+          "Offer accepted. The listing is closed, and other pending offers on it were declined automatically.",
+        );
+      } else {
+        toast.success("Offer declined.");
+      }
       await queryClient.invalidateQueries({ queryKey: ["owner-offers", user?.id] });
+      await queryClient.invalidateQueries({ queryKey: ["owner-properties"] });
+      await queryClient.invalidateQueries({ queryKey: ["owner-property"] });
+      await queryClient.invalidateQueries({ queryKey: ["owner-dashboard-overview"] });
+      await queryClient.invalidateQueries({ queryKey: ["owner-notifications"] });
     },
-    onError: () => toast.error("We couldn't update that offer."),
+    onError: (error) => toast.error(offerNegotiationErrorMessage(error)),
   });
 
   const counterMutation = useMutation({
     mutationFn: ({ offerId, amount }: { offerId: number; amount: number }) => counterOwnerOffer(offerId, { amount }),
     onSuccess: async () => {
-      toast.success("Counter offer sent.");
+      toast.success("Counter sent. The applicant must respond before you can act on this thread again.");
       await queryClient.invalidateQueries({ queryKey: ["owner-offers", user?.id] });
+      await queryClient.invalidateQueries({ queryKey: ["owner-notifications"] });
     },
-    onError: () => toast.error("We couldn't send that counter offer."),
+    onError: (error) => toast.error(offerNegotiationErrorMessage(error)),
   });
 
   if (offersQuery.isLoading) return <LoadingPanel label="Loading offers..." />;
@@ -139,14 +166,29 @@ export function OwnerOffersPage() {
     return <ErrorPanel body="We couldn't load owner offer chains from Haven." onRetry={() => offersQuery.refetch()} />;
   }
 
-  const groups = groupOffersByThread(offersQuery.data!);
+  const allOffers = offersQuery.data!;
+  const groups = useMemo(() => groupOffersByThread(allOffers), [allOffers]);
 
   return (
     <div className="space-y-6">
+      <AcceptOfferDialog
+        open={acceptTarget != null}
+        onOpenChange={(open) => {
+          if (!open) setAcceptTarget(null);
+        }}
+        amount={acceptTarget?.amount ?? 0}
+        listingTitle={acceptTarget?.listingTitle ?? "this listing"}
+        applicantLabel={acceptTarget?.applicantLabel ?? "this applicant"}
+        pending={respondMutation.isPending}
+        onConfirm={() => {
+          if (!acceptTarget) return;
+          respondMutation.mutate({ offerId: acceptTarget.offerId, status: "ACCEPTED" });
+        }}
+      />
       <DashboardPageIntro
         eyebrow="Negotiations"
         title="Offers"
-        description="See the full back-and-forth on every listing, decide quickly, and counter with clean context."
+        description="Each thread is one applicant on one listing. You can only accept, reject, or counter an offer the applicant proposed, not your own. Accepting closes the listing and declines other pending offers on it."
       />
 
       {groups.length > 0 ? (
@@ -154,11 +196,27 @@ export function OwnerOffersPage() {
           {groups.map((group) => {
             const current = group.current;
             if (!current) return null;
-            const actionable = current.offer.status === "PENDING" && current.offer.proposedByUserId !== user?.id;
+            const listingOffers = offersOnListing(allOffers, current.offer.listingId);
+            const acceptedWinner = findAcceptedOfferOnListing(allOffers, current.offer.listingId);
+            const actionable =
+              user?.id != null && ownerCanRespondToOffer(current, user.id, listingOffers);
+            const waitingHint =
+              user?.id != null ? ownerOfferWaitingHint(current, user.id, listingOffers) : null;
 
             return (
               <Card key={group.id} className="border-border/70 shadow-none">
                 <CardContent className="space-y-5 p-5">
+                  {acceptedWinner ? (
+                    <div className="border border-border bg-secondary/30 p-4 text-sm text-foreground">
+                      <p className="font-semibold">Listing closed</p>
+                      <p className="mt-1 text-muted-foreground">
+                        Accepted offer from applicant #{acceptedWinner.offer.applicantId} at{" "}
+                        {formatNaira(acceptedWinner.offer.amount)} on{" "}
+                        {formatDateTime(acceptedWinner.offer.updatedAt)}. That row is the permanent record of who
+                        rented or bought.
+                      </p>
+                    </div>
+                  ) : null}
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
@@ -175,9 +233,9 @@ export function OwnerOffersPage() {
                     </div>
                   </div>
 
-                  <div className="space-y-3 rounded-3xl bg-secondary/30 p-4">
+                  <div className="space-y-3 border border-border bg-secondary/30 p-4">
                     {group.chain.map((item) => (
-                      <div key={item.offer.id} className="rounded-2xl border border-border bg-white p-4">
+                      <div key={item.offer.id} className="border border-border bg-card p-4">
                         <div className="flex flex-wrap items-center justify-between gap-3">
                           <p className="text-sm font-medium text-foreground">
                             {item.offer.proposedByUserId === user?.id ? "You" : "Applicant"} proposed {formatNaira(item.offer.amount)}
@@ -193,24 +251,58 @@ export function OwnerOffersPage() {
                   </div>
 
                   {actionable ? (
-                    <div className="space-y-4 rounded-3xl border border-primary/15 bg-primary/5 p-4">
-                      <p className="text-sm font-semibold text-foreground">This offer still needs your response.</p>
-                      <div className="flex flex-wrap gap-3">
-                        <Button onClick={() => respondMutation.mutate({ offerId: current.offer.id, status: "ACCEPTED" })} disabled={respondMutation.isPending}>
+                    <div className="space-y-4 border border-primary/20 bg-primary/5 p-4">
+                      <OfferTurnBanner variant="your_turn">
+                        Your turn: the applicant proposed {formatNaira(current.offer.amount)}. Accept, reject, or send a
+                        counter.
+                      </OfferTurnBanner>
+                      <p className="text-sm text-muted-foreground">
+                        Accepting closes the listing and declines other pending offers on it. You can only accept one
+                        applicant per listing.
+                      </p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          onClick={() =>
+                            setAcceptTarget({
+                              offerId: current.offer.id,
+                              amount: current.offer.amount,
+                              listingTitle: current.listing?.title ?? `Listing #${current.offer.listingId}`,
+                              applicantLabel: `applicant #${current.offer.applicantId}`,
+                            })
+                          }
+                          disabled={respondMutation.isPending}
+                        >
                           Accept
                         </Button>
-                        <Button variant="outline" onClick={() => respondMutation.mutate({ offerId: current.offer.id, status: "DECLINED" })} disabled={respondMutation.isPending}>
-                          Reject
-                        </Button>
+                        <InspectionMoreMenu
+                          disabled={respondMutation.isPending}
+                          menuLabel="Reject only if you will not negotiate further on this applicant."
+                          triggerLabel="More offer actions"
+                          items={[
+                            {
+                              id: "reject",
+                              label: "Reject offer",
+                              description: "Declines this applicant's current offer on the thread.",
+                              destructive: true,
+                              onSelect: () =>
+                                respondMutation.mutate({ offerId: current.offer.id, status: "DECLINED" }),
+                            },
+                          ]}
+                        />
                       </div>
                       <div className="grid gap-3 md:grid-cols-[minmax(0,220px)_auto]">
-                        <Input
-                          value={counterAmounts[current.offer.id] ?? ""}
-                          onChange={(event) =>
-                            setCounterAmounts((state) => ({ ...state, [current.offer.id]: event.target.value }))
-                          }
-                          placeholder="Counter amount"
-                        />
+                        <div className="relative">
+                          <span aria-hidden className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground tabular-nums">₦</span>
+                          <Input
+                            inputMode="numeric"
+                            className="pl-7 tabular-nums"
+                            value={counterAmounts[current.offer.id] ?? ""}
+                            onChange={(event) =>
+                              setCounterAmounts((state) => ({ ...state, [current.offer.id]: event.target.value }))
+                            }
+                            placeholder="Counter amount"
+                          />
+                        </div>
                         <Button
                           variant="outline"
                           onClick={() => counterMutation.mutate({ offerId: current.offer.id, amount: Number(counterAmounts[current.offer.id] || 0) })}
@@ -220,6 +312,8 @@ export function OwnerOffersPage() {
                         </Button>
                       </div>
                     </div>
+                  ) : waitingHint ? (
+                    <OfferTurnBanner>{waitingHint}</OfferTurnBanner>
                   ) : null}
                 </CardContent>
               </Card>

@@ -68,7 +68,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 
-import { NativeSelect, FilterPills, listingImage } from "./agent-page-primitives";
+import { NativeSelect, FilterPills, ListingThumbnail, listingImage } from "./agent-page-primitives";
 
 export function AgentListingsPage() {
   const query = useQuery({
@@ -131,10 +131,9 @@ export function AgentListingsPage() {
             <Card key={item.assignment.id} className="overflow-hidden border-border shadow-none">
               <div className="grid gap-0 md:grid-cols-[220px_minmax(0,1fr)]">
                 <div className="relative h-52 bg-secondary md:h-full">
-                  <img
-                    src={listingImage(item.listing?.photos?.[0]?.url)}
+                  <ListingThumbnail
+                    url={listingImage(item.listing?.photos?.[0]?.url)}
                     alt={item.listing?.title ?? "Listing photo"}
-                    className="h-full w-full object-cover"
                   />
                 </div>
                 <CardContent className="space-y-5 p-5">

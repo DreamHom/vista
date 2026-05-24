@@ -1,6 +1,13 @@
 import { api } from "@/lib/api";
+import { pickPrimaryListingForProperty, sortListingsNewestFirst } from "@/lib/listing-lifecycle";
 import { latestPropertyDocumentsVerification, latestVerificationByType } from "@/lib/verification-helpers";
 import { datetimeLocalToInstantJson } from "@/lib/datetime-api";
+import {
+  migrateWorkspaceInspectionLabel,
+  workspaceLabelToLocalStatus,
+  type WorkspaceInspectionLocalStatus,
+  type WorkspaceInspectionStatusLabel,
+} from "@/lib/inspection-lifecycle";
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
   getNotificationHref,
@@ -73,6 +80,8 @@ export interface OwnerListingResponse {
   headline?: string | null;
   handoverDate?: string | null;
   status: "LIVE" | "PAUSED" | "CLOSED" | "TAKEN_DOWN";
+  /** Optimistic-lock token from Haven (@Version). Send on PATCH when present. */
+  version?: number | null;
   approvedAt?: string | null;
   viewCount?: number | null;
   createdAt: string;
@@ -117,10 +126,17 @@ export interface SlotResponse {
   endsAt: string;
 }
 
+export interface OwnerListingBundle {
+  listing: OwnerListingResponse;
+  detail: PublicListingDetail | null;
+}
+
 export interface OwnerManagedProperty {
   property: PropertyResponse;
   listing: OwnerListingResponse | null;
   listingDetail: PublicListingDetail | null;
+  /** Other listings on the same property (newest first), excluding the primary `listing`. */
+  pastListings?: OwnerListingBundle[];
 }
 
 export interface OwnerActivityItem {
@@ -186,8 +202,8 @@ export interface OwnerInspectionItem {
   listing: OwnerListingResponse | null;
   requestedAt: string;
   applicantName: string;
-  statusLabel: "Pending" | "Confirmed" | "Completed" | "Cancelled";
-  localStatus: "pending" | "confirmed" | "completed" | "cancelled";
+  statusLabel: WorkspaceInspectionStatusLabel;
+  localStatus: WorkspaceInspectionLocalStatus;
   /** When the notification payload carries a Haven inspection id, owner actions can call the API. */
   inspectionId: number | null;
 }
@@ -331,25 +347,38 @@ export async function listOwnerProperties(size = 100) {
     listOwnerListings(100),
   ]);
 
-  const listingByPropertyId = new Map<number, OwnerListingResponse>();
+  const listingsByPropertyId = new Map<number, OwnerListingBundle[]>();
   const detailByListingId = new Map<number, PublicListingDetail | null>();
 
   for (const item of ownerListings.items) {
-    const existing = listingByPropertyId.get(item.listing.propertyId);
-    if (!existing || new Date(item.listing.createdAt).getTime() > new Date(existing.createdAt).getTime()) {
-      listingByPropertyId.set(item.listing.propertyId, item.listing);
-      detailByListingId.set(item.listing.id, item.detail);
-    }
+    detailByListingId.set(item.listing.id, item.detail);
+    const bucket = listingsByPropertyId.get(item.listing.propertyId) ?? [];
+    bucket.push({ listing: item.listing, detail: item.detail });
+    listingsByPropertyId.set(item.listing.propertyId, bucket);
   }
 
   return {
     total: getPageTotal(propertiesResponse),
     items: propertiesResponse.content.map((property) => {
-      const listing = listingByPropertyId.get(property.id) ?? null;
+      const bundles = sortListingsNewestFirst(
+        (listingsByPropertyId.get(property.id) ?? []).map((row) => row.listing),
+      ).map((listing) => ({
+        listing,
+        detail: detailByListingId.get(listing.id) ?? null,
+      }));
+      const primary = pickPrimaryListingForProperty(
+        bundles.map((row) => row.listing),
+        property.id,
+      );
+      const pastListings = primary
+        ? bundles.filter((row) => row.listing.id !== primary.id)
+        : bundles.slice(1);
+
       return {
         property,
-        listing,
-        listingDetail: listing ? detailByListingId.get(listing.id) ?? null : null,
+        listing: primary,
+        listingDetail: primary ? detailByListingId.get(primary.id) ?? null : null,
+        pastListings,
       } satisfies OwnerManagedProperty;
     }),
   };
@@ -561,8 +590,10 @@ export async function listOwnerInspectionItems(userId: number) {
       listing,
       requestedAt: notification.createdAt,
       applicantName: applicantId ? `Applicant #${applicantId}` : "Interested applicant",
-      statusLabel: localStatuses[notification.id] ?? "Pending",
-      localStatus: (localStatuses[notification.id] ?? "pending").toLowerCase() as OwnerInspectionItem["localStatus"],
+      statusLabel: migrateWorkspaceInspectionLabel(localStatuses[notification.id] ?? "Pending"),
+      localStatus: workspaceLabelToLocalStatus(
+        migrateWorkspaceInspectionLabel(localStatuses[notification.id] ?? "Pending"),
+      ),
       inspectionId,
     };
   });
@@ -651,12 +682,26 @@ export async function getOwnerPropertyManagement(propertyId: number, ownerUserId
     }),
   ]);
 
-  const listingBundle =
-    ownerListings.items.find((item) => item.listing.propertyId === propertyId) ?? null;
+  const propertyBundles = ownerListings.items.filter((item) => item.listing.propertyId === propertyId);
+  const sortedBundles = sortListingsNewestFirst(propertyBundles.map((item) => item.listing)).map((listing) => {
+    const match = propertyBundles.find((item) => item.listing.id === listing.id)!;
+    return { listing, detail: match.detail };
+  });
+  const primaryListing = pickPrimaryListingForProperty(
+    sortedBundles.map((row) => row.listing),
+    propertyId,
+  );
+  const listingBundle = primaryListing
+    ? (sortedBundles.find((row) => row.listing.id === primaryListing.id) ?? null)
+    : null;
+  const listingHistory = primaryListing
+    ? sortedBundles.filter((row) => row.listing.id !== primaryListing.id)
+    : sortedBundles;
 
   return {
     property,
     listingBundle,
+    listingHistory,
     assignments: assignments.filter((item) => item.assignment.listingId === listingBundle?.listing.id),
     offers: offers.filter((item) => item.offer.listingId === listingBundle?.listing.id),
     comments: comments.filter((item) => item.comment.listingId === listingBundle?.listing.id),
@@ -699,9 +744,14 @@ export async function updateOwnerListing(
     description?: string;
     headline?: string;
     handoverDate?: string;
+    version?: number | null;
   },
 ) {
-  return api.patch<OwnerListingResponse>(`/listings/${listingId}`, payload);
+  const body: Record<string, unknown> = { ...payload };
+  if (payload.version == null) {
+    delete body.version;
+  }
+  return api.patch<OwnerListingResponse>(`/listings/${listingId}`, body);
 }
 
 export async function uploadOwnerListingPhoto(listingId: number, file: File, caption?: string) {
@@ -743,6 +793,10 @@ export async function submitPropertyDocumentsVerification(propertyId: number, fi
     propertyId,
     documentRefs,
   });
+}
+
+export async function listListingSlots(listingId: number) {
+  return api.get<SlotResponse[]>(`/listings/${listingId}/slots`, { skipAuth: true });
 }
 
 export async function createInspectionSlot(listingId: number, payload: { startsAt: string; endsAt: string }) {
@@ -819,16 +873,18 @@ export function toggleLeadShortlist(userId: number, leadKey: string) {
 }
 
 export function readInspectionStatuses(userId: number) {
-  return readFromStorage<Record<number, "Pending" | "Confirmed" | "Completed" | "Cancelled">>(
-    storageKey(OWNER_INSPECTION_STATUS_KEY, userId),
-    {},
-  );
+  const raw = readFromStorage<Record<number, string>>(storageKey(OWNER_INSPECTION_STATUS_KEY, userId), {});
+  const migrated: Record<number, WorkspaceInspectionStatusLabel> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    migrated[Number(key)] = migrateWorkspaceInspectionLabel(value);
+  }
+  return migrated;
 }
 
 export function saveInspectionStatus(
   userId: number,
   notificationId: number,
-  status: "Pending" | "Confirmed" | "Completed" | "Cancelled",
+  status: WorkspaceInspectionStatusLabel,
 ) {
   const current = readInspectionStatuses(userId);
   current[notificationId] = status;

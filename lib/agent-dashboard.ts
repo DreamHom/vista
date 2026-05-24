@@ -11,6 +11,7 @@ import {
   type VerificationResponse,
 } from "@/lib/applicant-dashboard";
 import { getListingById, type PublicListingDetail, type PublicReview } from "@/lib/seed/public-data";
+import type { WorkspaceInspectionStatusLabel } from "@/lib/inspection-lifecycle";
 import type { AgentListingResponse } from "@/lib/owner-dashboard";
 import type { Role } from "@/lib/types";
 
@@ -56,7 +57,7 @@ export interface AgentManagedListing {
 }
 
 export interface AgentInspectionDecision {
-  status: "pending" | "confirmed" | "completed" | "cancelled";
+  status: "pending" | "approved" | "completed" | "cancelled";
   note: string;
   noShow: boolean;
   rescheduleAt: string;
@@ -69,7 +70,7 @@ export interface AgentInspectionItem {
   listing: PublicListingDetail | null;
   applicantName: string;
   requestedAt: string;
-  statusLabel: "Pending" | "Confirmed" | "Completed" | "Cancelled";
+  statusLabel: WorkspaceInspectionStatusLabel;
   localStatus: AgentInspectionDecision["status"];
   note: string;
   noShow: boolean;
@@ -289,8 +290,25 @@ function readString(value: unknown, fallback = "") {
   return typeof value === "string" && value.trim().length > 0 ? value : fallback;
 }
 
+function migrateAgentInspectionDecision(
+  decision: AgentInspectionDecision & { status?: string },
+): AgentInspectionDecision {
+  const rawStatus = decision.status as string;
+  const status: AgentInspectionDecision["status"] =
+    rawStatus === "confirmed" ? "approved" : (decision.status as AgentInspectionDecision["status"]);
+  return { ...decision, status };
+}
+
 function getInspectionStorage(userId: number) {
-  return readFromStorage<Record<string, AgentInspectionDecision>>(storageKey(AGENT_INSPECTION_STATE_KEY, userId), {});
+  const raw = readFromStorage<Record<string, AgentInspectionDecision & { status?: string }>>(
+    storageKey(AGENT_INSPECTION_STATE_KEY, userId),
+    {},
+  );
+  const migrated: Record<string, AgentInspectionDecision> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    migrated[key] = migrateAgentInspectionDecision(value);
+  }
+  return migrated;
 }
 
 function getLeadStorage(userId: number) {
@@ -323,10 +341,11 @@ function getOwnerMessages(userId: number) {
   return readFromStorage<AgentOwnerMessage[]>(storageKey(AGENT_OWNER_MESSAGES_KEY, userId), []);
 }
 
-function buildInspectionStatus(status: AgentInspectionDecision["status"]): AgentInspectionItem["statusLabel"] {
-  switch (status) {
-    case "confirmed":
-      return "Confirmed";
+function buildInspectionStatus(state: AgentInspectionDecision): AgentInspectionItem["statusLabel"] {
+  if (state.noShow) return "No-show";
+  switch (state.status) {
+    case "approved":
+      return "Approved";
     case "completed":
       return "Completed";
     case "cancelled":
@@ -533,7 +552,7 @@ export async function listAgentInspections(userId: number) {
         listing: listingId ? (managedListingMap.get(listingId) ?? null) : null,
         applicantName: readString(payload?.applicantName, `Applicant #${readNumeric(payload?.applicantId) ?? "TBD"}`),
         requestedAt: notification.createdAt,
-        statusLabel: buildInspectionStatus(state.status),
+        statusLabel: buildInspectionStatus(state),
         localStatus: state.status,
         note: state.note,
         noShow: state.noShow,

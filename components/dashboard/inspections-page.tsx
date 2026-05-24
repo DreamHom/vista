@@ -22,7 +22,6 @@ import {
   listInspections,
   requestInspection,
   type EnrichedInspection,
-  type SlotResponse,
 } from "@/lib/applicant-dashboard";
 import {
   buildCalendarHref,
@@ -33,7 +32,20 @@ import {
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { InspectionSlotBookingCalendar } from "@/components/inspection/inspection-slot-booking-calendar";
 import { ApiError } from "@/lib/api";
+import { apiErrorMessage } from "@/lib/api-error-message";
+import { InspectionActionDialog } from "@/components/inspection/inspection-action-dialog";
+import { inspectionSlotClaimErrorMessage } from "@/lib/inspection-slot-errors";
+import { InspectionTabFilters } from "@/components/inspection/inspection-tab-filters";
+import {
+  applicantCancelBlockedReason,
+  applicantInspectionOutcomeLine,
+  canApplicantCancelInspection,
+  inspectionCancelErrorMessage,
+  inspectionHavenStatusLabel,
+} from "@/lib/inspection-lifecycle";
+import { formatSlotBookingLabel } from "@/lib/inspection-slots";
 import { formatNaira } from "@/lib/format";
 import { normalizeListingRouteId } from "@/lib/seed/public-data";
 import { useAuth } from "@/lib/use-auth";
@@ -81,7 +93,7 @@ function EmptyInspectionState({ tab }: { tab: InspectionTab }) {
 function InspectionBookingFromListing({ listingId, userId }: { listingId: string; userId: number }) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [selectedSlotId, setSelectedSlotId] = useState<number | null>(null);
+  const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
 
   const listingQuery = useQuery({
@@ -99,42 +111,23 @@ function InspectionBookingFromListing({ listingId, userId }: { listingId: string
     queryFn: () => fetchListingBookingPhotos(listingId),
   });
 
-  const openSlots = useMemo(() => {
-    const cutoff = Date.now() - 5 * 60 * 1000;
-    return (slotsQuery.data ?? [])
-      .filter((slot) => new Date(slot.startsAt).getTime() >= cutoff)
-      .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
-  }, [slotsQuery.data]);
-
-  const slotsByDay = useMemo(() => {
-    const map = new Map<string, SlotResponse[]>();
-    for (const slot of openSlots) {
-      const day = slot.startsAt.slice(0, 10);
-      const list = map.get(day) ?? [];
-      list.push(slot);
-      map.set(day, list);
-    }
-    return [...map.entries()].sort(([left], [right]) => left.localeCompare(right));
-  }, [openSlots]);
-
-  const dayHeading = useMemo(
+  const calendarSlots = useMemo(
     () =>
-      new Intl.DateTimeFormat("en-NG", {
-        weekday: "long",
-        month: "long",
-        day: "numeric",
-        year: "numeric",
-      }),
-    [],
+      (slotsQuery.data ?? []).map((slot) => ({
+        id: String(slot.id),
+        startsAt: slot.startsAt,
+        endsAt: slot.endsAt,
+      })),
+    [slotsQuery.data],
   );
 
-  const timeFormatter = useMemo(
-    () => new Intl.DateTimeFormat("en-NG", { hour: "numeric", minute: "2-digit" }),
-    [],
+  const selectedSlot = useMemo(
+    () => calendarSlots.find((slot) => slot.id === selectedSlotId) ?? null,
+    [calendarSlots, selectedSlotId],
   );
 
   const bookMutation = useMutation({
-    mutationFn: () => requestInspection({ slotId: selectedSlotId!, notes: notes.trim() || undefined }),
+    mutationFn: () => requestInspection({ slotId: Number(selectedSlotId!), notes: notes.trim() || undefined }),
     onSuccess: () => {
       toast.success("Inspection requested.");
       void queryClient.invalidateQueries({ queryKey: ["applicant-inspections", userId] });
@@ -146,7 +139,7 @@ function InspectionBookingFromListing({ listingId, userId }: { listingId: string
     onError: (error) => {
       if (error instanceof ApiError) {
         if (error.status === 409) {
-          toast.error("That slot was just taken. Pick another time.");
+          toast.error(inspectionSlotClaimErrorMessage(error));
           void slotsQuery.refetch();
           setSelectedSlotId(null);
           return;
@@ -160,7 +153,7 @@ function InspectionBookingFromListing({ listingId, userId }: { listingId: string
           return;
         }
       }
-      toast.error(error instanceof Error ? error.message : "We couldn't book this slot.");
+      toast.error(inspectionSlotClaimErrorMessage(error));
     },
   });
 
@@ -232,7 +225,7 @@ function InspectionBookingFromListing({ listingId, userId }: { listingId: string
             onRetry={() => void slotsQuery.refetch()}
           />
         </div>
-      ) : openSlots.length === 0 ? (
+      ) : calendarSlots.length === 0 ? (
         <div className="mt-6">
           <EmptyPanel
             title="No open slots right now"
@@ -242,65 +235,45 @@ function InspectionBookingFromListing({ listingId, userId }: { listingId: string
           />
         </div>
       ) : (
-        <div className="mt-6 space-y-6">
-          <p className="text-sm font-medium text-foreground">Choose a time</p>
-          {slotsByDay.map(([day, slots]) => (
-            <div key={day}>
-              <p className="text-xs font-semibold uppercase tracking-eyebrow text-muted-foreground">
-                {dayHeading.format(new Date(`${day}T12:00:00`))}
-              </p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {slots.map((slot) => {
-                  const active = selectedSlotId === slot.id;
-                  return (
-                    <button
-                      key={slot.id}
-                      type="button"
-                      aria-pressed={active}
-                      onClick={() => setSelectedSlotId(slot.id)}
-                      className={cn(
-                        "rounded-full border px-4 py-2 text-sm font-medium transition-colors",
-                        active
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : "border-border bg-background text-foreground hover:border-primary/50",
-                      )}
-                    >
-                      {timeFormatter.format(new Date(slot.startsAt))}
-                      {" – "}
-                      {timeFormatter.format(new Date(slot.endsAt))}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+        <div className="mt-6 space-y-4">
+          <InspectionSlotBookingCalendar
+            slots={calendarSlots}
+            selectedSlotId={selectedSlotId}
+            onSelectSlot={setSelectedSlotId}
+          />
+
+          {selectedSlot ? (
+            <p className="text-sm text-muted-foreground">
+              Selected: <span className="font-medium text-foreground">{formatSlotBookingLabel(selectedSlot)}</span>
+            </p>
+          ) : null}
+
+          <div className="space-y-2">
+            <Label htmlFor="inspection-notes">Notes for the host (optional)</Label>
+            <Textarea
+              id="inspection-notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              maxLength={5000}
+              placeholder="e.g. two people attending, parking needs"
+              rows={3}
+            />
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <Button
+              variant="primary"
+              disabled={selectedSlotId == null || bookMutation.isPending}
+              onClick={() => bookMutation.mutate()}
+            >
+              {bookMutation.isPending ? "Booking…" : "Request this visit"}
+            </Button>
+            <Link href={`/listings/${listingId}`} className={buttonVariants({ variant: "outline", size: "md" })}>
+              Back to listing
+            </Link>
+          </div>
         </div>
       )}
-
-      <div className="mt-6 space-y-2">
-        <Label htmlFor="inspection-notes">Notes for the host (optional)</Label>
-        <Textarea
-          id="inspection-notes"
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          maxLength={5000}
-          placeholder="e.g. two people attending, approximate arrival"
-          rows={3}
-        />
-      </div>
-
-      <div className="mt-6 flex flex-wrap gap-3">
-        <Button
-          variant="primary"
-          disabled={selectedSlotId == null || bookMutation.isPending}
-          onClick={() => bookMutation.mutate()}
-        >
-          {bookMutation.isPending ? "Booking…" : "Confirm inspection"}
-        </Button>
-        <Link href={`/listings/${listingId}`} className={buttonVariants({ variant: "outline", size: "md" })}>
-          Back to listing
-        </Link>
-      </div>
     </SectionCard>
   );
 }
@@ -308,14 +281,17 @@ function InspectionBookingFromListing({ listingId, userId }: { listingId: string
 function InspectionCard({
   item,
   tab,
-  onCancel,
+  onRequestCancel,
   cancelling,
 }: {
   item: EnrichedInspection;
   tab: InspectionTab;
-  onCancel: () => void;
+  onRequestCancel: () => void;
   cancelling: boolean;
 }) {
+  const status = item.inspection.status;
+  const canCancel = canApplicantCancelInspection(status);
+  const blockedReason = applicantCancelBlockedReason(status);
   const counterpartName = item.listing?.agent?.name ?? item.listing?.owner.name ?? "DreamHomes host";
   const fallback = fallbackListingPhoto(
     `${item.listing?.id ?? item.slot?.listingId ?? item.inspection.id}-${item.listing?.title ?? "inspection-listing"}`,
@@ -323,9 +299,9 @@ function InspectionCard({
   );
 
   return (
-    <div className="rounded-3xl border border-border bg-white px-5 py-5">
+    <div className="border border-border bg-card px-5 py-5 shadow-none">
       <div className="grid gap-5 lg:grid-cols-[180px_minmax(0,1fr)]">
-        <div className="overflow-hidden rounded-2xl border border-border bg-muted">
+        <div className="overflow-hidden border border-border bg-muted">
           <img
             src={item.listing?.photos[0]?.url ?? fallback.url}
             alt={item.listing?.photos[0]?.alt ?? fallback.alt ?? item.listing?.title ?? `Inspection #${item.inspection.id}`}
@@ -349,17 +325,23 @@ function InspectionCard({
               ) : null}
             </div>
             <StatusBadge
-              label={item.inspection.status}
+              label={inspectionHavenStatusLabel(item.inspection.status)}
               variant={inspectionStatusVariant(item.inspection.status)}
             />
           </div>
 
+          {tab === "cancelled" ? (
+            <p className="border border-border bg-secondary/30 px-3 py-2 text-sm text-muted-foreground">
+              {applicantInspectionOutcomeLine(status)}
+            </p>
+          ) : null}
+
           <div className="grid gap-3 md:grid-cols-2">
-            <div className="rounded-2xl border border-border px-4 py-3">
+            <div className="border border-border px-4 py-3">
               <p className="text-xs uppercase tracking-eyebrow text-muted-foreground">Host</p>
               <p className="mt-2 font-medium text-foreground">{counterpartName}</p>
             </div>
-            <div className="rounded-2xl border border-border px-4 py-3">
+            <div className="border border-border px-4 py-3">
               <p className="text-xs uppercase tracking-eyebrow text-muted-foreground">Notes</p>
               <p className="mt-2 text-sm text-muted-foreground">
                 {item.inspection.notes?.trim() || "No extra notes added to this booking."}
@@ -370,10 +352,14 @@ function InspectionCard({
           <div className="flex flex-wrap gap-3">
             {tab === "upcoming" ? (
               <>
-                <Button variant="outline" onClick={onCancel} disabled={cancelling}>
-                  <XCircle className="h-4 w-4" aria-hidden />
-                  Cancel booking
-                </Button>
+                {canCancel ? (
+                  <Button variant="outline" onClick={onRequestCancel} disabled={cancelling}>
+                    <XCircle className="h-4 w-4" aria-hidden />
+                    Cancel booking
+                  </Button>
+                ) : blockedReason ? (
+                  <p className="text-sm text-muted-foreground">{blockedReason}</p>
+                ) : null}
                 <Link
                   href={buildCalendarHref(item)}
                   target="_blank"
@@ -418,6 +404,7 @@ export function ApplicantInspectionsPage() {
   const fromListingId = searchParams.get("listingId");
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<InspectionTab>("upcoming");
+  const [cancelTarget, setCancelTarget] = useState<EnrichedInspection | null>(null);
 
   const normalizedFromListing =
     fromListingId != null && fromListingId.trim() !== "" ? normalizeListingRouteId(fromListingId) : null;
@@ -452,13 +439,18 @@ export function ApplicantInspectionsPage() {
 
   const cancelMutation = useMutation({
     mutationFn: (inspectionId: number) => cancelInspection(inspectionId),
-    onSuccess: () => {
-      toast.success("Inspection cancelled.");
+    onSuccess: (_data, inspectionId) => {
+      toast.success("Booking cancelled. The time slot is open for others.");
+      setCancelTarget(null);
       void queryClient.invalidateQueries({ queryKey: ["applicant-inspections", user?.id] });
       void queryClient.invalidateQueries({ queryKey: ["applicant-dashboard-overview", user?.id] });
+      const listingId = inspectionsQuery.data?.items.find((row) => row.inspection.id === inspectionId)?.listing?.id;
+      if (listingId) {
+        void queryClient.invalidateQueries({ queryKey: ["listing-open-slots", String(listingId)] });
+      }
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "We couldn't cancel this inspection.");
+      toast.error(inspectionCancelErrorMessage(error));
     },
   });
 
@@ -494,33 +486,52 @@ export function ApplicantInspectionsPage() {
 
   const activeItems = grouped[activeTab];
 
+  const cancelWindowLabel = cancelTarget?.slot
+    ? formatInspectionWindow(cancelTarget.slot.startsAt, cancelTarget.slot.endsAt)
+    : cancelTarget?.listing?.title ?? "this visit";
+
   return (
     <div className="space-y-6">
       {bookingHeader}
 
+      <InspectionActionDialog
+        open={cancelTarget != null}
+        onOpenChange={(open) => {
+          if (!open) setCancelTarget(null);
+        }}
+        title="Cancel this booking?"
+        destructive
+        confirmLabel="Cancel booking"
+        pending={cancelMutation.isPending}
+        onConfirm={() => {
+          if (cancelTarget) cancelMutation.mutate(cancelTarget.inspection.id);
+        }}
+        description={
+          <>
+            <p>
+              You are cancelling your request for <strong className="text-foreground">{cancelWindowLabel}</strong>.
+              Haven frees the slot so other applicants can book it.
+            </p>
+            <p>This only works while your request is still pending. Approved visits need the host to update the booking.</p>
+          </>
+        }
+      />
+
       <DashboardPageIntro
         eyebrow="Inspections"
         title="My inspections"
-        description="Keep every booking in view, add confirmed visits to your calendar, and quickly recover if a slot changes."
+        description="Keep every booking in view, add approved visits to your calendar, and quickly recover if a slot changes."
       />
 
       <SectionCard title="Inspection tabs" description="Switch between your upcoming, past, and cancelled bookings.">
-        <div className="flex flex-wrap gap-3">
-          {(Object.keys(TAB_LABELS) as InspectionTab[]).map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => setActiveTab(tab)}
-              className={
-                activeTab === tab
-                  ? "rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
-                  : "rounded-full border border-border bg-background px-4 py-2 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
-              }
-            >
-              {TAB_LABELS[tab]}
-            </button>
-          ))}
-        </div>
+        <InspectionTabFilters
+          value={activeTab}
+          onChange={(tab) => setActiveTab(tab as InspectionTab)}
+          options={(Object.keys(TAB_LABELS) as InspectionTab[]).map((tab) => ({
+            label: TAB_LABELS[tab],
+            value: tab,
+          }))}
+        />
       </SectionCard>
 
       {activeItems.length === 0 ? (
@@ -532,8 +543,8 @@ export function ApplicantInspectionsPage() {
               key={item.inspection.id}
               item={item}
               tab={activeTab}
-              onCancel={() => cancelMutation.mutate(item.inspection.id)}
-              cancelling={cancelMutation.isPending}
+              onRequestCancel={() => setCancelTarget(item)}
+              cancelling={cancelMutation.isPending && cancelTarget?.inspection.id === item.inspection.id}
             />
           ))}
         </div>

@@ -9,7 +9,7 @@ export function DreamAiDashboardCard({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "flex flex-col overflow-hidden rounded-3xl border border-border/70 bg-white text-foreground shadow-none",
+        "flex flex-col overflow-hidden border border-border bg-white text-foreground shadow-none",
         className,
       )}
     >

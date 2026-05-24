@@ -147,7 +147,7 @@ export function AgentDashboardPage() {
                       <p className="text-sm font-medium text-foreground">{inspection.listing?.title ?? "Managed listing"}</p>
                       <p className="mt-1 text-sm text-muted-foreground">{inspection.applicantName}</p>
                     </div>
-                    <StatusBadge label={inspection.statusLabel} variant={inspection.localStatus === "confirmed" ? "success" : "secondary"} />
+                    <StatusBadge label={inspection.statusLabel} variant={inspection.localStatus === "approved" ? "success" : "secondary"} />
                   </div>
                   <p className="mt-3 text-sm text-muted-foreground">{formatDateTime(inspection.requestedAt)}</p>
                 </div>

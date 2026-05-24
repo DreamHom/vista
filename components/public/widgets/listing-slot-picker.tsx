@@ -1,131 +1,120 @@
 "use client";
 
 /**
- * In-page inspection slot picker for `/listings/[id]`.
- *
- * Previously the listing detail page just deep-linked authenticated applicants
- * out to `/dashboard/inspections?listingId=…` — a two-screen booking that lost
- * the listing context. This widget lets the same booking happen inline:
- *
- *   • Guest                        → preview slots, sign-up CTA
- *   • Applicant w/ open slots      → pick a day → pick a slot → optional notes → book
- *   • Applicant w/ no open slots   → tap "Request a custom time" → write a note → posts as a public comment on the listing so the owner can create a matching slot
- *   • Owner / agent of the listing → informational only, no booking
- *
- * Visual language matches the listing detail style: hairline borders, square
- * surfaces, eyebrow labels, primary brand-black CTAs.
+ * Calendly-style inspection booking on `/listings/[id]`.
+ * Applicants pick a published day, then a time window, then confirm in one step.
  */
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { CalendarClock, Check, MessageSquare, Sparkles } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { CalendarClock, Check, ChevronDown, MessageSquare } from "lucide-react";
 
+import { InspectionSlotBookingCalendar } from "@/components/inspection/inspection-slot-booking-calendar";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { useAuth } from "@/lib/use-auth";
 import { ApiError } from "@/lib/api";
-import { postListingComment, requestInspection } from "@/lib/applicant-dashboard";
+import { apiErrorMessage } from "@/lib/api-error-message";
+import { inspectionSlotClaimErrorMessage } from "@/lib/inspection-slot-errors";
+import { fetchListingBookingSlots, postListingComment, requestInspection } from "@/lib/applicant-dashboard";
+import {
+  formatSlotBookingLabel,
+  groupInspectionSlotsByDay,
+  type InspectionSlotInput,
+  toInspectionSlotInputs,
+  upcomingInspectionSlots,
+} from "@/lib/inspection-slots";
 import { cn } from "@/lib/utils";
 
-export interface SlotInput {
-  id: string;
-  startsAt: string;
-  endsAt: string;
-}
+export type SlotInput = InspectionSlotInput;
 
 interface ListingSlotPickerProps {
   listingId: string;
-  /** Open slots; pre-filtered upstream is fine, we re-filter to be safe. */
   slots: SlotInput[];
-  /** When provided, hides booking UI for the listing's own owner/agent. */
   ownerId?: string;
   agentId?: string | null;
 }
 
-const dayFormatter = new Intl.DateTimeFormat("en-NG", {
-  weekday: "long",
-  month: "long",
-  day: "numeric",
-});
-
-const timeFormatter = new Intl.DateTimeFormat("en-NG", {
-  hour: "numeric",
-  minute: "2-digit",
-});
-
-/**
- * Group future-only slots by ISO day. Past slots are filtered out using a
- * 5-minute grace window (matches what the dashboard inspections page does)
- * so a slot that just started doesn't disappear mid-booking.
- */
-function groupByDay(slots: SlotInput[]) {
-  const cutoff = Date.now() - 5 * 60 * 1000;
-  const upcoming = slots
-    .filter((slot) => new Date(slot.startsAt).getTime() >= cutoff)
-    .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
-
-  const map = new Map<string, SlotInput[]>();
-  for (const slot of upcoming) {
-    const key = slot.startsAt.slice(0, 10);
-    const list = map.get(key) ?? [];
-    list.push(slot);
-    map.set(key, list);
-  }
-  return [...map.entries()].sort(([left], [right]) => left.localeCompare(right));
-}
-
-export function ListingSlotPicker({
-  listingId,
-  slots,
-  ownerId,
-  agentId,
-}: ListingSlotPickerProps) {
+export function ListingSlotPicker({ listingId, slots, ownerId, agentId }: ListingSlotPickerProps) {
   const { hydrated, isAuthenticated, user } = useAuth();
   const router = useRouter();
   const queryClient = useQueryClient();
 
-  const grouped = useMemo(() => groupByDay(slots), [slots]);
-  const upcomingCount = grouped.reduce((sum, [, items]) => sum + items.length, 0);
+  const slotsQuery = useQuery({
+    queryKey: ["listing-open-slots", listingId],
+    queryFn: async () => toInspectionSlotInputs(await fetchListingBookingSlots(listingId)),
+    initialData: slots,
+    enabled: Boolean(listingId),
+    staleTime: 5_000,
+    refetchOnWindowFocus: true,
+    refetchInterval: (query) => {
+      const role = hydrated && isAuthenticated ? user?.role : undefined;
+      const applicant = role === "APPLICANT";
+      if (!applicant) return false;
+      const data = query.state.data ?? slots;
+      return upcomingInspectionSlots(data).length > 0 ? 30_000 : false;
+    },
+  });
 
-  // Role gates the experience, but we keep all hooks above this line so order
-  // is stable across renders (React requires it).
+  const liveSlots = slotsQuery.data ?? slots;
+  const upcoming = useMemo(() => upcomingInspectionSlots(liveSlots), [liveSlots]);
+  const grouped = useMemo(() => groupInspectionSlotsByDay(liveSlots), [liveSlots]);
+  const upcomingCount = upcoming.length;
+
   const role = hydrated && isAuthenticated ? user?.role : undefined;
   const isOwnerOrAgent =
-    role === "OWNER" || role === "AGENT" || role === "ADMIN" ||
+    role === "OWNER" ||
+    role === "AGENT" ||
+    role === "ADMIN" ||
     user?.id?.toString() === ownerId ||
     (agentId != null && user?.id?.toString() === agentId);
   const isApplicant = role === "APPLICANT";
+  const canBook = hydrated && isApplicant;
 
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
+  const [notesOpen, setNotesOpen] = useState(false);
   const [notes, setNotes] = useState("");
   const [fallbackMessage, setFallbackMessage] = useState("");
   const [fallbackOpen, setFallbackOpen] = useState(false);
+  const [bookedSlotLabel, setBookedSlotLabel] = useState<string | null>(null);
+
+  const selectedSlot = useMemo(
+    () => upcoming.find((slot) => slot.id === selectedSlotId) ?? null,
+    [upcoming, selectedSlotId],
+  );
 
   const bookMutation = useMutation({
     mutationFn: () => {
-      if (!selectedSlotId) throw new Error("Pick a slot first.");
+      if (!selectedSlot) throw new Error("Pick a time first.");
       return requestInspection({
-        slotId: Number(selectedSlotId),
+        slotId: Number(selectedSlot.id),
         notes: notes.trim() || undefined,
       });
     },
     onSuccess: () => {
-      toast.success("Inspection requested. You'll see it on My Inspections.");
+      const label = selectedSlot ? formatSlotBookingLabel(selectedSlot) : null;
       void queryClient.invalidateQueries({ queryKey: ["applicant-inspections"] });
+      setBookedSlotLabel(label);
       setSelectedSlotId(null);
       setNotes("");
-      // Drop the user on their inspections workspace so they can see the new
-      // entry pending owner acceptance.
-      router.push(`/dashboard/inspections?listingId=${encodeURIComponent(listingId)}`);
+      setNotesOpen(false);
+      toast.success("Visit requested. The owner will confirm your slot.");
     },
     onError: (error) => {
       if (error instanceof ApiError) {
         if (error.status === 409) {
-          toast.error("That slot was just taken. Pick another time.");
-          router.refresh();
+          toast.error(inspectionSlotClaimErrorMessage(error));
+          setSelectedSlotId(null);
+          void slotsQuery.refetch();
+          return;
+        }
+        if (error.status === 422) {
+          toast.error(
+            apiErrorMessage(error, "You already have a request on this listing. Check My inspections."),
+          );
           setSelectedSlotId(null);
           return;
         }
@@ -138,7 +127,7 @@ export function ListingSlotPicker({
           return;
         }
       }
-      toast.error(error instanceof Error ? error.message : "We couldn't book this slot.");
+      toast.error(inspectionSlotClaimErrorMessage(error));
     },
   });
 
@@ -146,147 +135,137 @@ export function ListingSlotPicker({
     mutationFn: () => {
       const body = fallbackMessage.trim();
       if (!body) throw new Error("Add a short note so the owner can respond.");
-      return postListingComment(listingId, `🗓️ Custom inspection request: ${body}`);
+      return postListingComment(listingId, `Custom inspection request: ${body}`);
     },
     onSuccess: () => {
-      toast.success("Request sent. The owner will reply with available times.");
+      toast.success("Request sent. The owner can add matching slots on their calendar.");
       setFallbackMessage("");
       setFallbackOpen(false);
       router.refresh();
     },
-    onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "We couldn't send that request.");
-    },
+    onError: (error) => toast.error(apiErrorMessage(error, "We couldn't send that request.")),
   });
 
   return (
-    <section
-      id="schedule-inspection"
-      className="scroll-mt-24 border border-border bg-card p-6 md:p-8"
-    >
+    <section id="schedule-inspection" className="scroll-mt-24 border border-border bg-card p-6 md:p-8">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-eyebrow text-muted-foreground">
-            Schedule a visit
-          </p>
+          <p className="text-xs font-semibold uppercase tracking-eyebrow text-muted-foreground">Schedule a visit</p>
           <h2 className="mt-1 text-xl font-semibold tracking-tight md:text-2xl">
-            {upcomingCount === 0
-              ? "No slots yet; ask for a time"
-              : upcomingCount === 1
-                ? "1 open inspection slot"
-                : `${upcomingCount} open inspection slots`}
+            {upcomingCount === 0 ? "No open times yet" : "Pick a time that works for you"}
           </h2>
+          <p className="mt-2 max-w-xl text-sm text-muted-foreground">
+            The owner published fixed windows on their calendar. Choose a day, tap a time, and send your request in
+            one step, like Calendly.
+          </p>
         </div>
-        {isApplicant && upcomingCount > 0 ? (
-          <span className="inline-flex items-center gap-1.5 border border-border bg-secondary px-2.5 py-1 text-[11px] uppercase tracking-eyebrow text-muted-foreground">
-            <Sparkles className="h-3 w-3" aria-hidden />
-            One-tap booking
-          </span>
-        ) : null}
       </div>
 
-      {/* OWNER / AGENT viewing their own listing → informational only */}
-      {hydrated && isOwnerOrAgent ? (
-        <div className="mt-6 border border-dashed border-border p-4 text-sm text-muted-foreground">
-          You manage this listing. Applicants will book the slots you create from{" "}
-          <Link
-            href={role === "AGENT" ? "/agent/inspections" : "/owner/inspections"}
-            className="font-medium text-primary hover:text-primary/80"
-          >
-            Inspection slots
-          </Link>
-          .
+      {bookedSlotLabel ? (
+        <div className="mt-6 border border-border bg-secondary/30 p-5">
+          <div className="flex items-start gap-3">
+            <span
+              aria-hidden
+              className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center bg-primary text-primary-foreground"
+            >
+              <Check className="h-4 w-4" />
+            </span>
+            <div className="min-w-0">
+              <p className="font-semibold tracking-tight text-foreground">Request sent</p>
+              <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                You asked to visit on{" "}
+                <span className="font-medium text-foreground">{bookedSlotLabel}</span>. The owner will confirm. Track
+                it under My inspections.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Link
+                  href="/dashboard/inspections"
+                  className={cn(buttonVariants({ variant: "primary", size: "sm" }), "h-10")}
+                >
+                  View My inspections
+                </Link>
+                {upcomingCount > 0 ? (
+                  <Button type="button" variant="outline" size="sm" className="h-10" onClick={() => setBookedSlotLabel(null)}>
+                    Book another time
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          </div>
         </div>
       ) : null}
 
-      {/* Has slots → tile picker (guest preview if not signed in) */}
-      {!isOwnerOrAgent && upcomingCount > 0 ? (
-        <div className="mt-6 space-y-5">
-          {grouped.map(([day, slotsForDay]) => (
-            <div key={day}>
-              <p className="text-xs font-semibold uppercase tracking-eyebrow text-muted-foreground">
-                {dayFormatter.format(new Date(`${day}T00:00:00`))}
-              </p>
-              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
-                {slotsForDay.map((slot) => {
-                  const active = selectedSlotId === slot.id;
-                  return (
-                    <button
-                      key={slot.id}
-                      type="button"
-                      onClick={() => {
-                        if (!isApplicant) return;
-                        setSelectedSlotId(active ? null : slot.id);
-                      }}
-                      disabled={!isApplicant || bookMutation.isPending}
-                      aria-pressed={active}
-                      className={cn(
-                        "group flex flex-col items-start gap-1 border px-3 py-2.5 text-left text-sm transition-colors",
-                        active
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : "border-border bg-secondary/30 text-foreground hover:bg-secondary",
-                        !isApplicant && "cursor-default hover:bg-secondary/30",
-                      )}
-                    >
-                      <span className="text-xs uppercase tracking-eyebrow opacity-70">
-                        {new Date(slot.startsAt).toLocaleDateString("en-NG", {
-                          month: "short",
-                          day: "numeric",
-                        })}
-                      </span>
-                      <span className="font-medium tabular-nums">
-                        {timeFormatter.format(new Date(slot.startsAt))}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+      {!bookedSlotLabel && hydrated && isOwnerOrAgent ? (
+        <div className="mt-6 border border-dashed border-border p-4 text-sm text-muted-foreground">
+          You manage this listing. Add bookable windows from{" "}
+          <Link
+            href={role === "AGENT" ? "/agent/inspections" : "/owner/inspections"}
+            className="font-medium text-accent hover:underline"
+          >
+            Inspection slots
+          </Link>
+          . Applicants only see the times you publish.
+        </div>
+      ) : null}
 
-          {/* Applicant booking strip */}
-          {isApplicant && selectedSlotId ? (
-            <div className="mt-6 space-y-3 border-t border-border pt-5">
-              <label className="block">
-                <span className="text-xs font-semibold uppercase tracking-eyebrow text-muted-foreground">
-                  Optional note for the owner
-                </span>
+      {!bookedSlotLabel && !isOwnerOrAgent && upcomingCount > 0 ? (
+        <div className="mt-6 space-y-4">
+          <InspectionSlotBookingCalendar
+            slots={liveSlots}
+            selectedSlotId={selectedSlotId}
+            onSelectSlot={setSelectedSlotId}
+            interactive={canBook}
+          />
+
+          <p className="text-xs text-muted-foreground">
+            Each time is exclusive. If two people tap the same slot, Haven keeps the first claim and returns an
+            error to the other.
+          </p>
+
+          {canBook && selectedSlot ? (
+            <div className="border border-border bg-secondary/20 p-4 md:p-5">
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <CalendarClock className="h-4 w-4 shrink-0 text-accent" aria-hidden />
+                <span className="text-muted-foreground">Your visit</span>
+                <span className="font-semibold text-foreground">{formatSlotBookingLabel(selectedSlot)}</span>
+              </div>
+
+              <button
+                type="button"
+                className="mt-3 flex w-full items-center justify-between gap-2 border border-border bg-card px-3 py-2 text-left text-sm text-muted-foreground hover:bg-secondary/50"
+                onClick={() => setNotesOpen((open) => !open)}
+                aria-expanded={notesOpen}
+              >
+                <span>Add a note for the owner (optional)</span>
+                <ChevronDown className={cn("h-4 w-4 shrink-0 transition-transform", notesOpen && "rotate-180")} aria-hidden />
+              </button>
+
+              {notesOpen ? (
                 <Textarea
                   value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Anything they should know: pets, group size, accessibility needs."
+                  onChange={(event) => setNotes(event.target.value)}
+                  placeholder="Pets, group size, parking, accessibility needs."
                   rows={3}
                   className="mt-2"
                 />
-              </label>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-xs text-muted-foreground">
-                  Booking sends the request to the owner. You'll see it under{" "}
-                  <Link href="/dashboard/inspections" className="text-primary hover:text-primary/80">
-                    My inspections
-                  </Link>
-                  .
-                </p>
-                <Button
-                  type="button"
-                  onClick={() => bookMutation.mutate()}
-                  disabled={bookMutation.isPending}
-                  size="lg"
-                  className="h-11 gap-2"
-                >
-                  <Check className="h-4 w-4" aria-hidden />
-                  {bookMutation.isPending ? "Booking…" : "Book this slot"}
-                </Button>
-              </div>
+              ) : null}
+
+              <Button
+                type="button"
+                size="lg"
+                className="mt-4 h-12 w-full gap-2 sm:w-auto sm:min-w-[14rem]"
+                disabled={bookMutation.isPending}
+                onClick={() => bookMutation.mutate()}
+              >
+                <Check className="h-4 w-4" aria-hidden />
+                {bookMutation.isPending ? "Sending request…" : "Request this visit"}
+              </Button>
             </div>
           ) : null}
 
-          {/* Guest preview footer */}
           {hydrated && !isAuthenticated ? (
-            <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5">
-              <p className="text-sm text-muted-foreground">
-                Sign in as an applicant to book a slot directly from this page.
-              </p>
+            <div className="flex flex-wrap items-center justify-between gap-3 border border-border bg-secondary/30 p-4">
+              <p className="text-sm text-muted-foreground">Sign in as an applicant to book a published time.</p>
               <div className="flex gap-2">
                 <Link
                   href={`/login?next=${encodeURIComponent(`/listings/${listingId}#schedule-inspection`)}`}
@@ -304,22 +283,23 @@ export function ListingSlotPicker({
             </div>
           ) : null}
 
-          {/* Wrong-role footer (signed in as owner / agent / admin browsing) */}
-          {isApplicant ? null : hydrated && isAuthenticated && !isOwnerOrAgent ? (
-            <p className="mt-6 border-t border-border pt-5 text-sm text-muted-foreground">
-              Inspection bookings are reserved for applicant accounts. Switch profiles to book.
+          {hydrated && isAuthenticated && !isOwnerOrAgent && !isApplicant ? (
+            <p className="text-sm text-muted-foreground">Inspection bookings are for applicant accounts.</p>
+          ) : null}
+
+          {canBook && !selectedSlot ? (
+            <p className="text-center text-sm text-muted-foreground">
+              {grouped.length} day{grouped.length === 1 ? "" : "s"} with open times · select a slot to continue
             </p>
           ) : null}
         </div>
       ) : null}
 
-      {/* No slots → applicant can ping the owner publicly */}
-      {!isOwnerOrAgent && upcomingCount === 0 ? (
+      {!bookedSlotLabel && !isOwnerOrAgent && upcomingCount === 0 ? (
         <div className="mt-6 space-y-4">
           <p className="text-sm leading-relaxed text-muted-foreground">
-            The owner hasn't published inspection slots yet. You can drop a public
-            note with your preferred time; they'll create a matching slot and
-            confirm.
+            The owner has not published inspection times yet. Ask for a window you prefer; they can add matching slots
+            to their calendar.
           </p>
 
           {hydrated && isApplicant ? (
@@ -327,17 +307,17 @@ export function ListingSlotPicker({
               <div className="space-y-3 border border-border p-4">
                 <label className="block">
                   <span className="text-xs font-semibold uppercase tracking-eyebrow text-muted-foreground">
-                    Preferred time + a short note
+                    When works for you?
                   </span>
                   <Textarea
                     value={fallbackMessage}
-                    onChange={(e) => setFallbackMessage(e.target.value)}
-                    placeholder="e.g. Saturday afternoon, anytime after 2 PM. Coming with my partner."
+                    onChange={(event) => setFallbackMessage(event.target.value)}
+                    placeholder="e.g. Saturday after 2 PM. Two people visiting."
                     rows={3}
                     className="mt-2"
                   />
                 </label>
-                <div className="flex flex-wrap items-center justify-end gap-2">
+                <div className="flex flex-wrap justify-end gap-2">
                   <Button
                     type="button"
                     variant="ghost"
@@ -352,8 +332,8 @@ export function ListingSlotPicker({
                   <Button
                     type="button"
                     size="sm"
-                    onClick={() => requestMutation.mutate()}
                     disabled={requestMutation.isPending || !fallbackMessage.trim()}
+                    onClick={() => requestMutation.mutate()}
                     className="gap-2"
                   >
                     <MessageSquare className="h-4 w-4" aria-hidden />
@@ -362,13 +342,7 @@ export function ListingSlotPicker({
                 </div>
               </div>
             ) : (
-              <Button
-                type="button"
-                onClick={() => setFallbackOpen(true)}
-                variant="outline"
-                size="lg"
-                className="gap-2"
-              >
+              <Button type="button" variant="outline" size="lg" className="gap-2" onClick={() => setFallbackOpen(true)}>
                 <CalendarClock className="h-4 w-4" aria-hidden />
                 Request a custom time
               </Button>

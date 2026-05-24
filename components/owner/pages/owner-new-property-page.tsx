@@ -68,6 +68,7 @@ import {
   type OwnerPropertyFormDraft,
 } from "@/lib/owner-dashboard";
 import { useAuth } from "@/lib/use-auth";
+import { ApiError, NetworkError } from "@/lib/api";
 import { formatGroupedIntegerInput, formatNaira, formatStoredGroupedInteger, parseGroupedNumberInput } from "@/lib/format";
 import {
   DashboardPageIntro,
@@ -112,6 +113,53 @@ type PendingListingPhoto = {
   caption: string;
   previewUrl: string;
 };
+
+type PhotoUploadFailure = { fileName: string; reason: string };
+
+type SubmitResult = {
+  propertyId: number;
+  photoAttempted: number;
+  photoSucceeded: number;
+  photoFailures: PhotoUploadFailure[];
+  docFailure: string | null;
+};
+
+/**
+ * Map errors from `uploadOwnerListingPhoto` / `submitPropertyDocumentsVerification`
+ * to per-file human messages. Different statuses are different stories: 413 is
+ * "your file's too big", 415 is "wrong format", 5xx is "haven is having a bad
+ * day". The generic "upload failed" is reserved for truly unknown errors.
+ */
+function describeUploadError(err: unknown, fileName: string): string {
+  if (err instanceof ApiError) {
+    switch (err.status) {
+      case 401:
+        return `${fileName}: session expired, sign in again`;
+      case 403:
+        return `${fileName}: not permitted to attach photos here`;
+      case 413:
+        return `${fileName}: too large, try compressing below ~10 MB`;
+      case 415:
+        return `${fileName}: unsupported format (use JPG, PNG, or WEBP)`;
+      case 422:
+        return `${fileName}: ${err.problem?.detail ?? "rejected by haven"}`;
+      case 429:
+        return `${fileName}: too many uploads at once, try again in a moment`;
+      default:
+        if (err.status >= 500) {
+          return `${fileName}: haven couldn't store this one (status ${err.status})`;
+        }
+        return `${fileName}: ${err.problem?.detail ?? err.message}`;
+    }
+  }
+  if (err instanceof NetworkError) {
+    return `${fileName}: lost connection during upload`;
+  }
+  if (err instanceof Error) {
+    return `${fileName}: ${err.message}`;
+  }
+  return `${fileName}: upload failed`;
+}
 
 function makePendingPhoto(file: File): PendingListingPhoto {
   return {
@@ -217,8 +265,10 @@ export function OwnerNewPropertyPage() {
     });
   }
 
-  const submitMutation = useMutation({
-    mutationFn: async () => {
+  const submitMutation = useMutation<SubmitResult>({
+    mutationFn: async (): Promise<SubmitResult> => {
+      // Property + listing are the "atomic" pre-flight: if either fails, the
+      // whole submission is treated as failed and the draft stays put.
       const property = await createOwnerProperty({
         address: draft.basic.address,
         type: draft.basic.type,
@@ -241,37 +291,125 @@ export function OwnerNewPropertyPage() {
         handoverDate: draft.terms.availabilityDate || undefined,
       });
 
+      // Photos: each file gets its own try/catch so one bad file doesn't kill
+      // the rest. A 201 with an empty `url` counts as failure too — haven would
+      // otherwise report success while the photo never persisted.
       const uploadQueue = pendingPhotosRef.current;
+      const photoFailures: PhotoUploadFailure[] = [];
+      let photoSucceeded = 0;
+
       for (const item of uploadQueue) {
-        await uploadOwnerListingPhoto(
-          listing.id,
-          item.file,
-          item.caption.trim() ? item.caption.trim() : undefined,
-        );
+        try {
+          const response = await uploadOwnerListingPhoto(
+            listing.id,
+            item.file,
+            item.caption.trim() ? item.caption.trim() : undefined,
+          );
+          if (!response?.url || !response.url.trim()) {
+            photoFailures.push({
+              fileName: item.file.name,
+              reason: `${item.file.name}: haven accepted the upload but didn't return a URL`,
+            });
+          } else {
+            photoSucceeded += 1;
+          }
+        } catch (err) {
+          photoFailures.push({
+            fileName: item.file.name,
+            reason: describeUploadError(err, item.file.name),
+          });
+        }
       }
 
+      // Documents: also non-blocking. If property/listing are saved, we don't
+      // want a verification snag to throw out the entire submission.
+      let docFailure: string | null = null;
       if (docFiles.length > 0) {
-        await submitPropertyDocumentsVerification(property.id, docFiles);
+        try {
+          await submitPropertyDocumentsVerification(property.id, docFiles);
+        } catch (err) {
+          docFailure = describeUploadError(err, "Property documents");
+        }
       }
 
-      return property.id;
+      return {
+        propertyId: property.id,
+        photoAttempted: uploadQueue.length,
+        photoSucceeded,
+        photoFailures,
+        docFailure,
+      };
     },
-    onSuccess: async (propertyId) => {
+    onSuccess: async (result) => {
+      const { propertyId, photoAttempted, photoSucceeded, photoFailures, docFailure } = result;
+
       const snapshot = [...pendingPhotosRef.current];
       for (const p of snapshot) {
         URL.revokeObjectURL(p.previewUrl);
       }
       setPendingPhotos([]);
-      toast.success("Property created and listing published.");
       if (user) saveOwnerPropertyDraft(user.id, DEFAULT_PROPERTY_DRAFT);
+
+      const describeFailures = (failures: PhotoUploadFailure[]) => {
+        const top = failures.slice(0, 3).map((f) => f.reason).join(" · ");
+        const more = failures.length > 3 ? ` (and ${failures.length - 3} more)` : "";
+        return `${top}${more}`;
+      };
+
+      if (photoFailures.length === 0 && !docFailure) {
+        toast.success("Property created and listing published.");
+      } else if (photoAttempted > 0 && photoFailures.length === photoAttempted) {
+        // Property + listing live, but every photo failed. Send the user to the
+        // detail page where they can re-upload from the gallery section.
+        toast.error("Property and listing saved. Photos didn't upload.", {
+          description: `${describeFailures(photoFailures)} · Re-upload from the property page.`,
+        });
+      } else if (photoFailures.length > 0) {
+        toast.warning(`${photoSucceeded} of ${photoAttempted} photos uploaded.`, {
+          description: describeFailures(photoFailures),
+        });
+      }
+
+      if (docFailure) {
+        toast.error("Property documents couldn't be submitted for verification.", {
+          description: `${docFailure} · You can resubmit from the property page.`,
+        });
+      }
+
       await queryClient.invalidateQueries({ queryKey: ["owner-properties"] });
       if (user) {
         await queryClient.invalidateQueries({ queryKey: ["owner-property", user.id, propertyId] });
       }
       router.push(`/owner/properties/${propertyId}`);
     },
-    onError: () => {
-      toast.error("We couldn't complete the full property submission. Your draft is still here.");
+    onError: (err: unknown) => {
+      // Only fires if property OR listing creation throws. Photos and docs are
+      // captured inside mutationFn and reported via onSuccess.
+      if (err instanceof ApiError) {
+        if (err.isUnauthorized) {
+          toast.error("Your session ended.", {
+            description: "Sign in again, your draft is still saved on this device.",
+          });
+        } else if (err.isValidation) {
+          toast.error("Haven flagged something on the form.", {
+            description: err.problem?.detail ?? err.problem?.title ?? "Check the fields above and try again.",
+          });
+        } else if (err.status >= 500) {
+          toast.error("Haven is having trouble right now.", {
+            description: "Your draft is safe. Try again in a moment.",
+          });
+        } else {
+          toast.error("We couldn't create the property.", {
+            description: err.problem?.detail ?? err.message,
+          });
+        }
+      } else if (err instanceof NetworkError) {
+        toast.error("Lost connection.", {
+          description: "Your draft is safe. Reconnect and try again.",
+        });
+      } else {
+        toast.error("We couldn't complete the property submission. Your draft is still here.");
+      }
     },
   });
 
@@ -420,47 +558,72 @@ export function OwnerNewPropertyPage() {
             </div>
             <div className="space-y-2">
               <FieldLabel>Asking price</FieldLabel>
-              <Input
-                inputMode="numeric"
-                value={draft.terms.askingPrice}
-                onChange={(event) =>
-                  updateDraft({ terms: { ...draft.terms, askingPrice: formatGroupedIntegerInput(event.target.value) } })
-                }
-                placeholder="e.g. 8,500,000"
-              />
+              <div className="relative">
+                <span aria-hidden className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground tabular-nums">₦</span>
+                <Input
+                  inputMode="numeric"
+                  className="pl-7 tabular-nums"
+                  value={draft.terms.askingPrice}
+                  onChange={(event) =>
+                    updateDraft({ terms: { ...draft.terms, askingPrice: formatGroupedIntegerInput(event.target.value) } })
+                  }
+                  placeholder="8,500,000"
+                />
+              </div>
             </div>
             <div className="space-y-2">
-              <FieldLabel>Caution fee</FieldLabel>
-              <Input
-                inputMode="numeric"
-                value={draft.terms.cautionFee}
-                onChange={(event) =>
-                  updateDraft({ terms: { ...draft.terms, cautionFee: formatGroupedIntegerInput(event.target.value) } })
-                }
-                placeholder="e.g. 500,000"
-              />
+              <FieldLabel>
+                Caution fee
+                <span className="ml-2 text-[10px] font-normal uppercase tracking-eyebrow text-muted-foreground">Optional</span>
+              </FieldLabel>
+              <div className="relative">
+                <span aria-hidden className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground tabular-nums">₦</span>
+                <Input
+                  inputMode="numeric"
+                  className="pl-7 tabular-nums"
+                  value={draft.terms.cautionFee}
+                  onChange={(event) =>
+                    updateDraft({ terms: { ...draft.terms, cautionFee: formatGroupedIntegerInput(event.target.value) } })
+                  }
+                  placeholder="Leave empty if none"
+                />
+              </div>
             </div>
             <div className="space-y-2">
-              <FieldLabel>Service charge</FieldLabel>
-              <Input
-                inputMode="numeric"
-                value={draft.terms.serviceCharge}
-                onChange={(event) =>
-                  updateDraft({ terms: { ...draft.terms, serviceCharge: formatGroupedIntegerInput(event.target.value) } })
-                }
-                placeholder="e.g. 150,000"
-              />
+              <FieldLabel>
+                Service charge
+                <span className="ml-2 text-[10px] font-normal uppercase tracking-eyebrow text-muted-foreground">Optional</span>
+              </FieldLabel>
+              <div className="relative">
+                <span aria-hidden className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground tabular-nums">₦</span>
+                <Input
+                  inputMode="numeric"
+                  className="pl-7 tabular-nums"
+                  value={draft.terms.serviceCharge}
+                  onChange={(event) =>
+                    updateDraft({ terms: { ...draft.terms, serviceCharge: formatGroupedIntegerInput(event.target.value) } })
+                  }
+                  placeholder="Leave empty if none"
+                />
+              </div>
             </div>
             <div className="space-y-2">
-              <FieldLabel>Agency fee</FieldLabel>
-              <Input
-                inputMode="numeric"
-                value={draft.terms.agencyFee}
-                onChange={(event) =>
-                  updateDraft({ terms: { ...draft.terms, agencyFee: formatGroupedIntegerInput(event.target.value) } })
-                }
-                placeholder="e.g. 850,000"
-              />
+              <FieldLabel>
+                Agency fee
+                <span className="ml-2 text-[10px] font-normal uppercase tracking-eyebrow text-muted-foreground">Optional</span>
+              </FieldLabel>
+              <div className="relative">
+                <span aria-hidden className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground tabular-nums">₦</span>
+                <Input
+                  inputMode="numeric"
+                  className="pl-7 tabular-nums"
+                  value={draft.terms.agencyFee}
+                  onChange={(event) =>
+                    updateDraft({ terms: { ...draft.terms, agencyFee: formatGroupedIntegerInput(event.target.value) } })
+                  }
+                  placeholder="Leave empty if none"
+                />
+              </div>
             </div>
             <div className="md:col-span-2">
               <SettingsToggle

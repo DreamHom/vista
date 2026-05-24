@@ -506,6 +506,10 @@ export async function markAllNotificationsRead() {
   return api.post<{ marked: number }>("/notifications/mark-all-read");
 }
 
+export async function saveListing(listingId: number) {
+  return api.post<void>(`/listings/${listingId}/save`, {});
+}
+
 export async function unsaveListing(listingId: number) {
   return api.delete<void>(`/listings/${listingId}/save`);
 }

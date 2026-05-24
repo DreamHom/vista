@@ -4,7 +4,7 @@
 import { useMemo } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRightLeft, CheckCircle2, XCircle } from "lucide-react";
+import { ArrowRightLeft, CheckCircle2 } from "lucide-react";
 import {
   DashboardPageIntro,
   EmptyPanel,
@@ -12,6 +12,8 @@ import {
   LoadingPanel,
   StatusBadge,
 } from "@/components/dashboard/applicant-ui";
+import { InspectionMoreMenu } from "@/components/inspection/inspection-more-menu";
+import { OfferTurnBanner } from "@/components/offers/offer-turn-banner";
 import {
   listOffers,
   respondToOffer,
@@ -21,6 +23,11 @@ import { useAuth } from "@/lib/use-auth";
 import { toast } from "@/components/ui/toast";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { formatNaira } from "@/lib/format";
+import {
+  applicantCanRespondToCounter,
+  applicantOfferWaitingHint,
+  offerNegotiationErrorMessage,
+} from "@/lib/offer-lifecycle";
 import { fallbackListingPhoto } from "@/lib/seed/photos";
 import { formatDateTime, offerStatusLabel, offerStatusVariant } from "@/components/dashboard/utils";
 
@@ -28,6 +35,8 @@ type OfferCardView = {
   root: EnrichedOffer;
   counterOffer: EnrichedOffer | null;
   displayStatus: "COUNTER_RECEIVED" | "PENDING" | "ACCEPTED" | "DECLINED" | "WITHDRAWN" | "COUNTERED";
+  canRespondToCounter: boolean;
+  waitingHint: string | null;
 };
 
 function buildOfferViews(items: EnrichedOffer[], userId: number): OfferCardView[] {
@@ -48,20 +57,34 @@ function buildOfferViews(items: EnrichedOffer[], userId: number): OfferCardView[
         (left, right) => new Date(right.offer.createdAt).getTime() - new Date(left.offer.createdAt).getTime(),
       );
       const latestCounter = childOffers.find((item) => item.offer.proposedByUserId !== userId) ?? null;
+      const latestByViewer = childOffers.find((item) => item.offer.proposedByUserId === userId) ?? null;
 
-      if (latestCounter?.offer.status === "PENDING") {
+      const canRespond =
+        latestCounter != null && applicantCanRespondToCounter(latestCounter.offer, userId);
+
+      if (canRespond) {
         return {
           root,
           counterOffer: latestCounter,
           displayStatus: "COUNTER_RECEIVED" as const,
+          canRespondToCounter: true,
+          waitingHint: null,
         };
       }
+
+      const waitingHint = applicantOfferWaitingHint(
+        root.offer.status,
+        false,
+        latestByViewer != null && latestByViewer.offer.status === "PENDING",
+      );
 
       if (latestCounter?.offer.status) {
         return {
           root,
           counterOffer: latestCounter,
           displayStatus: latestCounter.offer.status,
+          canRespondToCounter: false,
+          waitingHint,
         };
       }
 
@@ -69,6 +92,8 @@ function buildOfferViews(items: EnrichedOffer[], userId: number): OfferCardView[
         root,
         counterOffer: null,
         displayStatus: root.offer.status,
+        canRespondToCounter: false,
+        waitingHint,
       };
     })
     .sort((left, right) => new Date(right.root.offer.updatedAt).getTime() - new Date(left.root.offer.updatedAt).getTime());
@@ -92,9 +117,9 @@ function OfferCard({
   );
 
   return (
-    <div className="rounded-3xl border border-border bg-white px-5 py-5">
+    <div className="border border-border bg-card px-5 py-5 shadow-none">
       <div className="grid gap-5 lg:grid-cols-[160px_minmax(0,1fr)]">
-        <div className="overflow-hidden rounded-2xl border border-border bg-muted">
+        <div className="overflow-hidden border border-border bg-muted">
           <img
             src={listing?.photos[0]?.url ?? fallback.url}
             alt={listing?.photos[0]?.alt ?? fallback.alt ?? listing?.title ?? `Listing #${item.root.offer.listingId}`}
@@ -118,49 +143,51 @@ function OfferCard({
             />
           </div>
 
+          {item.canRespondToCounter ? (
+            <OfferTurnBanner variant="your_turn">Your turn: accept or reject the owner&apos;s counter.</OfferTurnBanner>
+          ) : item.waitingHint ? (
+            <OfferTurnBanner>{item.waitingHint}</OfferTurnBanner>
+          ) : null}
+
           <div className="grid gap-3 md:grid-cols-3">
-            <div className="rounded-2xl border border-border px-4 py-3">
+            <div className="border border-border px-4 py-3">
               <p className="text-xs uppercase tracking-eyebrow text-muted-foreground">Your amount</p>
-              <p className="mt-2 text-lg font-semibold text-foreground">
-                {formatNaira(item.root.offer.amount)}
-              </p>
+              <p className="mt-2 text-lg font-semibold text-foreground">{formatNaira(item.root.offer.amount)}</p>
             </div>
-            <div className="rounded-2xl border border-border px-4 py-3">
+            <div className="border border-border px-4 py-3">
               <p className="text-xs uppercase tracking-eyebrow text-muted-foreground">Intent</p>
               <p className="mt-2 font-medium text-foreground">
                 {item.root.offer.intent === "BUY" ? "Buy" : item.root.offer.intent === "RENT" ? "Rent" : "Rent to buy"}
               </p>
             </div>
-            <div className="rounded-2xl border border-border px-4 py-3">
+            <div className="border border-border px-4 py-3">
               <p className="text-xs uppercase tracking-eyebrow text-muted-foreground">Submitted</p>
               <p className="mt-2 font-medium text-foreground">{formatDateTime(item.root.offer.createdAt)}</p>
             </div>
           </div>
 
           {item.counterOffer ? (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
+            <div className="border border-border bg-secondary/40 px-4 py-4">
               <div className="flex items-start gap-3">
-                <div className="mt-1 flex h-10 w-10 items-center justify-center rounded-full bg-white text-amber-700">
-                  <ArrowRightLeft className="h-4 w-4" aria-hidden />
-                </div>
+                <ArrowRightLeft className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
                 <div className="space-y-2">
-                  <p className="font-medium text-foreground">Counter amount received</p>
+                  <p className="font-medium text-foreground">Counter from the owner</p>
                   <p className="text-lg font-semibold text-foreground">
                     {formatNaira(item.counterOffer.offer.amount)}
                   </p>
                   {item.counterOffer.offer.message ? (
-                    <p className="text-sm leading-7 text-muted-foreground">{item.counterOffer.offer.message}</p>
+                    <p className="text-sm leading-relaxed text-muted-foreground">{item.counterOffer.offer.message}</p>
                   ) : null}
                 </div>
               </div>
             </div>
           ) : item.root.offer.message ? (
-            <div className="rounded-2xl border border-border px-4 py-4 text-sm leading-7 text-muted-foreground">
+            <div className="border border-border px-4 py-4 text-sm leading-relaxed text-muted-foreground">
               {item.root.offer.message}
             </div>
           ) : null}
 
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             <Link
               href={listing ? `/listings/${listing.id}` : "/listings"}
               className={buttonVariants({ variant: "outline", size: "md" })}
@@ -168,16 +195,26 @@ function OfferCard({
               View listing
             </Link>
 
-            {item.displayStatus === "COUNTER_RECEIVED" && item.counterOffer ? (
+            {item.canRespondToCounter && item.counterOffer ? (
               <>
                 <Button onClick={onAcceptCounter} disabled={actionBusy}>
                   <CheckCircle2 className="h-4 w-4" aria-hidden />
                   Accept counter
                 </Button>
-                <Button variant="outline" onClick={onRejectCounter} disabled={actionBusy}>
-                  <XCircle className="h-4 w-4" aria-hidden />
-                  Reject counter
-                </Button>
+                <InspectionMoreMenu
+                  disabled={actionBusy}
+                  menuLabel="Rejecting ends this negotiation on your counter."
+                  triggerLabel="More counter actions"
+                  items={[
+                    {
+                      id: "reject-counter",
+                      label: "Reject counter",
+                      description: "The owner can send another counter or close the thread.",
+                      destructive: true,
+                      onSelect: onRejectCounter,
+                    },
+                  ]}
+                />
               </>
             ) : null}
           </div>
@@ -206,7 +243,7 @@ export function ApplicantOffersPage() {
       void queryClient.invalidateQueries({ queryKey: ["applicant-dashboard-overview", user?.id] });
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "We couldn't update this offer.");
+      toast.error(offerNegotiationErrorMessage(error));
     },
   });
 
@@ -233,13 +270,13 @@ export function ApplicantOffersPage() {
       <DashboardPageIntro
         eyebrow="Offers"
         title="My offers"
-        description="See every offer you’ve submitted, watch how negotiations move, and respond quickly when a counter comes back."
+        description="Negotiations alternate by design: you can only respond to an offer the other party proposed, not your own."
       />
 
       {offerViews.length === 0 ? (
         <EmptyPanel
           title="You haven't made any offers yet"
-          body="When you’re ready to make a move on a listing, your submitted offers and counter history will live here."
+          body="When you're ready to make a move on a listing, your submitted offers and counter history will live here."
           ctaLabel="Browse listings"
           ctaHref="/listings"
         />

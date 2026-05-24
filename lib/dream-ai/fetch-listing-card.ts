@@ -4,6 +4,7 @@ import type { PublicListing, PublicPhoto } from "@/lib/seed/public-data";
 
 type ListingResponse = {
   id: number;
+  propertyId: number;
   ownerId: number;
   listingType: "RENT" | "SALE";
   askingPrice: number;
@@ -90,6 +91,7 @@ export async function fetchDreamAiListingCard(id: number | string): Promise<Publ
 
     return {
       id: key,
+      propertyId: String(listing.propertyId),
       ownerId: String(listing.ownerId),
       agentId: listing.assignedAgentId ? String(listing.assignedAgentId) : null,
       title: listing.title?.trim() || listing.headline?.trim() || `Listing #${key}`,
