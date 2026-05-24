@@ -69,6 +69,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 
+import { AgentAssignmentInviteCard } from "@/components/assignments/agent-assignment-invite-card";
+import { AssignmentStatusBadge } from "@/components/assignments/assignment-status-badge";
+import { agentCanRespondToInvite } from "@/lib/assignment-lifecycle";
+
 import { FieldLabel, PrototypeNotice } from "./agent-page-primitives";
 
 export function AgentListingManagementPage({ listingId }: { listingId: number }) {
@@ -130,14 +134,31 @@ export function AgentListingManagementPage({ listingId }: { listingId: number })
   }
 
   const listing = managedListing.listing;
+  const pendingInvite = agentCanRespondToInvite(managedListing.assignment.status);
 
   return (
     <div className="space-y-6">
       <DashboardPageIntro
         eyebrow="Listing management"
         title={listing?.title ?? `Listing #${listingId}`}
-        description={listing?.address ?? "Use this workspace to review supply quality, pipeline activity, and owner comms for this assigned listing."}
+        description={
+          pendingInvite
+            ? "Accept the owner's invite to unlock management tools on this listing."
+            : (listing?.address ?? "Review supply quality, pipeline activity, and owner comms for this assignment.")
+        }
+        actions={<AssignmentStatusBadge status={managedListing.assignment.status} />}
       />
+
+      {pendingInvite ? (
+        <AgentAssignmentInviteCard
+          assignmentId={managedListing.assignment.id}
+          listingTitle={listing?.title ?? `Listing #${listingId}`}
+          ownerName={managedListing.ownerProfile?.fullName ?? listing?.owner?.name}
+          onSettled={async () => {
+            await workspaceQuery.refetch();
+          }}
+        />
+      ) : null}
 
       <PrototypeNotice
         title="Agent-side listing edits are still a product prototype"

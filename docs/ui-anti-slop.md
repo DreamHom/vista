@@ -45,3 +45,15 @@ After Haven-backed owner inspection or offer actions, invalidate role notificati
 | Review form without gate copy | `evaluateReviewEligibility()` banner (CLOSED + ACCEPTED offer) |
 | Assuming threaded `parentCommentId` | Flat list; owner answer = new `POST /comments` on listing |
 | Hide soft-delete semantics | Author remove via ⋯; toast notes aggregates self-heal on next load |
+
+## Agent assignments (`AgentListingStatus`)
+
+| Avoid | Prefer |
+|-------|--------|
+| Raw enums (`REQUESTED`, `ACCEPTED`) on cards | `assignmentStatusLabel()` → Invite sent, Active, Declined, Revoked |
+| Accept + Decline side by side | Accept primary; **Decline** under **⋯** with required reason dialog |
+| Revoke without reason | `OwnerAssignmentCard` revoke dialog (audit trail) |
+| Invite while pending/active exists | `ownerCanInviteAgent()` disables search + Invite; banner explains withdraw/revoke first |
+| Parallel invite race (409) | `assignmentInviteErrorMessage()` — friendly copy for pending vs active conflicts |
+| Revoke on pending invites | **Withdraw invite** on `REQUESTED`; **Revoke assignment** on `ACCEPTED` (same endpoint, reason required) |
+| “Reply” / threaded assignment UI | One row per invite; terminal rows in **Past assignments** |

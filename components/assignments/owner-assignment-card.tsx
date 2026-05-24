@@ -19,6 +19,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import {
+  assignmentEndActionCopy,
   assignmentErrorMessage,
   assignmentStatusHint,
   isTerminalAssignmentStatus,
@@ -53,7 +54,7 @@ export function OwnerAssignmentCard({
     onSuccess: async () => {
       setRevokeOpen(false);
       setRevokeReason("");
-      toast.success("Agent removed from this listing.");
+      toast.success(endCopy.successToast);
       await onChanged();
     },
     onError: (error) => toast.error(assignmentErrorMessage(error, "We couldn't remove that assignment.")),
@@ -62,6 +63,7 @@ export function OwnerAssignmentCard({
   const hint = assignmentStatusHint(assignment.status);
   const terminal = isTerminalAssignmentStatus(assignment.status);
   const canRevoke = ownerCanRevokeAssignment(assignment.status);
+  const endCopy = assignmentEndActionCopy(assignment.status);
 
   return (
     <div className={cn("border border-border bg-secondary/20 p-4", className)}>
@@ -104,8 +106,8 @@ export function OwnerAssignmentCard({
             items={[
               {
                 id: "revoke",
-                label: "Revoke assignment",
-                description: "Requires a reason. Agent loses listing access; invite someone new later.",
+                label: endCopy.menuLabel,
+                description: endCopy.menuDescription,
                 destructive: true,
                 onSelect: () => setRevokeOpen(true),
               },
@@ -146,7 +148,7 @@ export function OwnerAssignmentCard({
               disabled={revokeMutation.isPending || !revokeReason.trim()}
               onClick={() => revokeMutation.mutate(revokeReason.trim())}
             >
-              {revokeMutation.isPending ? "Revoking…" : "Revoke assignment"}
+              {revokeMutation.isPending ? endCopy.pendingLabel : endCopy.confirmLabel}
             </Button>
           </DialogFooter>
         </DialogContent>

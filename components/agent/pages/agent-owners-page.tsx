@@ -4,41 +4,21 @@
 
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  appendAgentOwnerMessage,
-  listAgentOwnerRelationships,
-} from "@/lib/agent-dashboard";
 import { AgentAssignmentInviteCard } from "@/components/assignments/agent-assignment-invite-card";
-import { markAllNotificationsRead, markNotificationRead } from "@/lib/applicant-dashboard";
+import { appendAgentOwnerMessage, listAgentOwnerRelationships } from "@/lib/agent-dashboard";
 import { useAuth } from "@/lib/use-auth";
-import { formatNaira } from "@/lib/format";
 import {
   DashboardPageIntro,
   EmptyPanel,
   ErrorPanel,
   LoadingPanel,
-  MetricCard,
-  SectionCard,
-  SettingsToggle,
   StatusBadge,
 } from "@/components/dashboard/applicant-ui";
-import { firstName, formatDate, formatDateTime, getGreeting } from "@/components/dashboard/utils";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { formatDateTime } from "@/components/dashboard/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
-import { cn } from "@/lib/utils";
 
 export function AgentOwnersPage() {
   const { user } = useAuth();
@@ -49,28 +29,7 @@ export function AgentOwnersPage() {
     queryFn: () => listAgentOwnerRelationships(userId),
     enabled: userId > 0,
   });
-  const [declineReasons, setDeclineReasons] = useState<Record<number, string>>({});
   const [messages, setMessages] = useState<Record<number, string>>({});
-
-  const acceptMutation = useMutation({
-    mutationFn: acceptAgentAssignment,
-    onSuccess: async () => {
-      toast.success("Assignment accepted.");
-      await queryClient.invalidateQueries({ queryKey: ["agent-owners", userId] });
-      await queryClient.invalidateQueries({ queryKey: ["agent-managed-listings"] });
-    },
-    onError: () => toast.error("We couldn't accept that invite."),
-  });
-
-  const declineMutation = useMutation({
-    mutationFn: ({ assignmentId, reason }: { assignmentId: number; reason: string }) => declineAgentAssignment(assignmentId, reason),
-    onSuccess: async () => {
-      toast.success("Assignment declined.");
-      await queryClient.invalidateQueries({ queryKey: ["agent-owners", userId] });
-      await queryClient.invalidateQueries({ queryKey: ["agent-managed-listings"] });
-    },
-    onError: () => toast.error("We couldn't decline that invite."),
-  });
 
   if (ownersQuery.isLoading) return <LoadingPanel label="Loading owner relationships..." />;
   if (ownersQuery.isError || !ownersQuery.data) {

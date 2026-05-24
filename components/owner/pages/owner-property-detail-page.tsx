@@ -6,14 +6,11 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { OwnerListingAgentPanel } from "@/components/assignments/owner-listing-agent-panel";
 import {
   getOwnerPropertyManagement,
-  inviteAgentToListing,
-  revokeAgentAssignment,
-  searchAssignableAgents,
   submitPropertyDocumentsVerification,
   updateOwnerListing,
-  type AgentListingResponse,
 } from "@/lib/owner-dashboard";
 import { nextStatusForOwnerAction, type OwnerListingStatusAction } from "@/lib/listing-lifecycle";
 import { isListingStaleConflict, ownerListingErrorMessage } from "@/lib/owner-listing-errors";
@@ -41,7 +38,6 @@ import { FieldLabel, PropertyThumbnail, propertyImageUrl } from "./owner-page-pr
 export function OwnerPropertyDetailPage({ propertyId }: { propertyId: number }) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const [searchTerm, setSearchTerm] = useState("");
   const [editState, setEditState] = useState({
     title: "",
     headline: "",
@@ -56,12 +52,6 @@ export function OwnerPropertyDetailPage({ propertyId }: { propertyId: number }) 
     queryKey: ["owner-property", user?.id, propertyId],
     queryFn: () => getOwnerPropertyManagement(propertyId, user!.id),
     enabled: !!user?.id,
-  });
-
-  const agentSearchQuery = useQuery({
-    queryKey: ["owner-agent-search", searchTerm],
-    queryFn: () => searchAssignableAgents(searchTerm),
-    enabled: searchTerm.trim().length >= 2,
   });
 
   const listing = detailQuery.data?.listingBundle?.listing ?? null;
@@ -140,31 +130,6 @@ export function OwnerPropertyDetailPage({ propertyId }: { propertyId: number }) 
       await invalidatePropertyQueries();
     },
     onError: (error) => toast.error(ownerListingErrorMessage(error, "We couldn't submit the property documents just yet.")),
-  });
-
-  const inviteMutation = useMutation({
-    mutationFn: async (agentId: number) => {
-      if (!listing) return;
-      await inviteAgentToListing(listing.id, agentId);
-    },
-    onSuccess: async () => {
-      toast.success("Agent invitation sent.");
-      setSearchTerm("");
-      await invalidatePropertyQueries();
-      await queryClient.invalidateQueries({ queryKey: ["owner-assignments"] });
-    },
-    onError: (error) => toast.error(ownerListingErrorMessage(error, "We couldn't send that agent invitation.")),
-  });
-
-  const revokeMutation = useMutation({
-    mutationFn: (assignment: AgentListingResponse) =>
-      revokeAgentAssignment(assignment.id, "Owner removed this assignment."),
-    onSuccess: async () => {
-      toast.success("Agent assignment removed.");
-      await invalidatePropertyQueries();
-      await queryClient.invalidateQueries({ queryKey: ["owner-assignments"] });
-    },
-    onError: (error) => toast.error(ownerListingErrorMessage(error, "We couldn't remove that assignment.")),
   });
 
   if (detailQuery.isLoading) return <LoadingPanel label="Loading property workspace..." />;
@@ -374,76 +339,20 @@ export function OwnerPropertyDetailPage({ propertyId }: { propertyId: number }) 
 
         <SectionCard
           title="Agent on this listing"
-          description="Assignments apply to the current listing offer, not the property record alone."
+          description="One pending invite and one active agent at a time — withdraw or revoke before switching."
         >
           {listing ? (
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <FieldLabel>Search agents</FieldLabel>
-                <Input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search by name or location" />
-              </div>
-
-              {agentSearchQuery.data?.length ? (
-                <div className="space-y-3">
-                  {agentSearchQuery.data.slice(0, 4).map((agent) => (
-                    <div
-                      key={agent.id}
-                      className="flex items-center justify-between gap-3 border border-border bg-white p-4"
-                    >
-                      <div>
-                        <p className="font-medium text-foreground">{agent.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {agent.verified ? "Verified agent" : "Agent profile"}
-                          {agent.averageRating ? ` · ${agent.averageRating.toFixed(1)} rating` : " · New on DreamHomes"}
-                        </p>
-                      </div>
-                      <Button onClick={() => inviteMutation.mutate(Number(agent.id))} disabled={inviteMutation.isPending}>
-                        Invite
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              ) : searchTerm.length >= 2 ? (
-                <p className="text-sm text-muted-foreground">No agents matched that search yet.</p>
-              ) : null}
-
-              <div className="space-y-3">
-                {data.assignments.length > 0 ? (
-                  data.assignments.map((item) => (
-                    <div key={item.assignment.id} className="border border-border bg-secondary/20 p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="font-medium text-foreground">
-                            {item.agentProfile?.fullName ?? `Agent #${item.assignment.agentUserId}`}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            Requested {formatDateTime(item.assignment.requestedAt)}
-                            {item.assignment.decidedAt ? ` · decided ${formatDateTime(item.assignment.decidedAt)}` : ""}
-                          </p>
-                        </div>
-                        <StatusBadge
-                          label={item.assignment.status}
-                          variant={item.assignment.status === "ACCEPTED" ? "success" : "outline"}
-                        />
-                      </div>
-                      {item.assignment.status === "ACCEPTED" ? (
-                        <div className="mt-3">
-                          <Button
-                            variant="outline"
-                            onClick={() => revokeMutation.mutate(item.assignment)}
-                            disabled={revokeMutation.isPending}
-                          >
-                            Remove agent
-                          </Button>
-                        </div>
-                      ) : null}
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-sm text-muted-foreground">No agent assignments on this listing yet.</p>
-                )}
-              </div>
-            </div>
+            <OwnerListingAgentPanel
+              listingId={listing.id}
+              listingTitle={listing.title ?? `Listing #${listing.id}`}
+              listingLocation={data.property.address}
+              propertyHref={`/owner/properties/${propertyId}`}
+              assignments={data.assignments}
+              onChanged={async () => {
+                await invalidatePropertyQueries();
+                await queryClient.invalidateQueries({ queryKey: ["owner-assignments"] });
+              }}
+            />
           ) : (
             <EmptyPanel
               title="Create a listing before assigning an agent"
