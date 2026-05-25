@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import L from "leaflet";
@@ -52,8 +52,50 @@ function FitBounds({ points }: { points: [number, number][] }) {
   return null;
 }
 
+function resetLeafletContainer(el: Element | null) {
+  if (!el) return;
+  const node = el as Element & { _leaflet_id?: unknown };
+  if (node._leaflet_id !== undefined) delete node._leaflet_id;
+}
+
+function useLeafletContainerGuard(hostRef: React.RefObject<HTMLDivElement>) {
+  useLayoutEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    // Guard against stale instances left behind by HMR/StrictMode remounts.
+    resetLeafletContainer(host.querySelector(".leaflet-container"));
+    resetLeafletContainer(host.firstElementChild);
+  });
+}
+
+/**
+ * Dev/HMR guard: ensure Leaflet tears down the map instance on unmount so
+ * remounting in the same container doesn't trip "Map container is already initialized."
+ */
+function MapUnmountCleanup() {
+  const map = useMap();
+
+  useEffect(() => {
+    return () => {
+      try {
+        map.remove();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        // Dev/HMR can overlap teardown + remount and throw reuse errors.
+        if (!/reused by another instance|already initialized/i.test(message)) {
+          throw error;
+        }
+      }
+    };
+  }, [map]);
+
+  return null;
+}
+
 export function PublicListingsMap({ pins }: { pins: PublicMapPin[] }) {
   const router = useRouter();
+  const hostRef = useRef<HTMLDivElement>(null);
+  useLeafletContainerGuard(hostRef);
 
   if (pins.length === 0) {
     return (
@@ -67,13 +109,14 @@ export function PublicListingsMap({ pins }: { pins: PublicMapPin[] }) {
   const positions = pins.map((p) => [p.latitude, p.longitude] as [number, number]);
 
   return (
-    <div className="relative z-0 h-[70vh] min-h-[400px] w-full overflow-hidden border border-white/10 bg-slate-950">
+    <div ref={hostRef} className="relative z-0 h-[70vh] min-h-[400px] w-full overflow-hidden border border-white/10 bg-slate-950">
       <MapContainer
         center={[first.latitude, first.longitude]}
         zoom={12}
         className="h-full w-full [&_.leaflet-control-attribution]:text-[10px] [&_.leaflet-control-attribution]:bg-white/90"
         scrollWheelZoom
       >
+        <MapUnmountCleanup />
         <TileLayer attribution={OSM_ATTR} url={OSM_TILE} />
         <FitBounds points={positions} />
         {pins.map((pin) => (
@@ -120,8 +163,11 @@ export function ListingMiniMap({
   label: string;
   term: "RENT" | "SALE";
 }) {
+  const hostRef = useRef<HTMLDivElement>(null);
+  useLeafletContainerGuard(hostRef);
+
   return (
-    <div className="relative z-0 h-52 w-full overflow-hidden border border-border bg-muted">
+    <div ref={hostRef} className="relative z-0 h-52 w-full overflow-hidden border border-border bg-muted">
       <MapContainer
         center={[latitude, longitude]}
         zoom={14}
@@ -130,6 +176,7 @@ export function ListingMiniMap({
         dragging
         doubleClickZoom={false}
       >
+        <MapUnmountCleanup />
         <TileLayer attribution={OSM_ATTR} url={OSM_TILE} />
         <Marker position={[latitude, longitude]} icon={markerIcon(term, true)}>
           <Popup>
