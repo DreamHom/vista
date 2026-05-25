@@ -5,9 +5,11 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Trash2 } from "lucide-react";
 
 import { OwnerListingAgentPanel } from "@/components/assignments/owner-listing-agent-panel";
 import {
+  deleteOwnerListingPhoto,
   getOwnerPropertyManagement,
   submitPropertyDocumentsVerification,
   updateOwnerListing,
@@ -48,6 +50,7 @@ export function OwnerPropertyDetailPage({ propertyId }: { propertyId: number }) 
   });
   const [verificationFiles, setVerificationFiles] = useState<File[]>([]);
   const [listingPhotoFiles, setListingPhotoFiles] = useState<File[]>([]);
+  const [deletingPhotoId, setDeletingPhotoId] = useState<number | null>(null);
   const [pendingStatusAction, setPendingStatusAction] = useState<OwnerListingStatusAction | null>(null);
 
   const detailQuery = useQuery({
@@ -167,6 +170,24 @@ export function OwnerPropertyDetailPage({ propertyId }: { propertyId: number }) 
       await invalidatePropertyQueries();
     },
     onError: (error) => handleListingError(error, "We couldn't upload listing photos right now."),
+  });
+
+  const photoDeleteMutation = useMutation({
+    mutationFn: async (photoId: number) => {
+      if (!listing) return;
+      await deleteOwnerListingPhoto(listing.id, photoId);
+    },
+    onMutate: (photoId) => {
+      setDeletingPhotoId(photoId);
+    },
+    onSuccess: async () => {
+      toast.success("Photo removed from this listing.");
+      await invalidatePropertyQueries();
+    },
+    onError: (error) => handleListingError(error, "We couldn't remove that photo right now."),
+    onSettled: () => {
+      setDeletingPhotoId(null);
+    },
   });
 
   if (detailQuery.isLoading) return <LoadingPanel label="Loading property workspace..." />;
@@ -339,6 +360,9 @@ export function OwnerPropertyDetailPage({ propertyId }: { propertyId: number }) 
                   <p className="text-sm text-muted-foreground">
                     Add new photos to the live listing gallery. New uploads are appended.
                   </p>
+                  <p className="text-xs text-muted-foreground">
+                    Remove weak images here, then upload replacements. New uploads go to the end of the gallery.
+                  </p>
                 </div>
                 <Input
                   type="file"
@@ -367,6 +391,27 @@ export function OwnerPropertyDetailPage({ propertyId }: { propertyId: number }) 
                       <div key={photo.id} className="overflow-hidden border border-border bg-card">
                         <div className="aspect-[4/3] bg-muted">
                           <img src={photo.url} alt={photo.alt || "Listing photo"} className="h-full w-full object-cover" />
+                        </div>
+                        <div className="border-t border-border p-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="w-full gap-2"
+                            disabled={listingLocked || photoDeleteMutation.isPending}
+                            aria-label={`Remove photo ${photo.id}`}
+                            onClick={() => {
+                              const numericPhotoId = Number(photo.id);
+                              if (!Number.isFinite(numericPhotoId) || numericPhotoId <= 0) {
+                                toast.error("Could not identify this photo for deletion.");
+                                return;
+                              }
+                              photoDeleteMutation.mutate(numericPhotoId);
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" aria-hidden />
+                            {deletingPhotoId === Number(photo.id) ? "Removing..." : "Remove"}
+                          </Button>
                         </div>
                       </div>
                     ))}

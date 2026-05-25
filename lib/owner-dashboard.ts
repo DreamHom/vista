@@ -831,6 +831,11 @@ export async function createInspectionSlot(listingId: number, payload: { startsA
   return result;
 }
 
+export async function deleteOwnerListingPhoto(listingId: number, photoId: number) {
+  await api.delete<void>(`/listings/photos/${photoId}`);
+  invalidatePublicListingCache(String(listingId));
+}
+
 export async function inviteAgentToListing(listingId: number, agentId: number) {
   return api.post<AgentListingResponse>(`/listings/${listingId}/agent-assignment`, { agentId });
 }
