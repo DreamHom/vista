@@ -2,14 +2,8 @@
 "use client";
 
 import Link from "next/link";
-import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { ArrowRight, Expand } from "lucide-react";
-import {
-  Image as NexusImage,
-  ImageLightbox,
-  ImageLightboxOverlay,
-  ImageLightboxPreview,
-} from "@/components/nexus-ui/image";
+import { ArrowRight } from "lucide-react";
+import { Image as NexusImage } from "@/components/nexus-ui/image";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -33,7 +27,6 @@ export function ListingCardMedia({ listingId, title, photoUrl, fallbackUrl, alt 
     <NexusImage
       src={src}
       alt={alt}
-      modal
       className="aspect-auto min-h-0 w-full min-w-0 max-w-none flex-col overflow-hidden rounded-none border-0 bg-muted shadow-none dark:border-0"
     >
       <div className="relative aspect-[4/3] w-full overflow-hidden bg-muted">
@@ -57,31 +50,6 @@ export function ListingCardMedia({ listingId, title, photoUrl, fallbackUrl, alt 
             <ArrowRight className="h-4 w-4" aria-hidden />
           </Link>
         </div>
-
-        <DialogPrimitive.Trigger asChild>
-          <button
-            type="button"
-            className={cn(
-              buttonVariants({ variant: "outline", size: "icon" }),
-              "pointer-events-auto absolute bottom-3 right-3 z-30 h-10 w-10 rounded-none border-border/90 bg-background/90 text-foreground shadow-md backdrop-blur-sm hover:border-foreground hover:bg-secondary",
-            )}
-            aria-label={`Expand photo of ${title}`}
-          >
-            <Expand className="h-4 w-4" aria-hidden />
-          </button>
-        </DialogPrimitive.Trigger>
-
-        <ImageLightbox>
-          <ImageLightboxOverlay />
-          <ImageLightboxPreview
-            className={cn(
-              "fixed inset-8 z-50 flex !max-h-none !w-full !max-w-none !translate-x-0 !translate-y-0 items-center justify-center overflow-hidden",
-              "border border-border bg-background/95 p-3 shadow-2xl outline-none sm:inset-10 sm:p-4",
-              "[&_[data-slot=image-lightbox-image]]:mx-auto [&_[data-slot=image-lightbox-image]]:block [&_[data-slot=image-lightbox-image]]:max-h-[calc(100vh-6rem)] [&_[data-slot=image-lightbox-image]]:max-w-[calc(100vw-6rem)]",
-              "[&_[data-slot=image-lightbox-image]]:!h-auto [&_[data-slot=image-lightbox-image]]:!w-auto [&_[data-slot=image-lightbox-image]]:object-contain",
-            )}
-          />
-        </ImageLightbox>
       </div>
     </NexusImage>
   );

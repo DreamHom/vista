@@ -52,7 +52,14 @@ export function ListingDiscoveryCard({
           />
         </div>
         {compareMode && compare ? (
-          <label className="pointer-events-auto absolute right-4 top-4 z-40 flex cursor-pointer items-center gap-2 border border-border bg-card px-2 py-1.5 text-xs font-medium shadow-sm">
+          <label
+            className={cn(
+              "absolute right-4 top-4 z-40 flex items-center gap-2 border border-border bg-card px-2 py-1.5 text-xs font-medium shadow-sm transition-opacity",
+              selected
+                ? "pointer-events-auto opacity-100"
+                : "pointer-events-none opacity-0 group-hover/card:pointer-events-auto group-hover/card:opacity-100 group-focus-within/card:pointer-events-auto group-focus-within/card:opacity-100",
+            )}
+          >
             <input
               type="checkbox"
               className="h-4 w-4 accent-primary"

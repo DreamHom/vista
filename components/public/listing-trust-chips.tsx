@@ -12,9 +12,9 @@ function TrustChip({ chip }: { chip: ListingTrustChip }) {
   if (chip === "scam_warning") {
     return (
       <Badge
-        variant="outline"
+        variant="warning"
         className={cn(
-          "gap-1.5 border-amber-600/40 bg-amber-500/10 text-amber-950 dark:text-amber-100",
+          "gap-1.5 border-amber-300/80 dark:border-amber-700/60",
         )}
       >
         <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />

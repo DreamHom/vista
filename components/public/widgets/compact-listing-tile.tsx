@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import Link from "next/link";
-import { ArrowRight, MapPin } from "lucide-react";
+import { MapPin } from "lucide-react";
 
 import { buttonVariants } from "@/components/ui/button";
 import { formatNaira } from "@/lib/format";
@@ -37,18 +37,6 @@ export function CompactListingTile({
             className="h-full w-full transition-transform duration-500 group-hover/tile:scale-[1.03]"
           />
         </Link>
-        <div className="pointer-events-none absolute left-2 top-2 z-10 opacity-0 transition-all duration-300 group-hover/tile:pointer-events-auto group-hover/tile:opacity-100">
-          <Link
-            href={href}
-            className={cn(
-              buttonVariants({ variant: "outline", size: "icon" }),
-              "h-9 w-9 rounded-none border-white/80 bg-background/90 text-foreground shadow-md backdrop-blur-sm hover:border-foreground hover:bg-secondary",
-            )}
-            aria-label={ctaLabel}
-          >
-            <ArrowRight className="h-4 w-4" aria-hidden />
-          </Link>
-        </div>
       </div>
       <div className="flex min-w-0 flex-col gap-3">
         <ListingTrustChips

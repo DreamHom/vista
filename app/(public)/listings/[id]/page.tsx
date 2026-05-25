@@ -156,7 +156,7 @@ export default async function ListingDetailPage({
               </div>
             </div>
 
-            <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="mt-6 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
               <Stat icon={<BedDouble className="h-4 w-4" aria-hidden />} label="Bedrooms" value={String(listing.bedrooms ?? "N/A")} />
               <Stat icon={<Bath className="h-4 w-4" aria-hidden />} label="Bathrooms" value={String(listing.bathrooms ?? "N/A")} />
               <Stat
@@ -353,9 +353,6 @@ export default async function ListingDetailPage({
 
           <div>
             <p className="text-xs font-semibold uppercase tracking-eyebrow text-muted-foreground">Map</p>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              OpenStreetMap tiles · drag to pan · tap the pin for details. Coordinates are approximate until Haven ships geometry.
-            </p>
             <div className="mt-3">
               <ListingDetailMap
                 latitude={listing.latitude}
@@ -403,10 +400,12 @@ function Stat({
   value: string;
 }) {
   return (
-    <div className="border border-border p-4">
-      <div className="mb-3 inline-flex h-9 w-9 items-center justify-center bg-secondary text-foreground">{icon}</div>
-      <p className="text-xs uppercase tracking-eyebrow text-muted-foreground">{label}</p>
-      <p className="mt-2 text-sm font-medium text-foreground">{value}</p>
+    <div className="flex items-center gap-3 border border-border px-3 py-2.5">
+      <div className="inline-flex h-8 w-8 shrink-0 items-center justify-center bg-secondary text-foreground">{icon}</div>
+      <div className="min-w-0">
+        <p className="text-[11px] uppercase tracking-eyebrow text-muted-foreground">{label}</p>
+        <p className="mt-0.5 text-sm font-medium leading-tight text-foreground">{value}</p>
+      </div>
     </div>
   );
 }

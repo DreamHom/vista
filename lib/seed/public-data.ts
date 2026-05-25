@@ -303,17 +303,32 @@ function makeUrl(path: string, query?: Record<string, string | number | boolean 
  * can attribute traffic and ops can contact us if anything's wrong.
  */
 const SERVER_UA = "dreamhomes-vista/1.0 (+https://www.dreamhomes.today)";
+const SERVER_PUBLIC_REVALIDATE_SECONDS = 5;
+
+function publicFetchOptions(): RequestInit & { next?: { revalidate: number } } {
+  if (typeof window === "undefined") {
+    // SSR: short cache window smooths repeated renders without making
+    // listing state feel stale for long.
+    return { next: { revalidate: SERVER_PUBLIC_REVALIDATE_SECONDS } };
+  }
+  // Browser: always fetch fresh when called client-side.
+  return { cache: "no-store" };
+}
 
 async function publicFetch<T>(
   path: string,
   query?: Record<string, string | number | boolean | undefined | null>,
 ): Promise<T> {
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+  };
+  if (typeof window === "undefined") {
+    headers["User-Agent"] = SERVER_UA;
+  }
+
   const response = await fetch(makeUrl(path, query), {
-    headers: {
-      Accept: "application/json",
-      "User-Agent": SERVER_UA,
-    },
-    cache: "no-store",
+    headers,
+    ...publicFetchOptions(),
   });
 
   if (!response.ok) {
@@ -830,7 +845,7 @@ export async function searchAgents(input: AgentSearchInput) {
         Accept: "application/json",
         "User-Agent": SERVER_UA,
       },
-      cache: "no-store",
+      ...publicFetchOptions(),
     });
     if (!response.ok) {
       throw new Error(`Public API request failed: ${response.status} ${response.statusText}`);

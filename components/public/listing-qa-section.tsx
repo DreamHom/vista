@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 
 import { FlagCommentDialog } from "@/components/public/flag-comment-dialog";
@@ -31,20 +31,48 @@ export function ListingQaSection({
   const { hydrated, isAuthenticated, user } = useAuth();
   const [draft, setDraft] = useState("");
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
+  const [comments, setComments] = useState<ListingComment[]>(initialComments);
   const [flagTargetId, setFlagTargetId] = useState<number | null>(null);
   const [flaggedSession, setFlaggedSession] = useState<Set<number>>(() => new Set());
   const numericListingId = Number(listingId);
 
-  const refresh = () => {
-    invalidatePublicListingCache(listingId);
-    router.refresh();
-  };
+  useEffect(() => {
+    setComments(initialComments);
+  }, [initialComments]);
+
+  const roleLabel = (role: string): ListingComment["authorRole"] =>
+    role === "OWNER" ? "Owner" : role === "AGENT" ? "Agent" : "Applicant";
+
+  const formatCommentDate = (iso: string) =>
+    new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(new Date(iso));
 
   const postMutation = useMutation({
     mutationFn: ({ body, parentCommentId }: { body: string; parentCommentId?: number }) =>
       postListingComment(numericListingId, body, parentCommentId),
-    onSuccess: (_data, variables) => {
+    onSuccess: (data, variables) => {
+      const authorName = user?.fullName?.trim() || "You";
+      const date = formatCommentDate(data.createdAt);
       if (variables.parentCommentId != null) {
+        const replyId = String(data.id);
+        setComments((current) =>
+          current.map((comment) =>
+            Number(comment.id) === variables.parentCommentId
+              ? {
+                  ...comment,
+                  replies: [
+                    ...comment.replies,
+                    {
+                      id: replyId,
+                      authorName,
+                      authorRole: roleLabel(user?.role ?? "APPLICANT"),
+                      body: data.body,
+                      date,
+                    },
+                  ],
+                }
+              : comment,
+          ),
+        );
         setReplyDrafts((state) => {
           const next = { ...state };
           delete next[String(variables.parentCommentId)];
@@ -52,10 +80,22 @@ export function ListingQaSection({
         });
         toast.success("Reply posted.");
       } else {
+        setComments((current) => [
+          {
+            id: String(data.id),
+            authorUserId: data.authorUserId,
+            authorName,
+            authorRole: roleLabel(user?.role ?? "APPLICANT"),
+            body: data.body,
+            date,
+            replies: [],
+          },
+          ...current,
+        ]);
         setDraft("");
         toast.success("Question posted on the listing.");
       }
-      refresh();
+      invalidatePublicListingCache(listingId);
     },
     onError: (error) => toast.error(engagementErrorMessage(error, "We couldn't post your comment.")),
   });
@@ -80,9 +120,17 @@ export function ListingQaSection({
 
   const deleteMutation = useMutation({
     mutationFn: (commentId: number) => deleteComment(commentId),
-    onSuccess: () => {
+    onSuccess: (_data, commentId) => {
+      setComments((current) =>
+        current
+          .filter((comment) => Number(comment.id) !== commentId)
+          .map((comment) => ({
+            ...comment,
+            replies: comment.replies.filter((reply) => Number(reply.id) !== commentId),
+          })),
+      );
       toast.success("Comment removed.");
-      refresh();
+      invalidatePublicListingCache(listingId);
     },
     onError: (error) => toast.error(engagementErrorMessage(error, "We couldn't remove that comment.")),
   });
@@ -131,13 +179,19 @@ export function ListingQaSection({
     return (
       <article
         key={comment.id}
-        className={depth > 0 ? "ml-4 border-l border-border pl-4 md:ml-6 md:pl-5" : "border border-border p-4"}
+        className={
+          depth > 0
+            ? "ml-4 border-l border-border pl-3 md:ml-6 md:pl-4"
+            : "border border-border px-3 py-2.5 md:px-3.5 md:py-3"
+        }
       >
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="font-medium text-foreground">{comment.authorName}</p>
-            <Badge variant="outline">{comment.authorRole}</Badge>
-            <span className="text-sm text-muted-foreground">{comment.date}</span>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <p className="text-sm font-medium text-foreground">{comment.authorName}</p>
+            <Badge variant="outline" className="px-2 py-0 text-[10px]">
+              {comment.authorRole}
+            </Badge>
+            <span className="text-xs text-muted-foreground">{comment.date}</span>
           </div>
           {menuItems.length > 0 ? (
             <InspectionMoreMenu
@@ -148,16 +202,18 @@ export function ListingQaSection({
             />
           ) : null}
         </div>
-        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{comment.body}</p>
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{comment.body}</p>
 
         {comment.replies.map((reply) => (
-          <div key={reply.id} className="mt-4 ml-4 border-l border-border pl-4 md:ml-6 md:pl-5">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="font-medium text-foreground">{reply.authorName}</p>
-              <Badge variant="outline">{reply.authorRole}</Badge>
-              <span className="text-sm text-muted-foreground">{reply.date}</span>
+          <div key={reply.id} className="mt-3 ml-4 border-l border-border pl-3 md:ml-6 md:pl-4">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <p className="text-sm font-medium text-foreground">{reply.authorName}</p>
+              <Badge variant="outline" className="px-2 py-0 text-[10px]">
+                {reply.authorRole}
+              </Badge>
+              <span className="text-xs text-muted-foreground">{reply.date}</span>
             </div>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{reply.body}</p>
+            <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{reply.body}</p>
           </div>
         ))}
 
@@ -237,8 +293,8 @@ export function ListingQaSection({
       ) : null}
 
       <div className="mt-5 space-y-4">
-        {initialComments.length ? (
-          initialComments.map((comment) => renderCommentRow(comment))
+        {comments.length ? (
+          comments.map((comment) => renderCommentRow(comment))
         ) : (
           <p className="text-sm text-muted-foreground">No public questions yet on this listing.</p>
         )}
