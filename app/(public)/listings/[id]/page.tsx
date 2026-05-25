@@ -157,9 +157,17 @@ export default async function ListingDetailPage({
               </div>
             </div>
 
-            <div className="mt-6 grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
-              <Stat icon={<BedDouble className="h-4 w-4" aria-hidden />} label="Bedrooms" value={String(listing.bedrooms ?? "N/A")} />
-              <Stat icon={<Bath className="h-4 w-4" aria-hidden />} label="Bathrooms" value={String(listing.bathrooms ?? "N/A")} />
+            <div className="mt-5 flex flex-wrap gap-1.5">
+              <Stat
+                icon={<BedDouble className="h-4 w-4" aria-hidden />}
+                label="Bedrooms"
+                value={listing.bedrooms != null ? `${listing.bedrooms} bedrooms` : "Bedrooms not listed"}
+              />
+              <Stat
+                icon={<Bath className="h-4 w-4" aria-hidden />}
+                label="Bathrooms"
+                value={listing.bathrooms != null ? `${listing.bathrooms} bathrooms` : "Bathrooms not listed"}
+              />
               <Stat
                 icon={<Ruler className="h-4 w-4" aria-hidden />}
                 label="Size"
@@ -395,18 +403,24 @@ function Stat({
   icon,
   label,
   value,
+  className,
 }: {
   icon: ReactNode;
   label: string;
   value: string;
+  className?: string;
 }) {
   return (
-    <div className="flex items-center gap-3 border border-border px-3 py-2.5">
-      <div className="inline-flex h-8 w-8 shrink-0 items-center justify-center bg-secondary text-foreground">{icon}</div>
-      <div className="min-w-0">
-        <p className="text-[11px] uppercase tracking-eyebrow text-muted-foreground">{label}</p>
-        <p className="mt-0.5 text-sm font-medium leading-tight text-foreground">{value}</p>
-      </div>
+    <div
+      className={cn("flex items-center gap-2.5 border border-border px-2.5 py-1.5", className)}
+      aria-label={`${label}: ${value}`}
+      title={`${label}: ${value}`}
+    >
+      <div className="inline-flex h-7 w-7 shrink-0 items-center justify-center bg-secondary text-foreground">{icon}</div>
+      <p className="min-w-0 text-sm font-medium leading-tight text-foreground">
+        <span className="sr-only">{label}: </span>
+        {value}
+      </p>
     </div>
   );
 }

@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Lock, Mail } from "lucide-react";
-import { api } from "@/lib/api";
+import { ApiError, api } from "@/lib/api";
 import { apiErrorMessage } from "@/lib/api-error-message";
 import { loadSessionUserWithAvatar } from "@/lib/auth-hydrate-user";
 import { useAuthStore } from "@/lib/auth-store";
@@ -17,23 +17,67 @@ import { getDefaultDashboardPath } from "@/lib/dashboard-routes";
 import { cn } from "@/lib/utils";
 import { AUTH_INPUT_CHROME } from "./auth-shared";
 
+type AuthDiagnostics = {
+  responseKeys: string[];
+  tokenFound: boolean;
+  tokenSource: string;
+  normalizedPayload: boolean;
+  meCheck: "not-run" | "success" | "unauthenticated" | "failed";
+};
+
+function getObjectKeys(value: unknown): string[] {
+  if (!value || typeof value !== "object") return [];
+  return Object.keys(value as Record<string, unknown>).sort();
+}
+
+const AUTH_SESSION_NOT_ESTABLISHED = "AUTH_SESSION_NOT_ESTABLISHED";
+
 function normalizeRole(value: unknown): Role | null {
   if (typeof value !== "string") return null;
   const normalized = value.toUpperCase();
   return ROLES.includes(normalized as Role) ? (normalized as Role) : null;
 }
 
+function extractTokenFromLoginResponse(value: unknown): string | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Record<string, unknown>;
+  const direct =
+    candidate.token ??
+    candidate.accessToken ??
+    candidate.access_token ??
+    candidate.idToken ??
+    candidate.id_token ??
+    candidate.jwt;
+  if (typeof direct === "string" && direct.trim()) return direct.trim();
+
+  const nestedKeys = ["data", "payload", "result", "auth"];
+  for (const key of nestedKeys) {
+    const nested = candidate[key];
+    if (!nested || typeof nested !== "object") continue;
+    const nestedObj = nested as Record<string, unknown>;
+    const token =
+      nestedObj.token ??
+      nestedObj.accessToken ??
+      nestedObj.access_token ??
+      nestedObj.idToken ??
+      nestedObj.id_token ??
+      nestedObj.jwt;
+    if (typeof token === "string" && token.trim()) return token.trim();
+  }
+  return null;
+}
+
 function normalizeLoginResponse(value: unknown): LoginResponse | null {
   if (!value || typeof value !== "object") return null;
   const candidate = value as Record<string, unknown>;
-  const tokenCandidate = candidate.token ?? candidate.accessToken ?? candidate.jwt;
-  const rawUserId = candidate.userId ?? candidate.sub ?? candidate.id;
+  const tokenCandidate = extractTokenFromLoginResponse(candidate);
   const userCandidate =
     candidate.user && typeof candidate.user === "object"
       ? (candidate.user as Record<string, unknown>)
       : null;
-  const role = normalizeRole(candidate.role ?? userCandidate?.role);
-  const fullNameCandidate = candidate.fullName ?? userCandidate?.fullName ?? userCandidate?.name;
+  const rawUserId = candidate.userId ?? candidate.user_id ?? candidate.sub ?? candidate.id ?? userCandidate?.userId ?? userCandidate?.user_id ?? userCandidate?.id;
+  const role = normalizeRole(candidate.role ?? userCandidate?.role ?? userCandidate?.userRole);
+  const fullNameCandidate = candidate.fullName ?? candidate.full_name ?? userCandidate?.fullName ?? userCandidate?.full_name ?? userCandidate?.name;
 
   const token = typeof tokenCandidate === "string" ? tokenCandidate : null;
   const userId =
@@ -59,6 +103,7 @@ export function LoginForm({ next }: { next?: string }) {
   const router = useRouter();
   const setSession = useAuthStore((state) => state.setSession);
   const setUser = useAuthStore((state) => state.setUser);
+  const setToken = useAuthStore((state) => state.setToken);
   const hydrated = useAuthStore((state) => state.hydrated);
   const storedToken = useAuthStore((state) => state.token);
   const storedUser = useAuthStore((state) => state.user);
@@ -67,6 +112,8 @@ export function LoginForm({ next }: { next?: string }) {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [diagnostics, setDiagnostics] = useState<AuthDiagnostics | null>(null);
+  const showDiagnostics = process.env.NODE_ENV !== "production";
 
   useEffect(() => {
     if (!hydrated || (!storedToken && !storedUser)) return;
@@ -106,17 +153,39 @@ export function LoginForm({ next }: { next?: string }) {
     event.preventDefault();
     setLoading(true);
     setError(null);
+    if (showDiagnostics) setDiagnostics(null);
 
     try {
+      const loadVerifiedSessionUser = async () => {
+        try {
+          return await loadSessionUserWithAvatar();
+        } catch (error) {
+          if (error instanceof ApiError && error.status === 401) {
+            throw new Error(AUTH_SESSION_NOT_ESTABLISHED);
+          }
+          throw error;
+        }
+      };
+
       const response = await api.post<unknown>(
         "/auth/login",
         { email, password },
         { skipAuth: true },
       );
       const normalized = normalizeLoginResponse(response);
+      const token = extractTokenFromLoginResponse(response);
+      if (showDiagnostics) {
+        setDiagnostics({
+          responseKeys: getObjectKeys(response),
+          tokenFound: Boolean(token),
+          tokenSource: token ? "top-level-or-known-nested" : "none",
+          normalizedPayload: Boolean(normalized),
+          meCheck: "not-run",
+        });
+      }
       if (normalized) {
         setSession(normalized.token, {
-          id: me.id,
+          id: normalized.userId,
           fullName: normalized.fullName,
           role: normalized.role,
         });
@@ -125,7 +194,42 @@ export function LoginForm({ next }: { next?: string }) {
         return;
       }
 
-      const me = await loadSessionUserWithAvatar();
+      if (token) {
+        setToken(token);
+        const me = await loadVerifiedSessionUser();
+        if (showDiagnostics) {
+          setDiagnostics((current) =>
+            current
+              ? {
+                  ...current,
+                  meCheck: "success",
+                }
+              : current,
+          );
+        }
+        setSession(token, {
+          id: me.id,
+          fullName: me.fullName,
+          role: me.role,
+          email: me.email,
+          profileImageUrl: me.profileImageUrl,
+        });
+        toast.success("Signed in successfully.");
+        router.push(next ?? getDefaultDashboardPath(me.role));
+        return;
+      }
+
+      const me = await loadVerifiedSessionUser();
+      if (showDiagnostics) {
+        setDiagnostics((current) =>
+          current
+            ? {
+                ...current,
+                meCheck: "success",
+              }
+            : current,
+        );
+      }
       setUser({
         id: me.id,
         fullName: me.fullName,
@@ -136,7 +240,23 @@ export function LoginForm({ next }: { next?: string }) {
       toast.success("Signed in successfully.");
       router.push(next ?? getDefaultDashboardPath(me.role));
     } catch (err) {
-      const message = apiErrorMessage(err, "We could not log you in right now.");
+      if (showDiagnostics) {
+        setDiagnostics((current) => {
+          if (!current) return current;
+          if (err instanceof ApiError && err.status === 401) {
+            return { ...current, meCheck: "unauthenticated" };
+          }
+          return { ...current, meCheck: "failed" };
+        });
+      }
+      const message =
+        err instanceof Error && err.message === AUTH_SESSION_NOT_ESTABLISHED
+          ? "Sign-in reached the server, but your local session could not be created. This is usually a local dev cookie/session setup issue."
+          : err instanceof ApiError && err.status === 401
+          ? "We couldn't sign you in with those details. Check your email and password and try again."
+          : err instanceof Error && /unauthenticated|unauthorized/i.test(err.message)
+            ? "Your sign-in could not be confirmed. Please check your details and try again."
+            : apiErrorMessage(err, "We could not log you in right now.");
       setError(message);
       toast.error(message);
     } finally {
@@ -195,6 +315,15 @@ export function LoginForm({ next }: { next?: string }) {
 
       {error ? (
         <p className="border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">{error}</p>
+      ) : null}
+      {showDiagnostics && diagnostics ? (
+        <div className="border border-border bg-secondary/20 px-4 py-3 text-xs text-muted-foreground">
+          <p className="font-semibold text-foreground">Dev auth diagnostics</p>
+          <p className="mt-1">response keys: {diagnostics.responseKeys.join(", ") || "(none)"}</p>
+          <p>token found: {diagnostics.tokenFound ? "yes" : "no"} ({diagnostics.tokenSource})</p>
+          <p>normalized payload: {diagnostics.normalizedPayload ? "yes" : "no"}</p>
+          <p>/me check: {diagnostics.meCheck}</p>
+        </div>
       ) : null}
 
       <Button type="submit" size="lg" className="h-12 w-full rounded-none text-base font-semibold" disabled={loading}>
