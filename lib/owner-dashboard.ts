@@ -673,7 +673,7 @@ export async function getOwnerDashboardOverview(userId: number): Promise<OwnerDa
       title: notification.kind.replaceAll("_", " "),
       description: notification.body ?? "New platform activity on one of your listings.",
       occurredAt: notification.createdAt,
-      href: getNotificationHref(notification),
+      href: getNotificationHref(notification, "OWNER"),
     })),
     showVerificationBanner: !profileData.privateProfile.identityVerifiedAt,
     latestIdentityVerification: latestVerificationByType(profileData.verifications, "OWNER_IDENTITY"),

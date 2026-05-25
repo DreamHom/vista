@@ -182,7 +182,7 @@ export function ApplicantNotificationsPage() {
                         Mark read
                       </Button>
                     ) : null}
-                    <Link href={getNotificationHref(notification)} className={buttonVariants({ size: "md" })}>
+                    <Link href={getNotificationHref(notification, "APPLICANT")} className={buttonVariants({ size: "md" })}>
                       Open
                     </Link>
                   </div>

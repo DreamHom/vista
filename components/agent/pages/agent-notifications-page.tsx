@@ -37,7 +37,7 @@ import {
   type AgentPromotionRecord,
   type PipelineStage,
 } from "@/lib/agent-dashboard";
-import { markAllNotificationsRead, markNotificationRead } from "@/lib/applicant-dashboard";
+import { getNotificationHref, markAllNotificationsRead, markNotificationRead } from "@/lib/applicant-dashboard";
 import { useAuth } from "@/lib/use-auth";
 import { formatNaira } from "@/lib/format";
 import {
@@ -149,6 +149,9 @@ export function AgentNotificationsPage() {
                       Mark read
                     </Button>
                   ) : null}
+                  <Link href={getNotificationHref(notification, "AGENT")}>
+                    <Button variant="outline" size="sm">Open</Button>
+                  </Link>
                 </div>
               </div>
               <p className="mt-3 text-xs uppercase tracking-eyebrow text-muted-foreground">{formatDateTime(notification.createdAt)}</p>

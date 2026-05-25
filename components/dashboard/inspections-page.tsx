@@ -148,10 +148,8 @@ function InspectionBookingFromListing({ listingId, userId }: { listingId: string
           toast.error("This action is only available for applicant accounts.");
           return;
         }
-        if (error.status === 401) {
-          toast.error("Please sign in again to complete booking.");
-          return;
-        }
+        // 401 → handled globally (refresh-and-retry; on failure, AUTH_EXPIRED_EVENT
+        // clears the session and routes to /login). No local toast needed.
       }
       toast.error(inspectionSlotClaimErrorMessage(error));
     },

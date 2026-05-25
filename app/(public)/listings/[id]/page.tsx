@@ -123,7 +123,7 @@ export default async function ListingDetailPage({
           <ListingGallery photos={galleryPhotos} title={listing.title} />
 
           <article className="border border-border bg-card p-6 md:p-8">
-            <div className="flex flex-wrap items-start justify-between gap-6">
+            <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_auto] md:items-start md:gap-6">
               <div className="min-w-0 space-y-4">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="secondary">{listing.term === "RENT" ? "For rent" : "For sale"}</Badge>
@@ -144,7 +144,7 @@ export default async function ListingDetailPage({
                 </div>
               </div>
 
-              <div className="shrink-0 space-y-1 text-right">
+              <div className="space-y-1 md:pl-4 md:text-right">
                 <p className="text-3xl font-semibold tracking-tight text-foreground md:text-4xl">
                   {formatNaira(listing.priceNgn)}
                   {listing.term === "RENT" ? (

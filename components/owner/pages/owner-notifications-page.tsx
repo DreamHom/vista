@@ -177,7 +177,7 @@ export function OwnerNotificationsPage() {
                   <p className="text-xs text-muted-foreground">{formatDateTime(notification.createdAt)}</p>
                 </div>
                 <div className="flex flex-wrap gap-3">
-                  <Link href={getNotificationHref(notification)}>
+                  <Link href={getNotificationHref(notification, "OWNER")}>
                     <Button variant="outline">Open detail</Button>
                   </Link>
                   {!notification.readAt ? (

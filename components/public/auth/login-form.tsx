@@ -67,10 +67,28 @@ function extractTokenFromLoginResponse(value: unknown): string | null {
   return null;
 }
 
+function extractRefreshTokenFromLoginResponse(value: unknown): string | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Record<string, unknown>;
+  const direct = candidate.refreshToken ?? candidate.refresh_token;
+  if (typeof direct === "string" && direct.trim()) return direct.trim();
+
+  const nestedKeys = ["data", "payload", "result", "auth"];
+  for (const key of nestedKeys) {
+    const nested = candidate[key];
+    if (!nested || typeof nested !== "object") continue;
+    const nestedObj = nested as Record<string, unknown>;
+    const refresh = nestedObj.refreshToken ?? nestedObj.refresh_token;
+    if (typeof refresh === "string" && refresh.trim()) return refresh.trim();
+  }
+  return null;
+}
+
 function normalizeLoginResponse(value: unknown): LoginResponse | null {
   if (!value || typeof value !== "object") return null;
   const candidate = value as Record<string, unknown>;
   const tokenCandidate = extractTokenFromLoginResponse(candidate);
+  const refreshCandidate = extractRefreshTokenFromLoginResponse(candidate);
   const userCandidate =
     candidate.user && typeof candidate.user === "object"
       ? (candidate.user as Record<string, unknown>)
@@ -93,6 +111,9 @@ function normalizeLoginResponse(value: unknown): LoginResponse | null {
     token,
     tokenType: typeof candidate.tokenType === "string" ? candidate.tokenType : "Bearer",
     expiresInSeconds: typeof candidate.expiresInSeconds === "number" ? candidate.expiresInSeconds : 0,
+    refreshToken: refreshCandidate ?? undefined,
+    refreshExpiresInSeconds:
+      typeof candidate.refreshExpiresInSeconds === "number" ? candidate.refreshExpiresInSeconds : undefined,
     userId,
     role,
     fullName,
@@ -183,12 +204,18 @@ export function LoginForm({ next }: { next?: string }) {
           meCheck: "not-run",
         });
       }
+      const refreshToken = extractRefreshTokenFromLoginResponse(response);
+
       if (normalized) {
-        setSession(normalized.token, {
-          id: normalized.userId,
-          fullName: normalized.fullName,
-          role: normalized.role,
-        });
+        setSession(
+          normalized.token,
+          {
+            id: normalized.userId,
+            fullName: normalized.fullName,
+            role: normalized.role,
+          },
+          refreshToken ?? null,
+        );
         toast.success("Signed in successfully.");
         router.push(next ?? getDefaultDashboardPath(normalized.role));
         return;
@@ -207,13 +234,17 @@ export function LoginForm({ next }: { next?: string }) {
               : current,
           );
         }
-        setSession(token, {
-          id: me.id,
-          fullName: me.fullName,
-          role: me.role,
-          email: me.email,
-          profileImageUrl: me.profileImageUrl,
-        });
+        setSession(
+          token,
+          {
+            id: me.id,
+            fullName: me.fullName,
+            role: me.role,
+            email: me.email,
+            profileImageUrl: me.profileImageUrl,
+          },
+          refreshToken ?? null,
+        );
         toast.success("Signed in successfully.");
         router.push(next ?? getDefaultDashboardPath(me.role));
         return;

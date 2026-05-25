@@ -122,10 +122,10 @@ export function ListingSlotPicker({ listingId, slots, ownerId, agentId }: Listin
           toast.error("Only applicant accounts can book inspections.");
           return;
         }
-        if (error.status === 401) {
-          toast.error("Please sign in again to complete booking.");
-          return;
-        }
+        // 401s are handled globally: lib/api.ts attempts a refresh-and-retry;
+        // if that fails, the AUTH_EXPIRED_EVENT listener in app-providers
+        // clears the session and routes to /login. We deliberately don't
+        // toast here so the user only sees one signal.
       }
       toast.error(inspectionSlotClaimErrorMessage(error));
     },
