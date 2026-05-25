@@ -43,14 +43,46 @@ export function PropertyThumbnail({
   url,
   alt,
   className,
+  actionHref,
+  actionLabel = "Add photos",
 }: {
   url?: string | null;
   alt: string;
   className?: string;
+  /** Optional anchor target for the empty state (e.g. "#listing-photos"). */
+  actionHref?: string;
+  actionLabel?: string;
 }) {
   if (url) {
     return <img src={url} alt={alt} className={cn("h-full w-full object-cover", className)} />;
   }
+  const emptyBody = (
+    <>
+      <ImageOff className="h-5 w-5" aria-hidden />
+      <span className="text-[10px] uppercase tracking-eyebrow">No photo yet</span>
+      {actionHref ? (
+        <span className="mt-1 text-xs font-medium text-foreground underline underline-offset-4">
+          {actionLabel}
+        </span>
+      ) : null}
+    </>
+  );
+
+  if (actionHref) {
+    return (
+      <Link
+        href={actionHref}
+        aria-label={`${alt} — ${actionLabel}`}
+        className={cn(
+          "flex h-full w-full flex-col items-center justify-center gap-2 border border-border bg-secondary/40 text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground",
+          className,
+        )}
+      >
+        {emptyBody}
+      </Link>
+    );
+  }
+
   return (
     <div
       role="img"
@@ -60,8 +92,7 @@ export function PropertyThumbnail({
         className,
       )}
     >
-      <ImageOff className="h-5 w-5" aria-hidden />
-      <span className="text-[10px] uppercase tracking-eyebrow">No photo yet</span>
+      {emptyBody}
     </div>
   );
 }

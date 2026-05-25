@@ -22,6 +22,25 @@ interface MintUploadUrlResponse {
   allowedContentTypes: string[];
 }
 
+/**
+ * Thrown when the PUT to R2 fails for browser-side reasons (CORS preflight
+ * rejection, network drop, status non-2xx from R2). Wraps the underlying cause
+ * so callers can render a specific message instead of a generic "upload
+ * failed". CORS in particular is a backend/infra config issue, not the user's
+ * file, so it deserves its own surface.
+ */
+export class PresignedR2UploadError extends Error {
+  readonly r2Status: number | null;
+  readonly likelyCors: boolean;
+
+  constructor(message: string, options: { r2Status?: number | null; likelyCors?: boolean } = {}) {
+    super(message);
+    this.name = "PresignedR2UploadError";
+    this.r2Status = options.r2Status ?? null;
+    this.likelyCors = options.likelyCors ?? false;
+  }
+}
+
 export function putFileToPresignedUrl(
   uploadUrl: string,
   file: File,
@@ -38,9 +57,19 @@ export function putFileToPresignedUrl(
     };
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) resolve();
-      else reject(new Error(`Upload failed (${xhr.status})`));
+      else reject(new PresignedR2UploadError(`R2 rejected the upload (HTTP ${xhr.status})`, { r2Status: xhr.status }));
     };
-    xhr.onerror = () => reject(new Error("Upload network error"));
+    // `xhr.onerror` fires for both CORS-blocked preflights and genuine network
+    // drops. We can't distinguish them at this layer, but CORS is by far the
+    // most likely cause in production (R2 doesn't allow our origin by default).
+    xhr.onerror = () =>
+      reject(
+        new PresignedR2UploadError(
+          "Browser couldn't reach R2 (likely a CORS preflight rejection on the bucket, or a dropped connection)",
+          { likelyCors: true },
+        ),
+      );
+    xhr.onabort = () => reject(new PresignedR2UploadError("Upload aborted"));
     xhr.send(file);
   });
 }

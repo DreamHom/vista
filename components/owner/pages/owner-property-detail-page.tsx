@@ -17,6 +17,7 @@ import {
 } from "@/lib/owner-dashboard";
 import { nextStatusForOwnerAction, type OwnerListingStatusAction } from "@/lib/listing-lifecycle";
 import { isListingStaleConflict, ownerListingErrorMessage } from "@/lib/owner-listing-errors";
+import { describePhotoUploadError } from "@/lib/photo-upload-errors";
 import { useAuth } from "@/lib/use-auth";
 import { formatGroupedIntegerInput, formatStoredGroupedInteger, parseGroupedNumberInput } from "@/lib/format";
 import {
@@ -140,31 +141,40 @@ export function OwnerPropertyDetailPage({ propertyId }: { propertyId: number }) 
   const photoUploadMutation = useMutation({
     mutationFn: async () => {
       if (!listing || listingPhotoFiles.length === 0) {
-        return { attempted: 0, uploaded: 0, failed: 0 };
+        return { attempted: 0, uploaded: 0, failures: [] as string[] };
       }
 
       let uploaded = 0;
-      let failed = 0;
+      const failures: string[] = [];
 
       for (const file of listingPhotoFiles) {
         try {
-          await uploadOwnerListingPhoto(listing.id, file);
-          uploaded += 1;
-        } catch {
-          failed += 1;
+          const response = await uploadOwnerListingPhoto(listing.id, file);
+          if (!response?.url || !response.url.trim()) {
+            failures.push(`${file.name}: haven accepted the upload but didn't return a URL`);
+          } else {
+            uploaded += 1;
+          }
+        } catch (err) {
+          failures.push(describePhotoUploadError(err, file.name));
         }
       }
 
-      return { attempted: listingPhotoFiles.length, uploaded, failed };
+      return { attempted: listingPhotoFiles.length, uploaded, failures };
     },
-    onSuccess: async ({ attempted, uploaded, failed }) => {
+    onSuccess: async ({ attempted, uploaded, failures }) => {
       if (attempted === 0) return;
+      const failed = failures.length;
+      const describe = () => {
+        const top = failures.slice(0, 3).join(" · ");
+        return failures.length > 3 ? `${top} (and ${failures.length - 3} more)` : top;
+      };
       if (failed === 0) {
         toast.success(`${uploaded} photo${uploaded === 1 ? "" : "s"} uploaded to this listing.`);
       } else if (uploaded === 0) {
-        toast.error("We couldn't upload those listing photos right now.");
+        toast.error("Photos didn't upload.", { description: describe() });
       } else {
-        toast.warning(`${uploaded} photo${uploaded === 1 ? "" : "s"} uploaded, ${failed} failed.`);
+        toast.warning(`${uploaded} of ${attempted} photos uploaded.`, { description: describe() });
       }
       setListingPhotoFiles([]);
       await invalidatePropertyQueries();
@@ -222,6 +232,8 @@ export function OwnerPropertyDetailPage({ propertyId }: { propertyId: number }) 
               <PropertyThumbnail
                 url={detail?.photos?.[0]?.url ?? propertyImageUrl({ listingDetail: detail })}
                 alt={data.property.address}
+                actionHref={listing ? "#listing-photos" : undefined}
+                actionLabel={listing ? "Add photos" : undefined}
               />
             </div>
 
@@ -354,14 +366,14 @@ export function OwnerPropertyDetailPage({ propertyId }: { propertyId: number }) 
                 </div>
               </div>
 
-              <div className="space-y-4 border border-border bg-secondary/30 p-4">
+              <div id="listing-photos" className="scroll-mt-24 space-y-4 border border-border bg-secondary/30 p-4">
                 <div className="space-y-1">
                   <FieldLabel>Listing photos</FieldLabel>
                   <p className="text-sm text-muted-foreground">
                     Add new photos to the live listing gallery. New uploads are appended.
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Remove weak images here, then upload replacements. New uploads go to the end of the gallery.
+                    Keep each file under 10 MB (JPG, PNG, or WEBP). Remove weak images here, then upload replacements.
                   </p>
                 </div>
                 <Input

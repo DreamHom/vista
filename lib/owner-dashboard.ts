@@ -764,26 +764,25 @@ export async function updateOwnerListing(
   return api.patch<OwnerListingResponse>(`/listings/${listingId}`, body);
 }
 
+/**
+ * Upload a listing photo via haven's presigned R2 flow.
+ *
+ * The flow:
+ *   1. POST `/listings/{id}/photos/upload-url` to mint a presigned R2 PUT URL.
+ *   2. Browser PUTs the file directly to R2.
+ *   3. POST `/listings/{id}/photos/confirm` so haven records the photo row.
+ *
+ * If step 2 fails (almost always R2 CORS, sometimes a dropped connection),
+ * the error propagates as `PresignedR2UploadError`. We deliberately do NOT
+ * fall back to direct multipart upload here: that endpoint is gone in current
+ * haven builds, and the old fallback returned 413s that made it look like
+ * the user's file was too big when the real problem was R2 CORS.
+ */
 export async function uploadOwnerListingPhoto(listingId: number, file: File, caption?: string) {
   const { uploadListingPhotoDirect } = await import("@/lib/listing-photo-upload");
-  const { ApiError } = await import("@/lib/api");
-  try {
-    const result = await uploadListingPhotoDirect(listingId, file, { caption });
-    invalidatePublicListingCache(String(listingId));
-    return result;
-  } catch (error) {
-    if (error instanceof ApiError && error.status > 0 && error.status < 500) {
-      throw error;
-    }
-    const formData = new FormData();
-    formData.set("file", file);
-    if (caption?.trim()) {
-      formData.set("caption", caption.trim());
-    }
-    const result = await api.post<PhotoResponse>(`/listings/${listingId}/photos`, formData);
-    invalidatePublicListingCache(String(listingId));
-    return result;
-  }
+  const result = await uploadListingPhotoDirect(listingId, file, { caption });
+  invalidatePublicListingCache(String(listingId));
+  return result;
 }
 
 async function uploadVerificationFiles(files: File[]) {
