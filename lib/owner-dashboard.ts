@@ -25,6 +25,7 @@ import {
   type VerificationResponse,
 } from "@/lib/applicant-dashboard";
 import {
+  invalidatePublicListingCache,
   getListingById,
   searchAgents,
   type PublicListingDetail,
@@ -767,7 +768,9 @@ export async function uploadOwnerListingPhoto(listingId: number, file: File, cap
   const { uploadListingPhotoDirect } = await import("@/lib/listing-photo-upload");
   const { ApiError } = await import("@/lib/api");
   try {
-    return await uploadListingPhotoDirect(listingId, file, { caption });
+    const result = await uploadListingPhotoDirect(listingId, file, { caption });
+    invalidatePublicListingCache(String(listingId));
+    return result;
   } catch (error) {
     if (error instanceof ApiError && error.status > 0 && error.status < 500) {
       throw error;
@@ -777,7 +780,9 @@ export async function uploadOwnerListingPhoto(listingId: number, file: File, cap
     if (caption?.trim()) {
       formData.set("caption", caption.trim());
     }
-    return api.post<PhotoResponse>(`/listings/${listingId}/photos`, formData);
+    const result = await api.post<PhotoResponse>(`/listings/${listingId}/photos`, formData);
+    invalidatePublicListingCache(String(listingId));
+    return result;
   }
 }
 
@@ -818,10 +823,12 @@ export async function listListingSlots(listingId: number) {
 }
 
 export async function createInspectionSlot(listingId: number, payload: { startsAt: string; endsAt: string }) {
-  return api.post<SlotResponse>(`/listings/${listingId}/slots`, {
+  const result = await api.post<SlotResponse>(`/listings/${listingId}/slots`, {
     startsAt: datetimeLocalToInstantJson(payload.startsAt),
     endsAt: datetimeLocalToInstantJson(payload.endsAt),
   });
+  invalidatePublicListingCache(String(listingId));
+  return result;
 }
 
 export async function inviteAgentToListing(listingId: number, agentId: number) {

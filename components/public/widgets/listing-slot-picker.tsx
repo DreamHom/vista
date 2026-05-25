@@ -196,15 +196,33 @@ export function ListingSlotPicker({ listingId, slots, ownerId, agentId }: Listin
       ) : null}
 
       {!bookedSlotLabel && hydrated && isOwnerOrAgent ? (
-        <div className="mt-6 border border-dashed border-border p-4 text-sm text-muted-foreground">
-          You manage this listing. Add bookable windows from{" "}
-          <Link
-            href={role === "AGENT" ? "/agent/inspections" : "/owner/inspections"}
-            className="font-medium text-accent hover:underline"
-          >
-            Inspection slots
-          </Link>
-          . Applicants only see the times you publish.
+        <div className="mt-6 space-y-4">
+          <div className="border border-dashed border-border p-4 text-sm text-muted-foreground">
+            You manage this listing. Add bookable windows from{" "}
+            <Link
+              href={role === "AGENT" ? "/agent/inspections" : "/owner/inspections"}
+              className="font-medium text-accent hover:underline"
+            >
+              Inspection slots
+            </Link>
+            . Applicants only see the times you publish.
+          </div>
+          {upcomingCount > 0 ? (
+            <div className="border border-border bg-secondary/20 p-4">
+              <p className="text-xs font-semibold uppercase tracking-eyebrow text-muted-foreground">
+                Open slots ({upcomingCount})
+              </p>
+              <ul className="mt-3 space-y-2 text-sm text-foreground">
+                {upcoming.map((slot) => (
+                  <li key={slot.id} className="border border-border bg-card px-3 py-2">
+                    {formatSlotBookingLabel(slot)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No open slots are published on this listing yet.</p>
+          )}
         </div>
       ) : null}
 

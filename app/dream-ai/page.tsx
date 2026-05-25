@@ -28,18 +28,11 @@ export const metadata: Metadata = {
 export default async function DreamAiPage({
   searchParams,
 }: {
-  searchParams: Promise<{ prompt?: string; compare?: string }>;
+  searchParams: Promise<{ prompt?: string }>;
 }) {
   const listings = await getDreamAiInventory();
-  const { prompt, compare } = await searchParams;
+  const { prompt } = await searchParams;
   const initialPrompt = typeof prompt === "string" ? prompt : undefined;
-  const initialCompareIds =
-    typeof compare === "string"
-      ? compare
-          .split(",")
-          .map((part) => Number(part.trim()))
-          .filter((id) => Number.isFinite(id) && id > 0)
-      : undefined;
 
   return (
     <div className="flex h-dvh max-h-dvh flex-col overflow-hidden font-sans">
@@ -48,7 +41,6 @@ export default async function DreamAiPage({
         <DreamAiPageShell
           listings={listings}
           initialPrompt={initialPrompt}
-          initialCompareIds={initialCompareIds}
         />
       </main>
     </div>

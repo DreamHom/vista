@@ -40,7 +40,6 @@ export function ListingDiscoveryCard({
       <div className="relative">
         <ListingCardMedia
           listingId={listing.id}
-          title={listing.title}
           photoUrl={photo?.url}
           fallbackUrl={fallback.url}
           alt={photo?.alt ?? fallback.alt ?? listing.title}

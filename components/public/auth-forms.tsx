@@ -31,7 +31,9 @@ import type {
   PublicRole,
   RegisterAcceptedResponse,
   RegisterRequest,
+  Role,
 } from "@/lib/types";
+import { ROLES } from "@/lib/types";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/toast";
@@ -79,6 +81,44 @@ const ROLE_OPTIONS: Array<{
     ],
   },
 ];
+
+function normalizeRole(value: unknown): Role | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.toUpperCase();
+  return ROLES.includes(normalized as Role) ? (normalized as Role) : null;
+}
+
+function normalizeLoginResponse(value: unknown): LoginResponse | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Record<string, unknown>;
+  const tokenCandidate = candidate.token ?? candidate.accessToken ?? candidate.jwt;
+  const rawUserId = candidate.userId ?? candidate.sub ?? candidate.id;
+  const userCandidate =
+    candidate.user && typeof candidate.user === "object"
+      ? (candidate.user as Record<string, unknown>)
+      : null;
+  const role = normalizeRole(candidate.role ?? userCandidate?.role);
+  const fullNameCandidate = candidate.fullName ?? userCandidate?.fullName ?? userCandidate?.name;
+
+  const token = typeof tokenCandidate === "string" ? tokenCandidate : null;
+  const userId =
+    typeof rawUserId === "number"
+      ? rawUserId
+      : typeof rawUserId === "string" && rawUserId.trim() && Number.isFinite(Number(rawUserId))
+        ? Number(rawUserId)
+        : null;
+  const fullName = typeof fullNameCandidate === "string" && fullNameCandidate.trim() ? fullNameCandidate.trim() : null;
+
+  if (!token || userId == null || !role || !fullName) return null;
+  return {
+    token,
+    tokenType: typeof candidate.tokenType === "string" ? candidate.tokenType : "Bearer",
+    expiresInSeconds: typeof candidate.expiresInSeconds === "number" ? candidate.expiresInSeconds : 0,
+    userId,
+    role,
+    fullName,
+  };
+}
 
 function strengthLabel(password: string) {
   let score = 0;
@@ -439,6 +479,7 @@ export function SignupForm({
 export function LoginForm({ next }: { next?: string }) {
   const router = useRouter();
   const setSession = useAuthStore((state) => state.setSession);
+  const setUser = useAuthStore((state) => state.setUser);
   const hydrated = useAuthStore((state) => state.hydrated);
   const storedToken = useAuthStore((state) => state.token);
   const [email, setEmail] = useState("");
@@ -477,19 +518,33 @@ export function LoginForm({ next }: { next?: string }) {
     setError(null);
 
     try {
-      const response = await api.post<LoginResponse>(
+      const response = await api.post<unknown>(
         "/auth/login",
         { email, password },
         { skipAuth: true },
       );
+      const normalized = normalizeLoginResponse(response);
+      if (normalized) {
+        setSession(normalized.token, {
+          id: normalized.userId,
+          fullName: normalized.fullName,
+          role: normalized.role,
+        });
+        toast.success("Signed in successfully.");
+        router.push(next ?? getDefaultDashboardPath(normalized.role));
+        return;
+      }
 
-      setSession(response.token, {
-        id: response.userId,
-        fullName: response.fullName,
-        role: response.role,
+      const me = await loadSessionUserWithAvatar();
+      setUser({
+        id: me.id,
+        fullName: me.fullName,
+        role: me.role,
+        email: me.email,
+        profileImageUrl: me.profileImageUrl,
       });
       toast.success("Signed in successfully.");
-      router.push(next ?? getDefaultDashboardPath(response.role));
+      router.push(next ?? getDefaultDashboardPath(me.role));
     } catch (err) {
       const message = apiErrorMessage(err, "We could not log you in right now.");
       setError(message);

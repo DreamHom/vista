@@ -6,6 +6,7 @@ import {
   Bath,
   BedDouble,
   CalendarClock,
+  Eye,
   FileText,
   MapPin,
   Ruler,
@@ -13,7 +14,7 @@ import {
 } from "lucide-react";
 import { ListingGallery } from "@/components/public/listing-gallery";
 import { ListingDetailMap } from "@/components/public/listing-detail-map";
-import { CompactListingTile, MetricCard } from "@/components/public/public-components";
+import { CompactListingTile } from "@/components/public/public-components";
 import { ListingTrustChips } from "@/components/public/listing-trust-chips";
 import { ListingDetailViewerBar } from "@/components/public/listing-detail-viewer-bar";
 import { ListingQaSection } from "@/components/public/listing-qa-section";
@@ -156,7 +157,7 @@ export default async function ListingDetailPage({
               </div>
             </div>
 
-            <div className="mt-6 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="mt-6 grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
               <Stat icon={<BedDouble className="h-4 w-4" aria-hidden />} label="Bedrooms" value={String(listing.bedrooms ?? "N/A")} />
               <Stat icon={<Bath className="h-4 w-4" aria-hidden />} label="Bathrooms" value={String(listing.bathrooms ?? "N/A")} />
               <Stat
@@ -166,6 +167,7 @@ export default async function ListingDetailPage({
               />
               <Stat icon={<CalendarClock className="h-4 w-4" aria-hidden />} label="Handover" value={listing.availableFrom} />
               <Stat icon={<ShieldCheck className="h-4 w-4" aria-hidden />} label="Status" value={listing.status} />
+              <Stat icon={<Eye className="h-4 w-4" aria-hidden />} label="Views" value={String(listing.viewCount)} />
             </div>
 
             <div className="mt-8 border-t border-border pt-6">
@@ -210,7 +212,6 @@ export default async function ListingDetailPage({
             <section className="border border-border bg-card p-6 md:p-7">
               <h2 className="text-xl font-semibold tracking-tight">About this property</h2>
               <p className="mt-4 text-sm leading-relaxed text-muted-foreground md:text-base">{listing.description}</p>
-              <MetricCard label="Views" value={String(listing.viewCount)} icon="eye" />
             </section>
           </div>
 

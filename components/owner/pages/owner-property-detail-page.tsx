@@ -11,6 +11,7 @@ import {
   getOwnerPropertyManagement,
   submitPropertyDocumentsVerification,
   updateOwnerListing,
+  uploadOwnerListingPhoto,
 } from "@/lib/owner-dashboard";
 import { nextStatusForOwnerAction, type OwnerListingStatusAction } from "@/lib/listing-lifecycle";
 import { isListingStaleConflict, ownerListingErrorMessage } from "@/lib/owner-listing-errors";
@@ -46,6 +47,7 @@ export function OwnerPropertyDetailPage({ propertyId }: { propertyId: number }) 
     handoverDate: "",
   });
   const [verificationFiles, setVerificationFiles] = useState<File[]>([]);
+  const [listingPhotoFiles, setListingPhotoFiles] = useState<File[]>([]);
   const [pendingStatusAction, setPendingStatusAction] = useState<OwnerListingStatusAction | null>(null);
 
   const detailQuery = useQuery({
@@ -130,6 +132,41 @@ export function OwnerPropertyDetailPage({ propertyId }: { propertyId: number }) 
       await invalidatePropertyQueries();
     },
     onError: (error) => toast.error(ownerListingErrorMessage(error, "We couldn't submit the property documents just yet.")),
+  });
+
+  const photoUploadMutation = useMutation({
+    mutationFn: async () => {
+      if (!listing || listingPhotoFiles.length === 0) {
+        return { attempted: 0, uploaded: 0, failed: 0 };
+      }
+
+      let uploaded = 0;
+      let failed = 0;
+
+      for (const file of listingPhotoFiles) {
+        try {
+          await uploadOwnerListingPhoto(listing.id, file);
+          uploaded += 1;
+        } catch {
+          failed += 1;
+        }
+      }
+
+      return { attempted: listingPhotoFiles.length, uploaded, failed };
+    },
+    onSuccess: async ({ attempted, uploaded, failed }) => {
+      if (attempted === 0) return;
+      if (failed === 0) {
+        toast.success(`${uploaded} photo${uploaded === 1 ? "" : "s"} uploaded to this listing.`);
+      } else if (uploaded === 0) {
+        toast.error("We couldn't upload those listing photos right now.");
+      } else {
+        toast.warning(`${uploaded} photo${uploaded === 1 ? "" : "s"} uploaded, ${failed} failed.`);
+      }
+      setListingPhotoFiles([]);
+      await invalidatePropertyQueries();
+    },
+    onError: (error) => handleListingError(error, "We couldn't upload listing photos right now."),
   });
 
   if (detailQuery.isLoading) return <LoadingPanel label="Loading property workspace..." />;
@@ -294,6 +331,49 @@ export function OwnerPropertyDetailPage({ propertyId }: { propertyId: number }) 
                     Refresh from server
                   </Button>
                 </div>
+              </div>
+
+              <div className="space-y-4 border border-border bg-secondary/30 p-4">
+                <div className="space-y-1">
+                  <FieldLabel>Listing photos</FieldLabel>
+                  <p className="text-sm text-muted-foreground">
+                    Add new photos to the live listing gallery. New uploads are appended.
+                  </p>
+                </div>
+                <Input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  disabled={listingLocked || photoUploadMutation.isPending}
+                  onChange={(event) => setListingPhotoFiles(Array.from(event.target.files ?? []))}
+                />
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button
+                    type="button"
+                    onClick={() => photoUploadMutation.mutate()}
+                    disabled={listingLocked || photoUploadMutation.isPending || listingPhotoFiles.length === 0}
+                  >
+                    {photoUploadMutation.isPending ? "Uploading photos..." : "Upload selected photos"}
+                  </Button>
+                  {listingPhotoFiles.length > 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      {listingPhotoFiles.length} file{listingPhotoFiles.length === 1 ? "" : "s"} selected
+                    </p>
+                  ) : null}
+                </div>
+                {detail?.photos?.length ? (
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {detail.photos.map((photo) => (
+                      <div key={photo.id} className="overflow-hidden border border-border bg-card">
+                        <div className="aspect-[4/3] bg-muted">
+                          <img src={photo.url} alt={photo.alt || "Listing photo"} className="h-full w-full object-cover" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No listing photos yet. Upload one to start the gallery.</p>
+                )}
               </div>
             </div>
           ) : (

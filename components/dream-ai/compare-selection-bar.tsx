@@ -15,7 +15,7 @@ export function CompareSelectionBar() {
   const label =
     count < 2
       ? "Pick one more to compare"
-      : `Compare selected (${count})`;
+      : `Open table compare (${count})`;
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-card/95 p-4 backdrop-blur-sm">
@@ -34,9 +34,12 @@ export function CompareSelectionBar() {
             disabled={count < 2}
             onClick={() => {
               if (count < 2) return;
-              const ids = selectedIds.join(",");
+              const params = new URLSearchParams();
+              for (const id of selectedIds.slice(0, 3)) {
+                params.append("ids", String(id));
+              }
               clear();
-              router.push(`/dream-ai?compare=${encodeURIComponent(ids)}`);
+              router.push(`/compare?${params.toString()}`);
             }}
           >
             {label}
