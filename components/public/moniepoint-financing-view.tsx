@@ -65,21 +65,21 @@ export function MoniepointFinancingView() {
             <aside className="border border-border bg-card p-6 shadow-sm md:p-8 lg:col-span-5 lg:max-w-md lg:justify-self-end xl:max-w-lg">
               <div className="flex items-center gap-3 text-muted-foreground">
                 <Sparkles className="h-5 w-5 shrink-0 motion-safe:animate-ambient-breathe" aria-hidden />
-                <p className="text-xs font-medium uppercase tracking-eyebrow">Their north star</p>
+                <p className="text-xs font-medium uppercase tracking-eyebrow">Their public promise</p>
               </div>
               <blockquote className="mt-6 text-xl font-medium leading-snug tracking-tight text-foreground md:text-2xl">
-                &ldquo;Simplified credit for business growth&rdquo;; the promise is emotional before it is financial:
-                momentum without humiliation.
+                &ldquo;Simplified credit for business growth.&rdquo; Less paperwork, clearer steps, credit that fits how
+                shops and teams actually run.
               </blockquote>
               <p className="mt-5 text-sm leading-relaxed text-muted-foreground">
-                Moniepoint&apos;s public credit story focuses on accessible loans for small and medium businesses: less
-                hassle, flexible amounts, and repayment rhythms that respect how shops and teams actually run.
+                Moniepoint serves small and medium businesses with accessible loans, flexible amounts, and repayment
+                rhythms aligned to real cash flow.
               </p>
               <div className="mt-8 border border-border bg-muted/30 p-4">
                 <MoniepointMark />
                 <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-                  Official products, rates, and eligibility are defined by Moniepoint alone. This page is a love letter to
-                  the partnership spirit, not a product sheet.
+                  Products, rates, and eligibility are set by Moniepoint only. This page explains the partnership; it is
+                  not a loan application or product sheet.
                 </p>
               </div>
             </aside>
@@ -93,20 +93,20 @@ export function MoniepointFinancingView() {
             <ProseSection
               eyebrow="In plain words"
               title={c.whatItIs.heading}
-              supporting="Warm language, hard truths: money is part of home, and clarity matters."
+              supporting="Money sits beside every home decision. We keep the language plain so you know what DreamHomes does and what Moniepoint offers."
             >
               <div className="mt-8 grid gap-5 lg:grid-cols-3">
                 {c.whatItIs.paragraphs.map((paragraph, i) => (
                   <div
                     key={i}
-                    className="relative flex gap-5 border border-border bg-card p-6 md:gap-6 md:p-7"
+                    className="relative flex flex-col gap-4 border border-border bg-card p-6 md:gap-5 md:p-7"
                   >
-                    <AmbientFrame motion="float-delayed" decorative className="shrink-0 pt-0.5">
-                      <div className="rounded-none border border-border bg-muted/40 p-2">
+                    <AmbientFrame motion="float-delayed" decorative className="shrink-0">
+                      <div className="inline-flex rounded-none border border-border bg-muted/40 p-2">
                         <MoniepointWhatIsGlyph index={i as 0 | 1 | 2} />
                       </div>
                     </AmbientFrame>
-                    <p className="min-w-0 flex-1 text-sm leading-relaxed text-muted-foreground md:text-[15px] md:leading-relaxed">
+                    <p className="text-sm leading-relaxed text-muted-foreground md:text-[15px] md:leading-relaxed">
                       {paragraph}
                     </p>
                   </div>
@@ -150,7 +150,7 @@ export function MoniepointFinancingView() {
               </ol>
             </ProseSection>
 
-            <ProseSection eyebrow="Illustrative" title={c.caseStudies.heading} supporting={c.caseStudies.disclaimer}>
+            <ProseSection eyebrow={c.caseStudies.eyebrow} title={c.caseStudies.heading} supporting={c.caseStudies.disclaimer}>
               <div className="mt-10 grid gap-10 md:grid-cols-3 md:gap-8 lg:gap-10">
                 {c.caseStudies.items.map((story) => (
                   <figure
@@ -158,7 +158,7 @@ export function MoniepointFinancingView() {
                     className="flex flex-col border border-border bg-muted/10 p-6 md:p-7"
                   >
                     <blockquote className="m-0 border-0 p-0">
-                      <p className="font-sans text-[1.05rem] italic leading-snug tracking-tight text-foreground md:text-lg md:leading-snug">
+                      <p className="font-sans text-[1.03rem] italic leading-snug tracking-tight text-foreground md:text-lg md:leading-snug">
                         &ldquo;{story.quote}&rdquo;
                       </p>
                     </blockquote>

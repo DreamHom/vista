@@ -13,11 +13,8 @@ import {
 } from "lucide-react";
 import { ListingGallery } from "@/components/public/listing-gallery";
 import { ListingDetailMap } from "@/components/public/listing-detail-map";
-import {
-  CompactListingTile,
-  MetricCard,
-  VerificationBadgeWithPopover,
-} from "@/components/public/public-components";
+import { CompactListingTile, MetricCard } from "@/components/public/public-components";
+import { ListingTrustChips } from "@/components/public/listing-trust-chips";
 import { ListingDetailViewerBar } from "@/components/public/listing-detail-viewer-bar";
 import { ListingQaSection } from "@/components/public/listing-qa-section";
 import { ListingReviewsSection } from "@/components/public/listing-reviews-section";
@@ -130,12 +127,10 @@ export default async function ListingDetailPage({
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="secondary">{listing.term === "RENT" ? "For rent" : "For sale"}</Badge>
                   <Badge variant="outline">{formatListingTypeLabel(listing.type)}</Badge>
-                  {listing.verified ? (
-                    <VerificationBadgeWithPopover
-                      label={listing.verificationLabel?.trim() || "Verified"}
-                      align="start"
-                    />
-                  ) : null}
+                  <ListingTrustChips
+                    ownerIdentityVerifiedAt={listing.ownerIdentityVerifiedAt}
+                    documentsVerifiedAt={listing.documentsVerifiedAt}
+                  />
                 </div>
                 <div>
                   <h1 className="text-balance text-3xl font-semibold tracking-tight md:text-4xl lg:text-[2.35rem] lg:leading-tight">

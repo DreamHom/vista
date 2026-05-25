@@ -20,6 +20,10 @@ import { formatDateTime } from "@/components/dashboard/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/toast";
+import { LivenessCheckStep } from "@/components/verification/liveness-check-step";
+import { AutomatedCheckBlock } from "@/components/verification/automated-check-block";
+import { RejectionReasonBanner } from "@/components/verification/rejection-reason-banner";
+import { ApiError } from "@/lib/api";
 import { latestPropertyDocumentsVerification, latestVerificationByType } from "@/lib/verification-helpers";
 
 import { listingTitle } from "./owner-page-primitives";
@@ -41,6 +45,8 @@ export function OwnerVerificationPage() {
   const queryClient = useQueryClient();
   const [identityFiles, setIdentityFiles] = useState<File[]>([]);
   const [propertyFiles, setPropertyFiles] = useState<Record<number, File[]>>({});
+  const [identityStep, setIdentityStep] = useState<"liveness" | "documents">("liveness");
+  const [livenessCheckId, setLivenessCheckId] = useState<number | null>(null);
 
   const profileQuery = useQuery({
     queryKey: ["owner-profile", user?.id],
@@ -54,13 +60,23 @@ export function OwnerVerificationPage() {
   });
 
   const identityMutation = useMutation({
-    mutationFn: () => submitOwnerIdentityVerification(identityFiles),
+    mutationFn: () => submitOwnerIdentityVerification(identityFiles, livenessCheckId ?? undefined),
     onSuccess: async () => {
       toast.success("Owner verification submitted.");
       setIdentityFiles([]);
+      setLivenessCheckId(null);
+      setIdentityStep("liveness");
       await queryClient.invalidateQueries({ queryKey: ["owner-profile", user?.id] });
     },
-    onError: () => toast.error("We couldn't submit owner verification right now."),
+    onError: (error) => {
+      if (error instanceof ApiError && (error.status === 403 || error.status === 409)) {
+        toast.error("Your liveness check expired or was already used. Run a fresh mocked check.");
+        setLivenessCheckId(null);
+        setIdentityStep("liveness");
+        return;
+      }
+      toast.error("We couldn't submit owner verification right now.");
+    },
   });
 
   const propertyMutation = useMutation({
@@ -113,14 +129,34 @@ export function OwnerVerificationPage() {
                   : "Identity verification unlocks stronger trust on your owner profile and listings."}
               </p>
             </div>
+            {latestIdentity?.status === "REJECTED" && latestIdentity.decisionReason ? (
+              <RejectionReasonBanner reason={latestIdentity.decisionReason} />
+            ) : null}
+            {latestIdentity?.automatedChecks ? (
+              <AutomatedCheckBlock checks={latestIdentity.automatedChecks} />
+            ) : null}
             {identityPending && latestIdentity ? (
               <PendingVerificationNotice submittedAt={latestIdentity.submittedAt} />
+            ) : identityStep === "liveness" ? (
+              <LivenessCheckStep
+                livenessId={livenessCheckId}
+                onLivenessId={setLivenessCheckId}
+                onContinue={() => setIdentityStep("documents")}
+              />
             ) : (
               <>
                 <Input type="file" multiple onChange={(event) => setIdentityFiles(Array.from(event.target.files ?? []))} />
-                <Button onClick={() => identityMutation.mutate()} disabled={identityMutation.isPending || identityFiles.length === 0}>
-                  {identityMutation.isPending ? "Submitting..." : "Submit owner identity"}
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" onClick={() => setIdentityStep("liveness")}>
+                    Back to liveness
+                  </Button>
+                  <Button
+                    onClick={() => identityMutation.mutate()}
+                    disabled={identityMutation.isPending || identityFiles.length === 0 || livenessCheckId == null}
+                  >
+                    {identityMutation.isPending ? "Submitting…" : "Submit owner identity"}
+                  </Button>
+                </div>
               </>
             )}
           </div>

@@ -1,100 +1,56 @@
 "use client";
 
-/* eslint-disable @next/next/no-img-element */
-
-import Link from "next/link";
 import { useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, CalendarPlus, ExternalLink, Flag, Sparkles } from "lucide-react";
-import {
-  appendAgentOwnerMessage,
-  acceptAgentAssignment,
-  changeAgentPassword,
-  declineAgentAssignment,
-  DEFAULT_AGENT_NOTIFICATION_PREFERENCES,
-  DEFAULT_AGENT_PROFILE_DRAFT,
-  getAgentDashboardOverview,
-  getAgentListingWorkspace,
-  getAgentProfileWorkspace,
-  listAgentInspections,
-  listAgentLeads,
-  listAgentManagedListings,
-  listAgentNotifications,
-  listAgentOffers,
-  listAgentOwnerRelationships,
-  readAgentNotificationPreferences,
-  readAgentProfileDraft,
-  readAgentPromotions,
-  saveAgentInspectionDecision,
-  saveAgentLeadState,
-  saveAgentNotificationPreferences,
-  saveAgentOfferState,
-  saveAgentProfileDraft,
-  saveAgentPromotions,
-  updateAgentProfile,
-  type AgentInspectionDecision,
-  type AgentNotificationFilter,
-  type AgentPromotionRecord,
-  type PipelineStage,
-} from "@/lib/agent-dashboard";
-import { markAllNotificationsRead, markNotificationRead } from "@/lib/applicant-dashboard";
-import { useAuth } from "@/lib/use-auth";
-import { formatNaira } from "@/lib/format";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { CalendarDays, CalendarPlus } from "lucide-react";
+
 import {
   DashboardPageIntro,
   EmptyPanel,
   ErrorPanel,
   LoadingPanel,
-  MetricCard,
   SectionCard,
-  SettingsToggle,
-  StatusBadge,
 } from "@/components/dashboard/applicant-ui";
-import { firstName, formatDate, formatDateTime, getGreeting } from "@/components/dashboard/utils";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { toast } from "@/components/ui/toast";
-import { cn } from "@/lib/utils";
-import { AgentInspectionRequestCard } from "@/components/agent/agent-inspection-request-card";
+import { formatDate } from "@/components/dashboard/utils";
 import { InspectionSlotCreateDialog } from "@/components/inspection/inspection-slot-create-dialog";
-
 import { InspectionTabFilters } from "@/components/inspection/inspection-tab-filters";
-import { PrototypeNotice, FilterPills } from "./agent-page-primitives";
+import { WorkspaceInspectionCard } from "@/components/inspection/workspace-inspection-card";
+import { Button } from "@/components/ui/button";
+import { listAgentManagedListings, listAgentWorkspaceInspections } from "@/lib/agent-dashboard";
+import { agentHasOperationalAccess } from "@/lib/assignment-lifecycle";
+import {
+  readWorkspaceInspectionNotes,
+  saveInspectionServerState,
+  saveWorkspaceInspectionNote,
+  workspaceInspectionTab,
+} from "@/lib/workspace-inspections";
+import { useAuth } from "@/lib/use-auth";
 
 export function AgentInspectionsPage() {
   const { user } = useAuth();
   const userId = user?.id ?? 0;
   const queryClient = useQueryClient();
+  const [slotDialogOpen, setSlotDialogOpen] = useState(false);
+  const [tab, setTab] = useState("pending");
+  const [calendarView, setCalendarView] = useState(false);
+  const [notes, setNotes] = useState<Record<number, string>>({});
+
   const inspectionsQuery = useQuery({
-    queryKey: ["agent-inspections", userId],
-    queryFn: () => listAgentInspections(userId),
+    queryKey: ["agent-workspace-inspections", userId],
+    queryFn: () => listAgentWorkspaceInspections(userId),
     enabled: userId > 0,
   });
+
   const managedListingsQuery = useQuery({
     queryKey: ["agent-managed-listings"],
     queryFn: listAgentManagedListings,
     enabled: userId > 0,
   });
-  const [slotDialogOpen, setSlotDialogOpen] = useState(false);
-  const [tab, setTab] = useState<AgentInspectionDecision["status"] | "all">("pending");
-  const [calendarView, setCalendarView] = useState(false);
 
   const slotListingOptions = useMemo(
     () =>
       (managedListingsQuery.data ?? [])
-        .filter((item) => item.assignment.status === "ACCEPTED" && item.listing)
+        .filter((item) => agentHasOperationalAccess(item.assignment.status) && item.listing)
         .map((item) => ({
           id: item.assignment.listingId,
           title: item.listing?.title ?? `Listing #${item.assignment.listingId}`,
@@ -102,46 +58,24 @@ export function AgentInspectionsPage() {
     [managedListingsQuery.data],
   );
 
-  const decisionMutation = useMutation({
-    mutationFn: async ({
-      notificationId,
-      status,
-      note,
-      noShow,
-      rescheduleAt,
-    }: {
-      notificationId: number;
-      status: AgentInspectionDecision["status"];
-      note: string;
-      noShow: boolean;
-      rescheduleAt: string;
-    }) => {
-      saveAgentInspectionDecision(userId, notificationId, {
-        status,
-        note,
-        noShow,
-        rescheduleAt,
-      });
-    },
-    onSuccess: async () => {
-      toast.success("Inspection note saved locally.");
-      await queryClient.invalidateQueries({ queryKey: ["agent-inspections", userId] });
-    },
-    onError: () => toast.error("We couldn't save that inspection update."),
-  });
+  const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey: ["agent-workspace-inspections", userId] });
+  };
 
   if (inspectionsQuery.isLoading) return <LoadingPanel label="Loading inspection activity..." />;
   if (inspectionsQuery.isError || !inspectionsQuery.data) {
-    return <ErrorPanel body="We couldn’t load your inspection queue right now." onRetry={() => void inspectionsQuery.refetch()} />;
+    return (
+      <ErrorPanel
+        body="We couldn't load your inspection queue right now."
+        onRetry={() => void inspectionsQuery.refetch()}
+      />
+    );
   }
 
-  const items = inspectionsQuery.data.filter((item) => {
-    if (tab === "all") return true;
-    if (tab === "cancelled") return item.localStatus === "cancelled" || item.noShow;
-    return item.localStatus === tab && !item.noShow;
-  });
+  const items = inspectionsQuery.data.filter((item) => workspaceInspectionTab(item) === tab);
+
   const groups = items.reduce<Record<string, typeof items>>((accumulator, item) => {
-    const key = formatDate(item.requestedAt);
+    const key = item.slot ? formatDate(item.slot.startsAt) : formatDate(item.requestedAt);
     accumulator[key] = [...(accumulator[key] ?? []), item];
     return accumulator;
   }, {});
@@ -152,13 +86,13 @@ export function AgentInspectionsPage() {
         open={slotDialogOpen}
         onOpenChange={setSlotDialogOpen}
         listings={slotListingOptions}
-        queryKeysToInvalidate={[["agent-managed-listings"], ["agent-inspections", userId]]}
+        queryKeysToInvalidate={[["agent-managed-listings"], ["agent-workspace-inspections", userId]]}
       />
 
       <DashboardPageIntro
         eyebrow="Inspection workspace"
         title="Inspections"
-        description="Track requests across every managed listing, capture notes, and keep a visible daily plan."
+        description="Confirmed visits on your accepted listings. Reschedule, complete, or cancel from Haven when the slot time allows."
         actions={
           <Button variant="outline" onClick={() => setCalendarView((current) => !current)}>
             <CalendarDays className="mr-2 h-4 w-4" aria-hidden />
@@ -167,14 +101,9 @@ export function AgentInspectionsPage() {
         }
       />
 
-      <PrototypeNotice
-        title="Agent confirmation and reschedule actions are staged locally"
-        body="The backend exposes agent assignment acceptance, but not inspection decision endpoints yet. Use these controls to keep the workflow visible and synced for design review."
-      />
-
       <SectionCard
         title="Inspection slots"
-        description="Publish bookable windows on accepted listings. Same batch flow as owners: pick a date, select 10:00, 11:00, 14:00, publish once."
+        description="Publish bookable windows on accepted listings."
         action={
           <Button
             type="button"
@@ -189,7 +118,7 @@ export function AgentInspectionsPage() {
       >
         {slotListingOptions.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            Accept a listing assignment first. Only accepted listings can receive new inspection slots on Haven.
+            Accept a listing assignment first. Only accepted listings can receive new inspection slots.
           </p>
         ) : (
           <p className="text-sm text-muted-foreground">
@@ -200,28 +129,27 @@ export function AgentInspectionsPage() {
 
       <InspectionTabFilters
         value={tab}
-        onChange={(value) => setTab(value as typeof tab)}
+        onChange={setTab}
         options={[
           { label: "Pending", value: "pending" },
           { label: "Approved", value: "approved" },
           { label: "Completed", value: "completed" },
-          { label: "Declined / no-show", value: "cancelled" },
-          { label: "All", value: "all" },
+          { label: "Declined / cancelled", value: "cancelled" },
         ]}
       />
 
       {items.length === 0 ? (
         <EmptyPanel
           title="No inspections in this tab"
-          body="Switch tabs or wait for applicants to request inspections on your managed listings."
+          body="Booking requests on your managed listings appear here with Haven status and visit windows."
         />
       ) : calendarView ? (
         <div className="grid gap-4 md:grid-cols-2">
           {Object.entries(groups).map(([date, group]) => (
-            <SectionCard key={date} title={date} description={`${group.length} inspection item${group.length === 1 ? "" : "s"}.`}>
+            <SectionCard key={date} title={date} description={`${group.length} visit${group.length === 1 ? "" : "s"}.`}>
               <div className="space-y-3">
                 {group.map((item) => (
-                  <div key={item.key} className="border border-border bg-secondary/40 px-4 py-4">
+                  <div key={item.inspection.id} className="border border-border bg-secondary/40 px-4 py-4">
                     <p className="text-sm font-medium text-foreground">{item.listing?.title ?? "Managed listing"}</p>
                     <p className="mt-1 text-sm text-muted-foreground">{item.applicantName}</p>
                   </div>
@@ -233,19 +161,20 @@ export function AgentInspectionsPage() {
       ) : (
         <div className="space-y-4">
           {items.map((item) => (
-            <AgentInspectionRequestCard
-              key={item.key}
+            <WorkspaceInspectionCard
+              key={item.inspection.id}
               item={item}
-              pending={decisionMutation.isPending}
-              onSave={(decision) =>
-                decisionMutation.mutate({
-                  notificationId: item.notification.id,
-                  status: decision.status,
-                  note: decision.note,
-                  noShow: decision.noShow,
-                  rescheduleAt: decision.rescheduleAt,
-                })
-              }
+              role="agent"
+              note={notes[item.inspection.id] ?? ""}
+              onNoteChange={(value) => {
+                const next = { ...notes, [item.inspection.id]: value };
+                setNotes(next);
+                saveWorkspaceInspectionNote(userId, item.inspection.id, value);
+              }}
+              onRefresh={refresh}
+              onPersistInspection={(inspection) => {
+                saveInspectionServerState(userId, inspection);
+              }}
             />
           ))}
         </div>
@@ -253,4 +182,3 @@ export function AgentInspectionsPage() {
     </div>
   );
 }
-

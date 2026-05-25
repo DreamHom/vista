@@ -97,7 +97,7 @@ export function isLegacyWorkspaceInspectionLabel(label: string): boolean {
 }
 
 export function canApplicantCancelInspection(status: InspectionHavenStatus): boolean {
-  return status === "PENDING";
+  return status === "PENDING" || status === "APPROVED";
 }
 
 /** Shown on upcoming cards when cancel is not available. */
@@ -106,7 +106,7 @@ export function applicantCancelBlockedReason(status: InspectionHavenStatus): str
     case "PENDING":
       return null;
     case "APPROVED":
-      return "This visit is approved on Haven. Message the host if your plans change; they can decline or mark a no-show from their dashboard.";
+      return null;
     case "CANCELLED":
       return "You already cancelled this request. The slot may be open for others to book.";
     case "DECLINED":
@@ -136,14 +136,17 @@ export function applicantInspectionOutcomeLine(status: InspectionHavenStatus): s
 
 export function inspectionCancelErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
+    if (error.status === 400) {
+      return "Tell us why you are cancelling (max 200 characters).";
+    }
     if (error.status === 409) {
-      return "This visit is no longer pending (already approved, declined, or cancelled). Refresh your list.";
+      return "This inspection is not cancellable anymore. Refresh to see the latest state.";
     }
     if (error.status === 403) {
-      return "Only the applicant who booked this slot can cancel it.";
+      return "Only the applicant, listing owner, or assigned agent can cancel this inspection.";
     }
     if (error.status === 404) {
-      return "This inspection request was not found. Refresh and try again.";
+      return "We could not find that inspection. It may have been removed.";
     }
     return apiErrorMessage(error, "We could not cancel this inspection.");
   }

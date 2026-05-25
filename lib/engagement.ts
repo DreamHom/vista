@@ -6,6 +6,7 @@ export interface CommentResponse {
   listingId: number;
   authorUserId: number;
   body: string;
+  parentCommentId?: number | null;
   createdAt: string;
 }
 
@@ -26,8 +27,15 @@ export async function listListingComments(listingId: number, size = 20) {
   return response.content;
 }
 
-export async function postListingComment(listingId: number, body: string) {
-  return api.post<CommentResponse>(`/listings/${listingId}/comments`, { body });
+export async function postListingComment(
+  listingId: number,
+  body: string,
+  parentCommentId?: number | null,
+) {
+  return api.post<CommentResponse>(`/listings/${listingId}/comments`, {
+    body,
+    ...(parentCommentId != null ? { parentCommentId } : {}),
+  });
 }
 
 export async function flagListingComment(listingId: number, commentId: number, reason?: string) {

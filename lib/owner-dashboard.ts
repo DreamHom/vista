@@ -107,6 +107,7 @@ export interface AgentListingResponse {
   requestedByOwnerId: number;
   status: "REQUESTED" | "ACCEPTED" | "DECLINED" | "REVOKED";
   decisionReason?: string | null;
+  automatedChecks?: import("@/lib/verification-types").AutomatedCheckResultResponse[] | null;
   requestedAt: string;
   decidedAt?: string | null;
 }
@@ -443,7 +444,7 @@ export async function listOwnerComments(ownerUserId: number) {
 function pickInspectionIdFromPayload(payload: unknown): number | null {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
   const raw = payload as Record<string, unknown>;
-  for (const key of ["inspectionId", "inspection_id"]) {
+  for (const key of ["inspectionRequestId", "inspectionId", "inspection_id"]) {
     const v = raw[key];
     if (typeof v === "number" && Number.isFinite(v)) return v;
     if (typeof v === "string" && /^\d+$/.test(v)) return Number(v);
@@ -560,6 +561,14 @@ export async function listOwnerLeads(ownerUserId: number) {
     .sort((left, right) => new Date(right.lastActivityAt).getTime() - new Date(left.lastActivityAt).getTime());
 }
 
+export async function listOwnerWorkspaceInspections(userId: number) {
+  const ownerListings = await listOwnerListings(100);
+  const listingIds = new Set(ownerListings.items.map((item) => item.listing.id));
+  const { listWorkspaceInspections } = await import("@/lib/workspace-inspections");
+  return listWorkspaceInspections({ userId, listingIds });
+}
+
+/** @deprecated Use listOwnerWorkspaceInspections for Haven-backed status and actions. */
 export async function listOwnerInspectionItems(userId: number) {
   const notifications = await listNotifications({ size: 80, kind: "INSPECTION_REQUESTED" });
 
@@ -755,13 +764,21 @@ export async function updateOwnerListing(
 }
 
 export async function uploadOwnerListingPhoto(listingId: number, file: File, caption?: string) {
-  const formData = new FormData();
-  formData.set("file", file);
-  if (caption?.trim()) {
-    formData.set("caption", caption.trim());
+  const { uploadListingPhotoDirect } = await import("@/lib/listing-photo-upload");
+  const { ApiError } = await import("@/lib/api");
+  try {
+    return await uploadListingPhotoDirect(listingId, file, { caption });
+  } catch (error) {
+    if (error instanceof ApiError && error.status > 0 && error.status < 500) {
+      throw error;
+    }
+    const formData = new FormData();
+    formData.set("file", file);
+    if (caption?.trim()) {
+      formData.set("caption", caption.trim());
+    }
+    return api.post<PhotoResponse>(`/listings/${listingId}/photos`, formData);
   }
-
-  return api.post<PhotoResponse>(`/listings/${listingId}/photos`, formData);
 }
 
 async function uploadVerificationFiles(files: File[]) {
@@ -778,11 +795,12 @@ async function uploadVerificationFiles(files: File[]) {
   return Object.fromEntries(uploads);
 }
 
-export async function submitOwnerIdentityVerification(files: File[]) {
+export async function submitOwnerIdentityVerification(files: File[], livenessCheckId?: number) {
   const documentRefs = await uploadVerificationFiles(files);
   return api.post<VerificationResponse>("/verifications", {
     type: "OWNER_IDENTITY",
     documentRefs,
+    ...(livenessCheckId != null ? { livenessCheckId } : {}),
   });
 }
 

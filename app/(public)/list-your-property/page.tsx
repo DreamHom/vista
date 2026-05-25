@@ -22,13 +22,13 @@ import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "List Your Property",
-  description: "Publish where trust signals, visible fees, and serious discovery help owners and tenants meet with less noise.",
+  description: "List on DreamHomes with verification, visible fees, and discovery built for serious buyers and tenants in Nigeria.",
 };
 
 const VALUE_PILLS = [
-  { label: "Trust-first discovery", body: "Verification and fee clarity before the first message." },
-  { label: "You stay in control", body: "Self-serve or bring an agent without losing the thread." },
-  { label: "One documented trail", body: "Inspections and offers stay on-platform where they belong." },
+  { label: "Trust-first discovery", body: "Verification and fees visible before the first message." },
+  { label: "You stay in control", body: "Publish yourself or assign an agent without losing the thread." },
+  { label: "One on-platform trail", body: "Inspections and offers stay documented, not scattered in chat." },
 ] as const;
 
 const OFFERINGS = [
@@ -183,10 +183,10 @@ export default function ListYourPropertyPage() {
             <span className="text-xs text-muted-foreground">Owners · Verification-first · Haven-backed</span>
           </div>
           <h1 className="mt-4 max-w-4xl text-balance text-3xl font-semibold leading-tight tracking-tight text-foreground md:text-5xl lg:text-[3.05rem] lg:leading-[1.05]">
-            Your property deserves to be someone&apos;s dream home, not a mystery in someone&apos;s inbox.
+            List where buyers see fees and verification before they call.
           </h1>
           <p className="mt-5 max-w-2xl text-pretty text-sm leading-relaxed text-muted-foreground md:text-base">
-            Publish where trust signals, visible fees, and serious discovery help buyers and tenants decide before they burn your Saturday on a mismatch.
+            Publish on DreamHomes so trust signals, visible charges, and serious search help people decide before they waste your Saturday on a mismatch.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link href="/signup?role=OWNER" className={cn(buttonVariants({ variant: "primary", size: "lg" }), "rounded-none px-8")}>
@@ -213,7 +213,7 @@ export default function ListYourPropertyPage() {
         <SectionHeading
           eyebrow="Why publish here"
           title="Built for owners who want signal, not noise"
-          supporting="The same product principles we use for agents: clarity early, verification that means something, and a trail when things get serious."
+          supporting="Clarity early, verification that means something, and a trail when interest turns serious."
         />
         <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {OFFERINGS.map((item) => {
@@ -243,7 +243,7 @@ export default function ListYourPropertyPage() {
             </h2>
           </div>
           <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
-            The left column is where high-ticket listings quietly lose people. The right is where DreamHomes invests by default.
+            The left is where high-ticket listings quietly lose people. The right is what DreamHomes builds in by default.
           </p>
         </div>
         <div className="mt-10 grid gap-4 md:grid-cols-2 md:gap-6">
@@ -293,7 +293,7 @@ export default function ListYourPropertyPage() {
           <p className="text-xs font-semibold uppercase tracking-eyebrow text-muted-foreground">What we need on file</p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">Checklist before you publish</h2>
           <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-            Nothing here exists to slow you down for sport. Each line is so buyers know who they are dealing with and you keep a clean record.
+            Each item helps buyers know who they are dealing with and gives you a clean record if something goes wrong.
           </p>
           <ul className="mt-8 divide-y divide-border border border-border">
             {OWNER_REQUIREMENTS.map((row) => {
@@ -348,7 +348,11 @@ export default function ListYourPropertyPage() {
           <div className="mt-8 border-t border-border pt-6 text-sm leading-relaxed text-muted-foreground">
             <p className="font-medium text-foreground">Financing note</p>
             <p className="mt-2">
-              Qualified buyers can explore home financing through Moniepoint as the DreamHomes product vision matures, so serious interest can move toward action with fewer dead ends.
+              Serious buyers may explore Moniepoint financing options as that partnership grows.{" "}
+              <Link href="/moniepoint-financing" className="font-medium text-accent hover:text-accent/80">
+                Read how financing fits DreamHomes
+              </Link>
+              .
             </p>
           </div>
         </div>
@@ -422,9 +426,9 @@ export default function ListYourPropertyPage() {
       </section>
 
       <section className="mt-16 border border-primary/25 bg-primary/[0.06] px-6 py-10 text-center md:px-12">
-        <h2 className="text-2xl font-semibold tracking-tight text-foreground md:text-3xl">Ready to list where trust is visible?</h2>
+        <h2 className="text-2xl font-semibold tracking-tight text-foreground md:text-3xl">Ready to list with trust visible upfront?</h2>
         <p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground md:text-base">
-          Create your owner account, add the property once, and let verification and fee clarity do the early filtering for you.
+          Create your owner account, add the property once, and let verification and fee clarity filter interest early.
         </p>
         <div className="mt-8 flex flex-wrap justify-center gap-3">
           <Link href="/signup?role=OWNER" className={cn(buttonVariants({ variant: "primary", size: "lg" }), "rounded-none px-8")}>

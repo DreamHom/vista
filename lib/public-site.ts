@@ -41,9 +41,9 @@ export const STATIC_PAGES: readonly StaticPageContent[] = [
   {
     slug: "about",
     eyebrow: "About DreamHomes",
-    title: "A trust-first property platform built for real Nigerian housing journeys.",
+    title: "A trust-first property platform for Nigerian housing journeys.",
     description:
-      "DreamHomes exists to replace fake listings, hidden charges, and WhatsApp chaos with a calmer, verified way to discover, compare, and close on a home.",
+      "DreamHomes replaces fake listings, hidden charges, and scattered chat with verified discovery, visible fees, and on-platform inspections and offers.",
     sections: [
       {
         heading: "What we believe",
@@ -65,9 +65,9 @@ export const STATIC_PAGES: readonly StaticPageContent[] = [
   {
     slug: "how-it-works",
     eyebrow: "How It Works",
-    title: "DreamHomes keeps discovery open and serious actions accountable.",
+    title: "Open discovery. Documented next steps.",
     description:
-      "Browse listings, review trust signals, compare options, then move deeper only when the property feels right.",
+      "Browse listings and trust signals freely. Sign up when you want to save, inspect, list, or make an offer on-platform.",
     sections: [
       {
         heading: "For applicants",
@@ -89,9 +89,9 @@ export const STATIC_PAGES: readonly StaticPageContent[] = [
   {
     slug: "contact",
     eyebrow: "Contact Us",
-    title: "Talk to the DreamHomes team.",
+    title: "Contact DreamHomes",
     description:
-      "For support, partnerships, press requests, or trust and safety issues, reach out and we will route you to the right person.",
+      "Support, partnerships, press, or trust and safety. Reach out and we will route your message to the right team.",
     sections: [
       {
         heading: "Support channels",
@@ -114,7 +114,7 @@ export const STATIC_PAGES: readonly StaticPageContent[] = [
   {
     slug: "faq",
     eyebrow: "FAQ",
-    title: "Clear answers to the questions people ask before they trust a platform.",
+    title: "Answers before you trust a listing or a profile.",
     description:
       "These are the practical questions that come up most often across browsing, verification, inspections, and offers.",
     sections: [

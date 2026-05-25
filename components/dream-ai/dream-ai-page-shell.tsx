@@ -13,13 +13,14 @@ type DreamAiPageShellProps = {
   listings: PublicListing[];
   /** From `/dream-ai?prompt=…` (e.g. dashboard starter chips). */
   initialPrompt?: string;
+  initialCompareIds?: number[];
 };
 
 /**
  * Dream AI chat card. First message expands to fill the viewport below the header;
  * the welcome banner lives inside the card (centered gradient hero).
  */
-export function DreamAiPageShell({ listings, initialPrompt }: DreamAiPageShellProps) {
+export function DreamAiPageShell({ listings, initialPrompt, initialCompareIds }: DreamAiPageShellProps) {
   const [immersive, setImmersive] = React.useState(false);
 
   return (
@@ -53,6 +54,7 @@ export function DreamAiPageShell({ listings, initialPrompt }: DreamAiPageShellPr
           embedded
           listings={listings}
           initialPrompt={initialPrompt}
+          initialCompareIds={initialCompareIds}
           occupyFullHeight={immersive}
           onConversationChange={setImmersive}
         />

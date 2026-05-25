@@ -15,6 +15,8 @@ export interface DreamAiRunTurnRequest {
   chatId?: number | null;
   clientMessageId?: string | null;
   userChoice?: UserChoicePayload | null;
+  compareListingIds?: number[] | null;
+  rankMode?: "FAST" | "SMART" | null;
 }
 
 export interface ChipOption {

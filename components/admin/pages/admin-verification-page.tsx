@@ -25,6 +25,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { VerificationDocumentRefsDetail } from "@/components/admin/verification-submission-details";
+import { AutomatedCheckBlock } from "@/components/verification/automated-check-block";
 import { FilterPills } from "./admin-page-primitives";
 
 function defaultMoreInfoMessage(item: VerificationAdminView) {
@@ -125,6 +126,8 @@ export function AdminVerificationPage() {
                   </div>
                   <StatusBadge label={item.status} variant={item.status === "APPROVED" ? "success" : item.status === "REJECTED" ? "warning" : "secondary"} />
                 </div>
+
+                <AutomatedCheckBlock checks={item.automatedChecks} />
 
                 <div className="grid gap-4 xl:grid-cols-[1fr_300px]">
                   <div className="space-y-3">

@@ -126,6 +126,7 @@ export function DreamAiChat({
   embedded = false,
   listings,
   initialPrompt,
+  initialCompareIds,
   occupyFullHeight = false,
   onConversationChange,
 }: {
@@ -133,6 +134,8 @@ export function DreamAiChat({
   listings: PublicListing[];
   /** Auto-send once when set (dashboard prompt chips). */
   initialPrompt?: string;
+  /** From browse compare bar (`/dream-ai?compare=1,2,3`). */
+  initialCompareIds?: number[];
   occupyFullHeight?: boolean;
   onConversationChange?: (active: boolean) => void;
 }) {
@@ -335,6 +338,19 @@ export function DreamAiChat({
     initialPromptHandled.current = true;
     submit(trimmed);
   }, [initialPrompt, submit]);
+
+  const initialCompareHandled = React.useRef(false);
+  React.useEffect(() => {
+    const ids = initialCompareIds?.filter((id) => Number.isFinite(id)) ?? [];
+    if (ids.length < 2 || initialCompareHandled.current || busy) return;
+    initialCompareHandled.current = true;
+    setBusy(true);
+    setMessages((prev) => [...prev, { id: makeId(), role: "user", content: "Compare these for me" }]);
+    void runHavenTurn({
+      prompt: "Compare these for me",
+      compareListingIds: ids.slice(0, 5),
+    }).finally(() => setBusy(false));
+  }, [initialCompareIds, busy, runHavenTurn]);
 
   const submitChip = React.useCallback(
     (chip: ChipOption) => {

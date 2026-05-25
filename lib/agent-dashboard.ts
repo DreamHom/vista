@@ -541,6 +541,16 @@ export async function getAgentListingWorkspace(listingId: number, userId: number
   };
 }
 
+export async function listAgentWorkspaceInspections(userId: number) {
+  const managedListings = await listAgentManagedListings();
+  const listingIds = new Set(
+    acceptedManagedListings(managedListings).map((item) => item.assignment.listingId),
+  );
+  const { listWorkspaceInspections } = await import("@/lib/workspace-inspections");
+  return listWorkspaceInspections({ userId, listingIds });
+}
+
+/** @deprecated Use listAgentWorkspaceInspections for Haven-backed inspection operations. */
 export async function listAgentInspections(userId: number) {
   const { managedListings, notifications } = await listManagedContext();
   const active = acceptedManagedListings(managedListings);

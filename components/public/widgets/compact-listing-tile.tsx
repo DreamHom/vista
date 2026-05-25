@@ -8,7 +8,7 @@ import { formatNaira } from "@/lib/format";
 import { fallbackListingPhoto } from "@/lib/seed/photos";
 import type { PublicListing } from "@/lib/seed/public-data";
 import { cn } from "@/lib/utils";
-import { VerificationBadgeWithPopover } from "../verification-badge-popover";
+import { ListingTrustChips } from "@/components/public/listing-trust-chips";
 
 import { ListingImage } from "./listing-image";
 
@@ -51,11 +51,10 @@ export function CompactListingTile({
         </div>
       </div>
       <div className="flex min-w-0 flex-col gap-3">
-        {listing.verified ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <VerificationBadgeWithPopover label="Verified" align="start" />
-          </div>
-        ) : null}
+        <ListingTrustChips
+          ownerIdentityVerifiedAt={listing.ownerIdentityVerifiedAt}
+          documentsVerifiedAt={listing.documentsVerifiedAt}
+        />
         <div className="min-w-0">
           <Link
             href={href}

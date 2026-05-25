@@ -85,6 +85,7 @@ interface ListingResponse {
   viewCount: number | null;
   createdAt: string;
   updatedAt: string;
+  ownerIdentityVerifiedAt?: string | null;
   property: PropertySummary;
   assignedAgentId: number | null;
   pendingReportCount: number | null;
@@ -110,6 +111,7 @@ interface CommentResponse {
   listingId: number;
   authorUserId: number;
   body: string;
+  parentCommentId?: number | null;
   createdAt: string;
 }
 
@@ -179,7 +181,7 @@ export type PublicAgent = PublicPerson;
 export interface ListingCommentReply {
   id: string;
   authorName: string;
-  authorRole: "Owner" | "Agent";
+  authorRole: "Owner" | "Agent" | "Applicant";
   body: string;
   date: string;
 }
@@ -241,6 +243,8 @@ export interface PublicListing {
   updatedAt: string;
   verified: boolean;
   verificationLabel: string;
+  ownerIdentityVerifiedAt: string | null;
+  documentsVerifiedAt: string | null;
   photos: PublicPhoto[];
   owner: PublicOwner;
   agent: PublicAgent | null;
@@ -509,6 +513,8 @@ async function enrichListing(
     updatedAt: listing.updatedAt,
     verified: Boolean(listing.property.documentsVerifiedAt),
     verificationLabel: listing.property.documentsVerifiedAt ? "Property Verified" : "Verification pending",
+    ownerIdentityVerifiedAt: listing.ownerIdentityVerifiedAt ?? null,
+    documentsVerifiedAt: listing.property.documentsVerifiedAt ?? null,
     photos: gallery,
     owner,
     agent,
@@ -700,19 +706,41 @@ export async function getListingById(id: string): Promise<PublicListingDetail | 
           ...reviewsPage.content.map((review) => review.reviewerUserId),
         ]);
 
-        const comments: ListingComment[] = commentsPage.content.map((comment) => {
+        const commentRows = commentsPage.content.map((comment) => {
           const profile = authorProfiles.get(String(comment.authorUserId));
           return {
             id: String(comment.id),
+            numericId: comment.id,
+            parentCommentId: comment.parentCommentId ?? null,
             authorUserId: comment.authorUserId,
             authorName: profile ? toPublicPerson(profile).name : `User ${comment.authorUserId}`,
             authorRole:
               profile?.role === "AGENT" ? "Agent" : profile?.role === "OWNER" ? "Owner" : "Applicant",
             body: comment.body,
             date: formatDate(comment.createdAt, { dateStyle: "medium" }),
-            replies: [],
+            replies: [] as ListingComment["replies"],
           };
         });
+
+        const comments: ListingComment[] = commentRows
+          .filter((row) => row.parentCommentId == null)
+          .map((parent) => ({
+            id: parent.id,
+            authorUserId: parent.authorUserId,
+            authorName: parent.authorName,
+            authorRole: parent.authorRole as ListingComment["authorRole"],
+            body: parent.body,
+            date: parent.date,
+            replies: commentRows
+              .filter((row) => row.parentCommentId === parent.numericId)
+              .map((reply) => ({
+                id: reply.id,
+                authorName: reply.authorName,
+                authorRole: reply.authorRole as ListingCommentReply["authorRole"],
+                body: reply.body,
+                date: reply.date,
+              })),
+          }));
 
         const reviews: PublicReview[] = reviewsPage.content.map((review) => {
           const profile = authorProfiles.get(String(review.reviewerUserId));

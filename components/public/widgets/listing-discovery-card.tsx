@@ -1,13 +1,17 @@
+"use client";
+
 import Link from "next/link";
 import { Bath, BedDouble, MapPin } from "lucide-react";
 
+import { useCompareSelectionOptional } from "@/components/dream-ai/compare-selection-store";
 import { ListingCardMedia } from "@/components/listings/listing-card-media";
+import { ListingTrustChips } from "@/components/public/listing-trust-chips";
 import { buttonVariants } from "@/components/ui/button";
+import { toast } from "@/components/ui/toast";
 import { formatNaira } from "@/lib/format";
 import { fallbackListingPhoto } from "@/lib/seed/photos";
 import { type PublicListing, formatAvailability } from "@/lib/seed/public-data";
 import { cn } from "@/lib/utils";
-import { VerificationBadgeWithPopover } from "../verification-badge-popover";
 
 function formatPropertyTypeLabel(type: PublicListing["type"]): string {
   return type
@@ -17,10 +21,19 @@ function formatPropertyTypeLabel(type: PublicListing["type"]): string {
     .join(" ");
 }
 
-export function ListingDiscoveryCard({ listing }: { listing: PublicListing }) {
+export function ListingDiscoveryCard({
+  listing,
+  compareMode = false,
+}: {
+  listing: PublicListing;
+  compareMode?: boolean;
+}) {
   const period = listing.term === "RENT" ? "/year" : "";
   const photo = listing.photos[0];
   const fallback = fallbackListingPhoto(`${listing.id}-${listing.title}`, { w: 800, ratio: "4:3" });
+  const compare = useCompareSelectionOptional();
+  const numericId = Number(listing.id);
+  const selected = compare?.isSelected(numericId) ?? false;
 
   return (
     <article className="group/card border border-border bg-card">
@@ -32,10 +45,29 @@ export function ListingDiscoveryCard({ listing }: { listing: PublicListing }) {
           fallbackUrl={fallback.url}
           alt={photo?.alt ?? fallback.alt ?? listing.title}
         />
-        {listing.verified ? (
-          <div className="pointer-events-auto absolute left-4 top-4 z-40 drop-shadow-md">
-            <VerificationBadgeWithPopover label="Verified" align="start" />
-          </div>
+        <div className="pointer-events-auto absolute left-4 top-4 z-40 flex flex-col items-start gap-2 drop-shadow-md">
+          <ListingTrustChips
+            ownerIdentityVerifiedAt={listing.ownerIdentityVerifiedAt}
+            documentsVerifiedAt={listing.documentsVerifiedAt}
+          />
+        </div>
+        {compareMode && compare ? (
+          <label className="pointer-events-auto absolute right-4 top-4 z-40 flex cursor-pointer items-center gap-2 border border-border bg-card px-2 py-1.5 text-xs font-medium shadow-sm">
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-primary"
+              checked={selected}
+              aria-label="Add this listing to compare"
+              onChange={() => {
+                if (!selected && compare.atCap) {
+                  toast.message("Up to 5 listings can be compared at once. Uncheck one to swap.");
+                  return;
+                }
+                compare.toggle(numericId);
+              }}
+            />
+            Compare
+          </label>
         ) : null}
       </div>
 

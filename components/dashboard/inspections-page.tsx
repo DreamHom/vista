@@ -15,7 +15,7 @@ import {
   StatusBadge,
 } from "@/components/dashboard/applicant-ui";
 import {
-  cancelInspection,
+  cancelInspectionWithReason,
   fetchListingBookingPhotos,
   fetchListingBookingSlots,
   fetchListingBookingSummary,
@@ -35,7 +35,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { InspectionSlotBookingCalendar } from "@/components/inspection/inspection-slot-booking-calendar";
 import { ApiError } from "@/lib/api";
 import { apiErrorMessage } from "@/lib/api-error-message";
-import { InspectionActionDialog } from "@/components/inspection/inspection-action-dialog";
+import { CancelInspectionDialog } from "@/components/inspection/cancel-inspection-dialog";
 import { inspectionSlotClaimErrorMessage } from "@/lib/inspection-slot-errors";
 import { InspectionTabFilters } from "@/components/inspection/inspection-tab-filters";
 import {
@@ -438,9 +438,10 @@ export function ApplicantInspectionsPage() {
   });
 
   const cancelMutation = useMutation({
-    mutationFn: (inspectionId: number) => cancelInspection(inspectionId),
-    onSuccess: (_data, inspectionId) => {
-      toast.success("Booking cancelled. The time slot is open for others.");
+    mutationFn: ({ inspectionId, reason }: { inspectionId: number; reason: string }) =>
+      cancelInspectionWithReason(inspectionId, reason),
+    onSuccess: (_data, { inspectionId }) => {
+      toast.success("Inspection cancelled. The other party has been notified.");
       setCancelTarget(null);
       void queryClient.invalidateQueries({ queryKey: ["applicant-inspections", user?.id] });
       void queryClient.invalidateQueries({ queryKey: ["applicant-dashboard-overview", user?.id] });
@@ -494,27 +495,16 @@ export function ApplicantInspectionsPage() {
     <div className="space-y-6">
       {bookingHeader}
 
-      <InspectionActionDialog
+      <CancelInspectionDialog
         open={cancelTarget != null}
         onOpenChange={(open) => {
           if (!open) setCancelTarget(null);
         }}
-        title="Cancel this booking?"
-        destructive
-        confirmLabel="Cancel booking"
+        windowLabel={cancelWindowLabel}
         pending={cancelMutation.isPending}
-        onConfirm={() => {
-          if (cancelTarget) cancelMutation.mutate(cancelTarget.inspection.id);
+        onSubmit={(reason) => {
+          if (cancelTarget) cancelMutation.mutate({ inspectionId: cancelTarget.inspection.id, reason });
         }}
-        description={
-          <>
-            <p>
-              You are cancelling your request for <strong className="text-foreground">{cancelWindowLabel}</strong>.
-              Haven frees the slot so other applicants can book it.
-            </p>
-            <p>This only works while your request is still pending. Approved visits need the host to update the booking.</p>
-          </>
-        }
       />
 
       <DashboardPageIntro

@@ -13,10 +13,11 @@ import {
 import {
   getNotificationHref,
   listNotifications,
+  type NotificationResponse,
   markAllNotificationsRead,
   markNotificationRead,
-  type NotificationResponse,
 } from "@/lib/applicant-dashboard";
+import { notificationDisplayCopy } from "@/lib/notification-display";
 import { notificationCategory, formatDateTime } from "@/components/dashboard/utils";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { useAuth } from "@/lib/use-auth";
@@ -139,6 +140,7 @@ export function ApplicantNotificationsPage() {
         <div className="space-y-3">
           {filteredNotifications.map((notification) => {
             const isUnread = !notification.readAt;
+            const copy = notificationDisplayCopy(notification);
 
             return (
               <div
@@ -153,7 +155,7 @@ export function ApplicantNotificationsPage() {
                     <div className="space-y-2">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="text-sm font-medium uppercase tracking-eyebrow text-muted-foreground">
-                          {notification.kind.replaceAll("_", " ")}
+                          {copy.title}
                         </p>
                         {isUnread ? (
                           <span className="rounded-full bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground">
@@ -162,8 +164,8 @@ export function ApplicantNotificationsPage() {
                         ) : null}
                       </div>
                       <p className="text-base leading-7 text-foreground">
-                        {notification.body?.trim()
-                          ? notification.body
+                        {copy.body.trim()
+                          ? copy.body
                           : "Open this update to jump back into the relevant activity."}
                       </p>
                       <p className="text-sm text-muted-foreground">{formatDateTime(notification.createdAt)}</p>

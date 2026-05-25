@@ -27,13 +27,13 @@ import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "Become an Agent",
-  description: "Grow your real estate practice on DreamHomes with verification-first profiles, serious leads, and on-platform deal hygiene.",
+  description: "Join DreamHomes as an agent: verified profiles, serious leads, transparent fees, and on-platform inspections and offers.",
 };
 
 const VALUE_PILLS = [
-  { label: "Verification-first", body: "Badges tied to real checks, not vanity stickers." },
+  { label: "Verification-first", body: "Badges tied to credential review, not marketing stickers." },
   { label: "Serious discovery", body: "Applicants arrive after search, compare, and shortlist work." },
-  { label: "Documented flow", body: "Inspections and offers stay on-platform where they belong." },
+  { label: "Documented flow", body: "Inspections and offers stay on-platform, not lost in SMS." },
 ] as const;
 
 const OFFERINGS = [
@@ -188,10 +188,10 @@ export default function BecomeAnAgentPage() {
             <span className="text-xs text-muted-foreground">Nigeria-first · Haven-backed workflows</span>
           </div>
           <h1 className="mt-4 max-w-4xl text-balance text-3xl font-semibold leading-tight tracking-tight text-foreground md:text-5xl lg:text-[3.15rem] lg:leading-[1.05]">
-            Grow your practice on a platform that rewards trust, not noise.
+            Show up verified before the first call.
           </h1>
           <p className="mt-5 max-w-2xl text-pretty text-sm leading-relaxed text-muted-foreground md:text-base">
-            DreamHomes is for agents who want prospects to understand who you are, what you charge, and how you run a viewing before they ever pick up the phone.
+            DreamHomes is for agents who want prospects to see who you are, what you charge, and how you run a viewing before they dial your number.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link
@@ -221,7 +221,7 @@ export default function BecomeAnAgentPage() {
         <SectionHeading
           eyebrow="Why join"
           title="What you get on DreamHomes"
-          supporting="Four pillars we built after watching agents lose deals to confusion, not competition."
+          supporting="Four reasons agents join when clarity beats volume."
         />
         <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {OFFERINGS.map((item) => {
@@ -251,7 +251,7 @@ export default function BecomeAnAgentPage() {
             </h2>
           </div>
           <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
-            One path optimises for volume. The other optimises for what still matters after the tenth message.
+            One path optimises for volume. The other optimises for what still matters after the tenth message on WhatsApp.
           </p>
         </div>
         <div className="mt-10 grid gap-4 md:grid-cols-2 md:gap-6">
@@ -432,9 +432,9 @@ export default function BecomeAnAgentPage() {
       </section>
 
       <section className="mt-16 border border-primary/25 bg-primary/[0.06] px-6 py-10 text-center md:px-12">
-        <h2 className="text-2xl font-semibold tracking-tight text-foreground md:text-3xl">Ready to show up as the agent prospects trust first?</h2>
+        <h2 className="text-2xl font-semibold tracking-tight text-foreground md:text-3xl">Ready to register with credentials on file?</h2>
         <p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground md:text-base">
-          Create your agent account, upload credentials once, and let the product carry your professionalism into every listing touchpoint.
+          Create your agent account, upload documents once, and let verification and public fees speak before every listing touchpoint.
         </p>
         <div className="mt-8 flex flex-wrap justify-center gap-3">
           <Link

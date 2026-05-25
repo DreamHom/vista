@@ -8,6 +8,7 @@ import type { AssistantTurnV1, ChipOption, TurnBlock } from "@/lib/dream-ai/cont
 import type { PublicListing } from "@/lib/seed/public-data";
 
 import { DreamAiCompareView } from "./dream-ai-compare-view";
+import { DreamAiModeChip } from "./dream-ai-mode-chip";
 import { InlineListing } from "./inline-listing";
 
 function listingById(listings: PublicListing[], id: number): PublicListing | undefined {
@@ -46,6 +47,8 @@ export function AssistantTurnPanel({
 
   const compareIds = (compareBlock?.compareListingIds ?? []).filter((x): x is number => x != null).map(Number);
   const isCompare = turn.kind === "compare" && compareIds.length >= 2;
+  const softFallback =
+    !streaming && turn.kind === "reply" && meta?.queryTooStrict === true && listingIdsForRail.length > 0;
   const showTopMarkdown = !isCompare || streaming;
 
   return (
@@ -65,12 +68,18 @@ export function AssistantTurnPanel({
       {meta?.degraded && !streaming && !isCompare ? (
         <p className="text-[11px] text-muted-foreground">Ranking used a fallback path (live matcher degraded).</p>
       ) : null}
+      {!streaming && !isCompare ? <DreamAiModeChip provider={meta?.provider} /> : null}
+      {softFallback ? (
+        <p className="border border-border bg-secondary/25 px-3 py-2 text-sm text-muted-foreground">
+          {md.trim() || "No exact matches; here are close options you can still explore."}
+        </p>
+      ) : null}
 
       {streaming && !md.trim() ? (
         <TextShimmer duration={1.4} className="text-sm text-muted-foreground">
           Thinking…
         </TextShimmer>
-      ) : showTopMarkdown && md.trim() ? (
+      ) : showTopMarkdown && md.trim() && !softFallback ? (
         <MessageMarkdown>{md}</MessageMarkdown>
       ) : null}
 

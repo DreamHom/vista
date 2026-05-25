@@ -6,11 +6,11 @@ import { searchAgents, type AgentSearchInput } from "@/lib/seed/public-data";
 
 export const metadata: Metadata = {
   title: "Find an Agent",
-  description: "Compare DreamHomes agents by reviews, experience, and how they show up for clients.",
+  description: "Search DreamHomes agents by name, rating, and verification. Compare reviews and response time before you reach out.",
   alternates: { canonical: "/agents" },
   openGraph: {
     title: "Find an agent · DreamHomes",
-    description: "Compare DreamHomes agents by reviews, experience, and how they show up for clients.",
+    description: "Search DreamHomes agents by name, rating, and verification. Compare reviews and response time before you reach out.",
     url: "/agents",
   },
 };
@@ -47,7 +47,7 @@ export default async function AgentsPage({
               {agents.length} {agents.length === 1 ? "agent" : "agents"} match what you asked for
             </p>
             <p className="text-sm text-muted-foreground">
-              Each card shows ratings and activity we share openly. Open a profile to see their listings and what clients have said.
+              Each card shows ratings and activity we publish openly. Open a profile for listings, fees, and client reviews.
             </p>
           </div>
 
@@ -72,8 +72,8 @@ export default async function AgentsPage({
           </div>
         ) : (
           <EmptyHint
-            title="No agents match those filters right now."
-            body="Try a different name spelling, lower the minimum rating, or turn off verified-only."
+            title="No agents match those filters"
+            body="Try another spelling, lower the minimum rating, or clear verified-only to see more profiles."
           />
         )}
       </section>

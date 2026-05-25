@@ -44,6 +44,9 @@ export interface OfferResponse {
 
 export type NotificationKind =
   | "INSPECTION_REQUESTED"
+  | "INSPECTION_APPROVED"
+  | "INSPECTION_DECLINED"
+  | "INSPECTION_CANCELLED"
   | "OFFER_SUBMITTED"
   | "VERIFICATION_APPROVED"
   | "VERIFICATION_REJECTED"
@@ -120,6 +123,8 @@ export interface VerificationResponse {
   documentRefs?: Record<string, unknown> | string | null;
   submittedAt: string;
   decidedAt?: string | null;
+  decisionReason?: string | null;
+  automatedChecks?: import("@/lib/verification-types").AutomatedCheckResultResponse[] | null;
 }
 
 export interface SlotResponse {
@@ -522,6 +527,8 @@ export async function cancelInspection(inspectionId: number) {
   return api.delete<void>(`/inspections/${inspectionId}`);
 }
 
+export { cancelInspectionWithReason } from "@/lib/inspection-api";
+
 /** Public listing header for the inspection booking panel (GET /listings/{id}). */
 export interface ListingBookingSummary {
   id: number;
@@ -571,7 +578,7 @@ export function postListingComment(listingId: string | number, body: string) {
   );
 }
 
-export async function submitApplicantVerification(file: File) {
+export async function submitApplicantVerification(file: File, livenessCheckId?: number) {
   const formData = new FormData();
   formData.set("file", file);
   const upload = await api.post<{ url: string }>("/verifications/files", formData);
@@ -582,6 +589,7 @@ export async function submitApplicantVerification(file: File) {
       kind: "NIN",
       ref: upload.url,
     },
+    ...(livenessCheckId != null ? { livenessCheckId } : {}),
   });
 }
 

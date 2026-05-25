@@ -6,7 +6,8 @@ import { buildQueryString, type QueryState } from "@/lib/query-string";
 import { searchListings, summarizeQuery, type ListingSearchInput } from "@/lib/seed/public-data";
 import { cn } from "@/lib/utils";
 import { ListingsExplorerPresets } from "@/components/listings/listings-explorer-presets";
-import { EmptyHint, ListingDiscoveryCard, PublicApiNotice } from "./public-components";
+import { ListingsResultsGrid } from "./listings-results-grid";
+import { EmptyHint, PublicApiNotice } from "./public-components";
 import { ListingsToolbar } from "./listings-toolbar";
 import { SortAutoSubmitForm } from "./sort-auto-submit";
 
@@ -73,11 +74,7 @@ export async function ListingsExplorer({
             />
           ) : (
             <>
-              <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-                {listings.map((listing) => (
-                  <ListingDiscoveryCard key={listing.id} listing={listing} />
-                ))}
-              </div>
+              <ListingsResultsGrid listings={listings} />
 
               {mode === "search" && total < 4 ? (
                 <div className="border border-accent/20 bg-accent/5 p-5">

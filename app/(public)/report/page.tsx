@@ -10,9 +10,9 @@ export const metadata: Metadata = {
 export default function ReportPage() {
   return (
     <FormShell
-      eyebrow="Report a Listing"
-      title="Help us keep DreamHomes trustworthy."
-      description="Flag a listing that looks fraudulent, inaccurate, already taken, or otherwise unsafe. No account is required for this report form."
+      eyebrow="Report a listing"
+      title="Flag a listing that looks wrong"
+      description="Report fraud, wrong details, a property already taken, or unsafe content. You do not need an account."
       maxWidth="max-w-2xl"
     >
       <ReportListingForm />
