@@ -16,6 +16,7 @@ import {
   Flag,
   MessageSquareWarning,
 } from "lucide-react";
+import { NotificationBell } from "@/components/layout/notification-bell";
 import { WorkspaceAccountMenu } from "@/components/layout/workspace-account-menu";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { LogoMark } from "@/components/logo";
@@ -122,17 +123,11 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                 </Link>
               <div className="flex items-center gap-1.5">
                 {notifHref ? (
-                  <Link
+                  <NotificationBell
                     href={notifHref}
-                    className={cn(
-                      buttonVariants({ variant: "ghost", size: "icon" }),
-                      "h-9 w-9",
-                      pathname.startsWith(notifHref) && "bg-secondary text-foreground",
-                    )}
-                    aria-label="Notifications"
-                  >
-                    <Bell className="h-4 w-4" aria-hidden />
-                  </Link>
+                    size="small"
+                    className={cn(pathname.startsWith(notifHref) && "bg-secondary text-foreground")}
+                  />
                 ) : null}
                 <Button
                   type="button"
@@ -159,17 +154,11 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
               <div className="hidden items-center justify-end gap-1.5 lg:flex">
                 {notifHref ? (
-                  <Link
+                  <NotificationBell
                     href={notifHref}
-                    className={cn(
-                      buttonVariants({ variant: "ghost", size: "icon" }),
-                      "h-9 w-9",
-                      pathname.startsWith(notifHref) && "bg-secondary text-foreground",
-                    )}
-                    aria-label="Notifications"
-                  >
-                    <Bell className="h-4 w-4" aria-hidden />
-                  </Link>
+                    size="small"
+                    className={cn(pathname.startsWith(notifHref) && "bg-secondary text-foreground")}
+                  />
                 ) : null}
                 <Button
                   type="button"

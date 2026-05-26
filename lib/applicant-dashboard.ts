@@ -386,8 +386,10 @@ export async function listInspections(size = 30): Promise<{
   };
 }
 
-export async function getUnreadNotificationCount() {
-  return api.get<{ unread: number }>("/notifications/mine/unread-count");
+/** Haven's cheap COUNT endpoint for the bell-badge: GET /notifications/mine/unread-count. */
+export async function getUnreadNotificationCount(): Promise<number> {
+  const response = await api.get<{ unread: number }>("/notifications/mine/unread-count");
+  return typeof response?.unread === "number" ? response.unread : 0;
 }
 
 export async function getApplicantDashboardOverview(userId: number): Promise<ApplicantDashboardOverview> {
@@ -445,7 +447,7 @@ export async function getApplicantDashboardOverview(userId: number): Promise<App
     savedCount: saved.total,
     upcomingInspectionCount: upcomingInspections.length,
     activeOfferCount: activeOffers.length,
-    unreadNotificationCount: unread.unread,
+    unreadNotificationCount: unread,
     savedPreview: saved.items
       .sort((left, right) => new Date(right.save.savedAt).getTime() - new Date(left.save.savedAt).getTime())
       .slice(0, 3),
@@ -593,26 +595,58 @@ export async function submitApplicantVerification(file: File, livenessCheckId?: 
   });
 }
 
-export function getNotificationHref(notification: NotificationResponse) {
+/**
+ * Build the click-through href for a notification card.
+ *
+ * Role matters: `/dashboard/*` is applicant-only (guarded in
+ * `app/dashboard/layout.tsx`), so an owner clicking a notification that
+ * resolved to `/dashboard/inspections` would bounce off the guard back to
+ * `/owner` (the owner home). Always route via the role-specific tree.
+ *
+ * Deep links: when the payload carries an `inspectionRequestId` or `offerId`
+ * we append it as a query param so the destination page can scroll to /
+ * highlight the specific row. Pages that don't yet honor the param render
+ * the full list, which is still better than the wrong tree.
+ */
+export function getNotificationHref(notification: NotificationResponse, role?: Role | null) {
   const payload = parseNotificationPayload(notification.payload);
   const listingId = typeof payload?.listingId === "number" ? payload.listingId : null;
+  const inspectionId = typeof payload?.inspectionRequestId === "number" ? payload.inspectionRequestId : null;
+  const offerId = typeof payload?.offerId === "number" ? payload.offerId : null;
+
+  const base = roleHomeBase(role);
 
   if (notification.kind.startsWith("OFFER")) {
-    return "/dashboard/offers";
+    return offerId != null ? `${base}/offers?offerId=${offerId}` : `${base}/offers`;
   }
   if (notification.kind.startsWith("INSPECTION")) {
-    return "/dashboard/inspections";
+    return inspectionId != null ? `${base}/inspections?inspectionId=${inspectionId}` : `${base}/inspections`;
   }
   if (notification.kind === "REVIEW_RECEIVED") {
-    return "/dashboard/profile";
+    return `${base}/profile`;
   }
   if (notification.kind.startsWith("VERIFICATION")) {
-    return "/dashboard/profile";
+    // Owners have a dedicated verification page; applicants/agents use profile.
+    return role === "OWNER" ? "/owner/verification" : `${base}/profile`;
+  }
+  if (notification.kind.startsWith("AGENT_ASSIGNMENT")) {
+    // Owners manage assignments per-property; agents see invites on their
+    // listings page. Listing-scoped landing is the closest thing.
+    if (role === "OWNER" && listingId) return `/owner/properties?listingId=${listingId}`;
+    if (role === "AGENT") return "/agent/listings";
   }
   if (listingId) {
     return `/listings/${listingId}`;
   }
-  return "/dashboard/notifications";
+  return `${base}/notifications`;
+}
+
+function roleHomeBase(role?: Role | null): string {
+  if (role === "OWNER") return "/owner";
+  if (role === "AGENT") return "/agent";
+  // APPLICANT and unknown both use /dashboard. Unknown will hit the guard
+  // and bounce to its real home, which is the best we can do without a role.
+  return "/dashboard";
 }
 
 export function getNotificationPayload(notification: NotificationResponse) {

@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Bell, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { NotificationBell } from "@/components/layout/notification-bell";
 import { WorkspaceAccountMenu } from "@/components/layout/workspace-account-menu";
 import { toast } from "@/components/ui/toast";
 import {
@@ -50,17 +51,11 @@ export function PublicAuthDesktopCluster({
       ) : isAuthenticated && user ? (
         <>
           {surface === "public" && notifHref ? (
-            <Link
+            <NotificationBell
               href={notifHref}
-              className={cn(
-                buttonVariants({ variant: "ghost", size: "icon" }),
-                "h-9 w-9 shrink-0 sm:h-10 sm:w-10",
-                pathname.startsWith(notifHref) && "bg-secondary text-foreground",
-              )}
-              aria-label="Notifications"
-            >
-              <Bell className="h-4 w-4" aria-hidden />
-            </Link>
+              size="default"
+              className={cn(pathname.startsWith(notifHref) && "bg-secondary text-foreground")}
+            />
           ) : null}
           {surface === "public" ? (
             <Button
@@ -142,18 +137,11 @@ export function PublicAuthMobileCluster({
         className={cn("flex items-center gap-2", isHero && "w-full flex-wrap justify-end gap-2")}
       >
         {surface === "public" && notifHref ? (
-          <Link
+          <NotificationBell
             href={notifHref}
-            onClick={onNavigate}
-            className={cn(
-              buttonVariants({ variant: "ghost", size: "icon" }),
-              "h-10 w-10 shrink-0",
-              pathname.startsWith(notifHref) && "bg-secondary text-foreground",
-            )}
-            aria-label="Notifications"
-          >
-            <Bell className="h-4 w-4" aria-hidden />
-          </Link>
+            size="default"
+            className={cn(pathname.startsWith(notifHref) && "bg-secondary text-foreground")}
+          />
         ) : null}
         {surface === "public" ? (
           <Button

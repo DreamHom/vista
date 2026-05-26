@@ -85,6 +85,7 @@ export function AgentNotificationsPage() {
     mutationFn: markNotificationRead,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["agent-notifications"] });
+      await queryClient.invalidateQueries({ queryKey: ["unread-notification-count", userId] });
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "We couldn't mark that notification as read."),
   });
@@ -94,6 +95,7 @@ export function AgentNotificationsPage() {
     onSuccess: async (result) => {
       toast.success(`${result.marked} notification${result.marked === 1 ? "" : "s"} marked as read.`);
       await queryClient.invalidateQueries({ queryKey: ["agent-notifications"] });
+      queryClient.setQueryData<number>(["unread-notification-count", userId], 0);
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "We couldn't mark everything as read."),
   });

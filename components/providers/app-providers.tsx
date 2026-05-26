@@ -3,6 +3,7 @@
 import { useEffect, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { QueryProvider } from "./query-provider";
+import { NotificationsStreamProvider } from "./notifications-stream-provider";
 import { setAuthTokenProvider } from "@/lib/api";
 import { getCurrentToken } from "@/lib/auth-store";
 import { AUTH_EXPIRED_EVENT } from "@/lib/auth-refresh";
@@ -53,6 +54,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
   return (
     <QueryProvider>
       <SessionExpiredListener />
+      <NotificationsStreamProvider />
       {children}
       <Toaster />
     </QueryProvider>

@@ -3,9 +3,9 @@
 /* eslint-disable @next/next/no-img-element */
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Trash2 } from "lucide-react";
+import { ImagePlus, Trash2, X } from "lucide-react";
 
 import { OwnerListingAgentPanel } from "@/components/assignments/owner-listing-agent-panel";
 import {
@@ -52,6 +52,7 @@ export function OwnerPropertyDetailPage({ propertyId }: { propertyId: number }) 
   const [verificationFiles, setVerificationFiles] = useState<File[]>([]);
   const [listingPhotoFiles, setListingPhotoFiles] = useState<File[]>([]);
   const [deletingPhotoId, setDeletingPhotoId] = useState<number | null>(null);
+  const photoFileInputRef = useRef<HTMLInputElement>(null);
   const [pendingStatusAction, setPendingStatusAction] = useState<OwnerListingStatusAction | null>(null);
 
   const detailQuery = useQuery({
@@ -373,28 +374,105 @@ export function OwnerPropertyDetailPage({ propertyId }: { propertyId: number }) 
                     Add new photos to the live listing gallery. New uploads are appended.
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Keep each file under 10 MB (JPG, PNG, or WEBP). Remove weak images here, then upload replacements.
+                    JPG, PNG, or WEBP. Keep each file under 10 MB.
                   </p>
                 </div>
-                <Input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  disabled={listingLocked || photoUploadMutation.isPending}
-                  onChange={(event) => setListingPhotoFiles(Array.from(event.target.files ?? []))}
-                />
+
+                {listingLocked ? (
+                  <p className="border border-border bg-background px-3 py-2 text-xs text-muted-foreground">
+                    Photo uploads are paused while this listing is taken down. Restore the listing to upload again.
+                  </p>
+                ) : null}
+
+                <div className="flex flex-col items-center justify-center gap-3 border border-dashed border-border bg-background p-5 text-center">
+                  <div className="bg-secondary p-3">
+                    <ImagePlus className="h-5 w-5 text-foreground" aria-hidden />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-foreground">
+                      {listingPhotoFiles.length > 0
+                        ? `${listingPhotoFiles.length} file${listingPhotoFiles.length === 1 ? "" : "s"} ready to upload`
+                        : "Pick photos from this device"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      You can choose more than one. Order in the gallery is the order they finish uploading.
+                    </p>
+                  </div>
+                  <input
+                    ref={photoFileInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    disabled={listingLocked || photoUploadMutation.isPending}
+                    onChange={(event) => {
+                      const picked = Array.from(event.target.files ?? []);
+                      setListingPhotoFiles((current) => [...current, ...picked]);
+                      // Reset so picking the same filename again still fires onChange.
+                      event.target.value = "";
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={listingLocked || photoUploadMutation.isPending}
+                    onClick={() => photoFileInputRef.current?.click()}
+                  >
+                    {listingPhotoFiles.length > 0 ? "Add more" : "Choose photos"}
+                  </Button>
+                </div>
+
+                {listingPhotoFiles.length > 0 ? (
+                  <ul className="space-y-2 border border-border bg-background p-3">
+                    {listingPhotoFiles.map((file, index) => (
+                      <li
+                        key={`${file.name}-${file.lastModified}-${index}`}
+                        className="flex items-center justify-between gap-3 text-sm"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-medium text-foreground">{file.name}</p>
+                          <p className="text-xs text-muted-foreground tabular-nums">
+                            {(file.size / 1024 / 1024).toFixed(2)} MB
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          aria-label={`Remove ${file.name}`}
+                          className="text-muted-foreground hover:text-foreground"
+                          onClick={() =>
+                            setListingPhotoFiles((current) => current.filter((_, i) => i !== index))
+                          }
+                          disabled={photoUploadMutation.isPending}
+                        >
+                          <X className="h-4 w-4" aria-hidden />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+
                 <div className="flex flex-wrap items-center gap-3">
                   <Button
                     type="button"
                     onClick={() => photoUploadMutation.mutate()}
                     disabled={listingLocked || photoUploadMutation.isPending || listingPhotoFiles.length === 0}
                   >
-                    {photoUploadMutation.isPending ? "Uploading photos..." : "Upload selected photos"}
+                    {photoUploadMutation.isPending
+                      ? "Uploading..."
+                      : listingPhotoFiles.length === 0
+                        ? "Upload"
+                        : `Upload ${listingPhotoFiles.length} photo${listingPhotoFiles.length === 1 ? "" : "s"}`}
                   </Button>
-                  {listingPhotoFiles.length > 0 ? (
-                    <p className="text-xs text-muted-foreground">
-                      {listingPhotoFiles.length} file{listingPhotoFiles.length === 1 ? "" : "s"} selected
-                    </p>
+                  {listingPhotoFiles.length > 0 && !photoUploadMutation.isPending ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setListingPhotoFiles([])}
+                    >
+                      Clear
+                    </Button>
                   ) : null}
                 </div>
                 {detail?.photos?.length ? (

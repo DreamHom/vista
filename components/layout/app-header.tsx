@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Bell, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
+import { NotificationBell } from "@/components/layout/notification-bell";
 import { WorkspaceAccountMenu } from "@/components/layout/workspace-account-menu";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import {
   ACCOUNT_MENU_GLOBAL_EXTRAS,
@@ -45,16 +46,10 @@ export function AppHeader() {
           {user && role ? (
             <>
               {notifHref ? (
-                <Link
+                <NotificationBell
                   href={notifHref}
-                  className={cn(
-                    buttonVariants({ variant: "ghost", size: "icon" }),
-                    pathname.startsWith(notifHref) && "bg-secondary text-foreground",
-                  )}
-                  aria-label="Notifications"
-                >
-                  <Bell className="h-4 w-4" aria-hidden />
-                </Link>
+                  className={cn(pathname.startsWith(notifHref) && "bg-secondary text-foreground")}
+                />
               ) : null}
               <Button type="button" variant="ghost" size="icon" aria-label="Sign out" onClick={handleLogout}>
                 <LogOut className="h-4 w-4" aria-hidden />

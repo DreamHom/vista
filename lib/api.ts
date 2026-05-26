@@ -79,12 +79,18 @@ export interface RequestOptions extends Omit<RequestInit, "body" | "method"> {
   skipAuth?: boolean;
   /** Query-string params, appended to the URL. */
   query?: Record<string, string | number | boolean | undefined | null>;
+  /**
+   * Skip the 401 → refresh → retry path. Set on the refresh request itself
+   * and on /auth/login to avoid recursion. Internal use; callers shouldn't
+   * normally need it.
+   */
+  skipRefreshRetry?: boolean;
 }
 
 type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 async function request<T>(method: Method, path: string, options: RequestOptions = {}): Promise<T> {
-  const { body, skipAuth, query, headers, ...rest } = options;
+  const { body, skipAuth, skipRefreshRetry, query, headers, ...rest } = options;
 
   const rawUrl = path.startsWith("http") ? path : `${getBaseUrl()}${path}`;
   const url =
@@ -133,10 +139,53 @@ async function request<T>(method: Method, path: string, options: RequestOptions 
   const parsed = text.length > 0 ? safeParseJson(text) : null;
 
   if (!response.ok) {
+    // 401 + we're in the browser + caller didn't opt out → try to refresh the
+    // access token once and retry the original request. If refresh fails or
+    // the retry still 401s, the original 401 bubbles up as before and the
+    // session-expired event has already fired downstream.
+    if (
+      response.status === 401 &&
+      !skipAuth &&
+      !skipRefreshRetry &&
+      typeof window !== "undefined"
+    ) {
+      const refreshed = await tryRefreshAndRetry<T>(method, path, {
+        ...options,
+        skipRefreshRetry: true,
+      });
+      if (refreshed.retried) return refreshed.value;
+    }
     throw new ApiError(response.status, parsed as ProblemDetail | null, response.statusText);
   }
 
   return parsed as T;
+}
+
+/**
+ * On a 401, attempt a single refresh-then-retry cycle. Returns `{ retried: true,
+ * value }` when the retry succeeded; `{ retried: false }` when no refresh was
+ * possible or the retry still failed (so the original 401 can be thrown by
+ * the caller).
+ *
+ * Lives here (vs in lib/auth-refresh) because `request<T>` is module-local.
+ */
+async function tryRefreshAndRetry<T>(
+  method: Method,
+  path: string,
+  options: RequestOptions,
+): Promise<{ retried: true; value: T } | { retried: false }> {
+  // Dynamic import to avoid a circular dep at module load time
+  // (auth-refresh imports `ApiError` from this file).
+  const { refreshAccessToken } = await import("./auth-refresh");
+  const newToken = await refreshAccessToken();
+  if (!newToken) return { retried: false };
+
+  try {
+    const value = await request<T>(method, path, options);
+    return { retried: true, value };
+  } catch {
+    return { retried: false };
+  }
 }
 
 function serializeBody(body: unknown, headers: Headers): BodyInit | undefined {

@@ -52,9 +52,17 @@ export interface LoginResponse {
   token: string;
   tokenType: string;
   expiresInSeconds: number;
+  /** Long-lived refresh token (haven returns it on /auth/login and /auth/refresh). */
+  refreshToken?: string;
+  refreshExpiresInSeconds?: number;
   userId: number;
   role: Role;
   fullName: string;
+}
+
+/** Mirrors haven's {@code RefreshTokenRequest}. */
+export interface RefreshTokenRequest {
+  refreshToken: string;
 }
 
 /** Mirrors haven's {@code MeResponse} (GET /api/me). */

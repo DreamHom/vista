@@ -63,6 +63,7 @@ export function ApplicantNotificationsPage() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["applicant-notifications", user?.id] });
       void queryClient.invalidateQueries({ queryKey: ["applicant-dashboard-overview", user?.id] });
+      void queryClient.invalidateQueries({ queryKey: ["unread-notification-count", user?.id] });
     },
     onError: (error) => {
       toast.error(error instanceof Error ? error.message : "We couldn't mark that notification as read.");
@@ -75,6 +76,7 @@ export function ApplicantNotificationsPage() {
       toast.success(`${result.marked} notification${result.marked === 1 ? "" : "s"} marked as read.`);
       void queryClient.invalidateQueries({ queryKey: ["applicant-notifications", user?.id] });
       void queryClient.invalidateQueries({ queryKey: ["applicant-dashboard-overview", user?.id] });
+      queryClient.setQueryData<number>(["unread-notification-count", user?.id], 0);
     },
     onError: (error) => {
       toast.error(error instanceof Error ? error.message : "We couldn't mark all notifications as read.");
