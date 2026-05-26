@@ -20,6 +20,7 @@ import { ListingDetailViewerBar } from "@/components/public/listing-detail-viewe
 import { ListingQaSection } from "@/components/public/listing-qa-section";
 import { ListingReviewsSection } from "@/components/public/listing-reviews-section";
 import { AdjacentListingNav } from "@/components/public/widgets/adjacent-listing-nav";
+import { ListingOfferPanel } from "@/components/public/widgets/listing-offer-panel";
 import { ListingSlotPicker } from "@/components/public/widgets/listing-slot-picker";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -178,7 +179,7 @@ export default async function ListingDetailPage({
               <Stat icon={<Eye className="h-4 w-4" aria-hidden />} label="Views" value={String(listing.viewCount)} />
             </div>
 
-            <div className="mt-8 border-t border-border pt-6">
+            <div className="mt-8 grid gap-2 border-t border-border pt-6 md:grid-cols-[1fr_auto]">
               <Link
                 href="#schedule-inspection"
                 className={cn(
@@ -191,8 +192,19 @@ export default async function ListingDetailPage({
                   ? `Schedule a visit · ${listing.slots.length} open slot${listing.slots.length === 1 ? "" : "s"}`
                   : "Schedule a visit"}
               </Link>
-              <p className="mt-3 text-center text-xs leading-relaxed text-muted-foreground md:text-sm">
-                Pick a published time below, or request a custom slot if none of the existing ones work.
+              {listing.status === "LIVE" ? (
+                <Link
+                  href="#make-offer"
+                  className={cn(
+                    buttonVariants({ variant: "outline", size: "lg" }),
+                    "flex h-14 w-full items-center justify-center gap-2 text-base font-semibold tracking-tight md:w-auto md:px-6",
+                  )}
+                >
+                  Make an offer
+                </Link>
+              ) : null}
+              <p className="mt-1 text-center text-xs leading-relaxed text-muted-foreground md:col-span-2 md:text-sm">
+                Pick a published time below, or jump straight to making an offer.
               </p>
             </div>
           </article>
@@ -230,6 +242,21 @@ export default async function ListingDetailPage({
           <ListingSlotPicker
             listingId={listing.id}
             slots={listing.slots}
+            ownerId={listing.ownerId}
+            agentId={listing.agentId}
+          />
+
+          {/* Inline offer surface — applicants only. Owners/agents of this
+              listing get nothing here (the offer they care about lives in
+              their own workspace); other roles see a muted note; guests get
+              a sign-in CTA. The form posts to Haven's POST /offers and the
+              SSE notifications stream pushes status updates back in. */}
+          <ListingOfferPanel
+            listingId={listing.id}
+            listingTitle={listing.title}
+            listingStatus={listing.status}
+            askingPriceNgn={listing.priceNgn}
+            term={listing.term}
             ownerId={listing.ownerId}
             agentId={listing.agentId}
           />

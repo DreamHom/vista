@@ -525,6 +525,39 @@ export async function respondToOffer(offerId: number, status: "ACCEPTED" | "DECL
   return api.patch<OfferResponse>(`/offers/${offerId}`, { status });
 }
 
+/**
+ * Submit a new offer on a listing. Backed by `POST /offers` per Haven OpenAPI
+ * v1.0.4 (docs/haven-api-docs-1.0.4.yaml lines 390-457, schema 6390-6414).
+ *
+ * Preconditions enforced server-side (errors bubble as ApiError):
+ *   - APPLICANT role (403 otherwise)
+ *   - Listing is in OPEN state (404 / 422 otherwise)
+ *   - Caller is not the listing owner (403)
+ *   - No existing PENDING offer on this listing (409 with the existing
+ *     offer's ID in the problem detail when available)
+ */
+export interface SubmitOfferInput {
+  listingId: number;
+  /** Naira amount (whole units, not minor). */
+  amount: number;
+  /** Optional message to the owner; backend caps at 5000 chars. */
+  message?: string;
+  /** Optional intent — applicants on rentals may opt to flag rent-to-buy. */
+  intent?: "RENT" | "BUY" | "RENT_TO_BUY";
+  /** ISO 4217 code. Defaults server-side to NGN; we always send NGN. */
+  currency?: string;
+}
+
+export async function submitOffer(input: SubmitOfferInput) {
+  return api.post<OfferResponse>("/offers", {
+    listingId: input.listingId,
+    amount: input.amount,
+    currency: input.currency ?? "NGN",
+    ...(input.message?.trim() ? { message: input.message.trim() } : {}),
+    ...(input.intent ? { intent: input.intent } : {}),
+  });
+}
+
 export async function cancelInspection(inspectionId: number) {
   return api.delete<void>(`/inspections/${inspectionId}`);
 }
