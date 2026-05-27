@@ -2,6 +2,7 @@ import { ApiError, api } from "@/lib/api";
 import { latestVerificationByType } from "@/lib/verification-helpers";
 import {
   getListingById,
+  invalidatePublicProfileCache,
   type PublicListingDetail,
   type PublicReview,
 } from "@/lib/seed/public-data";
@@ -487,14 +488,25 @@ export async function updateMyProfileBasics(payload: {
   profileImageUrl?: string;
   notificationPreferences?: string;
 }) {
-  return api.patch<PrivateUserProfile>("/me", payload);
+  const result = await api.patch<PrivateUserProfile>("/me", payload);
+  // Bust the public profile snapshot so the agent directory + listing detail
+  // see the new name / displayName / bio on the next render. Without this,
+  // the SSR cache replays the pre-edit version until the lambda recycles.
+  if (result?.userId != null) {
+    invalidatePublicProfileCache(result.userId);
+  }
+  return result;
 }
 
 /** Multipart avatar — Haven writes the public URL to `profile_image_url`. */
 export async function uploadMyAvatar(file: File) {
   const formData = new FormData();
   formData.set("file", file);
-  return api.post<PrivateUserProfile>("/me/avatar", formData);
+  const result = await api.post<PrivateUserProfile>("/me/avatar", formData);
+  if (result?.userId != null) {
+    invalidatePublicProfileCache(result.userId);
+  }
+  return result;
 }
 
 export async function deleteMyAccount() {

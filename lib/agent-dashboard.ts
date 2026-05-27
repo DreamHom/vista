@@ -10,7 +10,7 @@ import {
   type PrivateUserProfile,
   type VerificationResponse,
 } from "@/lib/applicant-dashboard";
-import { getListingById, type PublicListingDetail, type PublicReview } from "@/lib/seed/public-data";
+import { getListingById, invalidatePublicListingCache, type PublicListingDetail, type PublicReview } from "@/lib/seed/public-data";
 import type { WorkspaceInspectionStatusLabel } from "@/lib/inspection-lifecycle";
 import { agentHasOperationalAccess } from "@/lib/assignment-lifecycle";
 import type { AgentListingResponse } from "@/lib/owner-dashboard";
@@ -786,11 +786,22 @@ export function saveAgentPromotions(userId: number, promotions: AgentPromotionRe
 }
 
 export async function acceptAgentAssignment(assignmentId: number) {
-  return api.post<AgentListingResponse>(`/agent-listings/${assignmentId}/accept`);
+  const result = await api.post<AgentListingResponse>(`/agent-listings/${assignmentId}/accept`);
+  // Acceptance writes `assignedAgentId` onto the listing, which is shown on
+  // public /listings/{id}. Bust the cached snapshot for that listing so the
+  // next public render reflects the new assignment.
+  if (result?.listingId) {
+    invalidatePublicListingCache(String(result.listingId));
+  }
+  return result;
 }
 
 export async function declineAgentAssignment(assignmentId: number, reason: string) {
-  return api.post<AgentListingResponse>(`/agent-listings/${assignmentId}/decline`, { reason });
+  const result = await api.post<AgentListingResponse>(`/agent-listings/${assignmentId}/decline`, { reason });
+  if (result?.listingId) {
+    invalidatePublicListingCache(String(result.listingId));
+  }
+  return result;
 }
 
 export async function updateAgentProfile(payload: {

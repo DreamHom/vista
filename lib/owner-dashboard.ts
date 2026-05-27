@@ -761,7 +761,12 @@ export async function updateOwnerListing(
   if (payload.version == null) {
     delete body.version;
   }
-  return api.patch<OwnerListingResponse>(`/listings/${listingId}`, body);
+  const result = await api.patch<OwnerListingResponse>(`/listings/${listingId}`, body);
+  // The cached public snapshot held this listing's price / status / title /
+  // description / headline. Bust it so visitors to /listings/{id} see the
+  // owner's edit on the next render.
+  invalidatePublicListingCache(String(listingId));
+  return result;
 }
 
 /**
@@ -836,11 +841,24 @@ export async function deleteOwnerListingPhoto(listingId: number, photoId: number
 }
 
 export async function inviteAgentToListing(listingId: number, agentId: number) {
-  return api.post<AgentListingResponse>(`/listings/${listingId}/agent-assignment`, { agentId });
+  const result = await api.post<AgentListingResponse>(`/listings/${listingId}/agent-assignment`, { agentId });
+  // Listing's `assignedAgentId` is shown on public /listings/{id} once the
+  // agent accepts; bust the snapshot so the next render reflects the new
+  // assignment chain instead of a stale "no agent" state.
+  invalidatePublicListingCache(String(listingId));
+  return result;
 }
 
 export async function revokeAgentAssignment(assignmentId: number, reason: string) {
-  return api.post<AgentListingResponse>(`/agent-listings/${assignmentId}/revoke`, { reason });
+  const result = await api.post<AgentListingResponse>(`/agent-listings/${assignmentId}/revoke`, { reason });
+  // Revoke can drop the listing's assignedAgentId back to null on haven's
+  // side. We don't have the listingId here from the response shape, so we
+  // can't surgically invalidate; callers that know the listingId should
+  // invalidate it themselves (the owner-property-detail-page already
+  // invalidates owner-property + owner-properties on success, but that's
+  // a TanStack Query key not the public cache). Acceptable tradeoff: a
+  // visitor sees the old agent for a few seconds until the lambda recycles.
+  return result;
 }
 
 export async function counterOwnerOffer(offerId: number, payload: { amount: number; message?: string }) {
