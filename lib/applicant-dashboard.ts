@@ -44,6 +44,9 @@ export interface OfferResponse {
 
 export type NotificationKind =
   | "INSPECTION_REQUESTED"
+  | "INSPECTION_APPROVED"
+  | "INSPECTION_DECLINED"
+  | "INSPECTION_CANCELLED"
   | "OFFER_SUBMITTED"
   | "VERIFICATION_APPROVED"
   | "VERIFICATION_REJECTED"
@@ -120,6 +123,8 @@ export interface VerificationResponse {
   documentRefs?: Record<string, unknown> | string | null;
   submittedAt: string;
   decidedAt?: string | null;
+  decisionReason?: string | null;
+  automatedChecks?: import("@/lib/verification-types").AutomatedCheckResultResponse[] | null;
 }
 
 export interface SlotResponse {
@@ -381,8 +386,10 @@ export async function listInspections(size = 30): Promise<{
   };
 }
 
-export async function getUnreadNotificationCount() {
-  return api.get<{ unread: number }>("/notifications/mine/unread-count");
+/** Haven's cheap COUNT endpoint for the bell-badge: GET /notifications/mine/unread-count. */
+export async function getUnreadNotificationCount(): Promise<number> {
+  const response = await api.get<{ unread: number }>("/notifications/mine/unread-count");
+  return typeof response?.unread === "number" ? response.unread : 0;
 }
 
 export async function getApplicantDashboardOverview(userId: number): Promise<ApplicantDashboardOverview> {
@@ -440,7 +447,7 @@ export async function getApplicantDashboardOverview(userId: number): Promise<App
     savedCount: saved.total,
     upcomingInspectionCount: upcomingInspections.length,
     activeOfferCount: activeOffers.length,
-    unreadNotificationCount: unread.unread,
+    unreadNotificationCount: unread,
     savedPreview: saved.items
       .sort((left, right) => new Date(right.save.savedAt).getTime() - new Date(left.save.savedAt).getTime())
       .slice(0, 3),
@@ -518,9 +525,44 @@ export async function respondToOffer(offerId: number, status: "ACCEPTED" | "DECL
   return api.patch<OfferResponse>(`/offers/${offerId}`, { status });
 }
 
+/**
+ * Submit a new offer on a listing. Backed by `POST /offers` per Haven OpenAPI
+ * v1.0.4 (docs/haven-api-docs-1.0.4.yaml lines 390-457, schema 6390-6414).
+ *
+ * Preconditions enforced server-side (errors bubble as ApiError):
+ *   - APPLICANT role (403 otherwise)
+ *   - Listing is in OPEN state (404 / 422 otherwise)
+ *   - Caller is not the listing owner (403)
+ *   - No existing PENDING offer on this listing (409 with the existing
+ *     offer's ID in the problem detail when available)
+ */
+export interface SubmitOfferInput {
+  listingId: number;
+  /** Naira amount (whole units, not minor). */
+  amount: number;
+  /** Optional message to the owner; backend caps at 5000 chars. */
+  message?: string;
+  /** Optional intent — applicants on rentals may opt to flag rent-to-buy. */
+  intent?: "RENT" | "BUY" | "RENT_TO_BUY";
+  /** ISO 4217 code. Defaults server-side to NGN; we always send NGN. */
+  currency?: string;
+}
+
+export async function submitOffer(input: SubmitOfferInput) {
+  return api.post<OfferResponse>("/offers", {
+    listingId: input.listingId,
+    amount: input.amount,
+    currency: input.currency ?? "NGN",
+    ...(input.message?.trim() ? { message: input.message.trim() } : {}),
+    ...(input.intent ? { intent: input.intent } : {}),
+  });
+}
+
 export async function cancelInspection(inspectionId: number) {
   return api.delete<void>(`/inspections/${inspectionId}`);
 }
+
+export { cancelInspectionWithReason } from "@/lib/inspection-api";
 
 /** Public listing header for the inspection booking panel (GET /listings/{id}). */
 export interface ListingBookingSummary {
@@ -571,7 +613,7 @@ export function postListingComment(listingId: string | number, body: string) {
   );
 }
 
-export async function submitApplicantVerification(file: File) {
+export async function submitApplicantVerification(file: File, livenessCheckId?: number) {
   const formData = new FormData();
   formData.set("file", file);
   const upload = await api.post<{ url: string }>("/verifications/files", formData);
@@ -582,29 +624,62 @@ export async function submitApplicantVerification(file: File) {
       kind: "NIN",
       ref: upload.url,
     },
+    ...(livenessCheckId != null ? { livenessCheckId } : {}),
   });
 }
 
-export function getNotificationHref(notification: NotificationResponse) {
+/**
+ * Build the click-through href for a notification card.
+ *
+ * Role matters: `/dashboard/*` is applicant-only (guarded in
+ * `app/dashboard/layout.tsx`), so an owner clicking a notification that
+ * resolved to `/dashboard/inspections` would bounce off the guard back to
+ * `/owner` (the owner home). Always route via the role-specific tree.
+ *
+ * Deep links: when the payload carries an `inspectionRequestId` or `offerId`
+ * we append it as a query param so the destination page can scroll to /
+ * highlight the specific row. Pages that don't yet honor the param render
+ * the full list, which is still better than the wrong tree.
+ */
+export function getNotificationHref(notification: NotificationResponse, role?: Role | null) {
   const payload = parseNotificationPayload(notification.payload);
   const listingId = typeof payload?.listingId === "number" ? payload.listingId : null;
+  const inspectionId = typeof payload?.inspectionRequestId === "number" ? payload.inspectionRequestId : null;
+  const offerId = typeof payload?.offerId === "number" ? payload.offerId : null;
+
+  const base = roleHomeBase(role);
 
   if (notification.kind.startsWith("OFFER")) {
-    return "/dashboard/offers";
+    return offerId != null ? `${base}/offers?offerId=${offerId}` : `${base}/offers`;
   }
   if (notification.kind.startsWith("INSPECTION")) {
-    return "/dashboard/inspections";
+    return inspectionId != null ? `${base}/inspections?inspectionId=${inspectionId}` : `${base}/inspections`;
   }
   if (notification.kind === "REVIEW_RECEIVED") {
-    return "/dashboard/profile";
+    return `${base}/profile`;
   }
   if (notification.kind.startsWith("VERIFICATION")) {
-    return "/dashboard/profile";
+    // Owners have a dedicated verification page; applicants/agents use profile.
+    return role === "OWNER" ? "/owner/verification" : `${base}/profile`;
+  }
+  if (notification.kind.startsWith("AGENT_ASSIGNMENT")) {
+    // Owners manage assignments per-property; agents see invites on their
+    // listings page. Listing-scoped landing is the closest thing.
+    if (role === "OWNER" && listingId) return `/owner/properties?listingId=${listingId}`;
+    if (role === "AGENT") return "/agent/listings";
   }
   if (listingId) {
     return `/listings/${listingId}`;
   }
-  return "/dashboard/notifications";
+  return `${base}/notifications`;
+}
+
+function roleHomeBase(role?: Role | null): string {
+  if (role === "OWNER") return "/owner";
+  if (role === "AGENT") return "/agent";
+  // APPLICANT and unknown both use /dashboard. Unknown will hit the guard
+  // and bounce to its real home, which is the best we can do without a role.
+  return "/dashboard";
 }
 
 export function getNotificationPayload(notification: NotificationResponse) {

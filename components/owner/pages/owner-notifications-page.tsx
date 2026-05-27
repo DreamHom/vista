@@ -119,6 +119,7 @@ export function OwnerNotificationsPage() {
     mutationFn: (notificationId: number) => markNotificationRead(notificationId),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["owner-notifications", user?.id] });
+      await queryClient.invalidateQueries({ queryKey: ["unread-notification-count", user?.id] });
     },
   });
 
@@ -127,6 +128,7 @@ export function OwnerNotificationsPage() {
     onSuccess: async () => {
       toast.success("Notifications marked as read.");
       await queryClient.invalidateQueries({ queryKey: ["owner-notifications", user?.id] });
+      queryClient.setQueryData<number>(["unread-notification-count", user?.id], 0);
     },
   });
 
@@ -177,7 +179,7 @@ export function OwnerNotificationsPage() {
                   <p className="text-xs text-muted-foreground">{formatDateTime(notification.createdAt)}</p>
                 </div>
                 <div className="flex flex-wrap gap-3">
-                  <Link href={getNotificationHref(notification)}>
+                  <Link href={getNotificationHref(notification, "OWNER")}>
                     <Button variant="outline">Open detail</Button>
                   </Link>
                   {!notification.readAt ? (

@@ -17,7 +17,7 @@ export function useAuth() {
       token: s.token,
       user: s.user,
       hydrated: s.hydrated,
-      isAuthenticated: s.token != null && s.user != null,
+      isAuthenticated: s.user != null,
       role: s.user?.role ?? null,
       setSession: s.setSession,
       setUser: s.setUser,

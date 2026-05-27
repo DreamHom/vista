@@ -25,6 +25,7 @@ export interface HavenListingResponse {
   viewCount: number | null;
   createdAt: string;
   updatedAt: string;
+  ownerIdentityVerifiedAt?: string | null;
   property: {
     id: number;
     type: string;

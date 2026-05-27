@@ -22,6 +22,7 @@ export interface VerificationAdminView {
   decidedAt?: string | null;
   decidedByAdminId?: number | null;
   decisionReason?: string | null;
+  automatedChecks?: import("@/lib/verification-types").AutomatedCheckResultResponse[] | null;
 }
 
 export interface UserAdminView {

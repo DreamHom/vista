@@ -11,7 +11,7 @@ export function ReportListingForm() {
   if (submitted) {
     return (
       <div className="border border-emerald-200 bg-emerald-50 p-5 text-sm text-emerald-900">
-        Thank you, our team will review this.
+        Thanks. Our team will review this report.
       </div>
     );
   }
@@ -64,7 +64,7 @@ export function ContactForm() {
   if (submitted) {
     return (
       <div className="border border-emerald-200 bg-emerald-50 p-5 text-sm text-emerald-900">
-        Thanks for reaching out. We have received your message.
+        Thanks. We received your message and will reply when we can.
       </div>
     );
   }

@@ -194,8 +194,11 @@ export function AgentsToolbar({
       <div className="space-y-2">
         <p className="text-xs uppercase tracking-eyebrow text-muted-foreground">Find an agent</p>
         <h1 className="max-w-4xl text-balance text-3xl font-semibold leading-tight tracking-tight md:text-5xl">
-          Find an agent you can build a relationship with, not just a name on a listing.
+          Find an agent you can verify before the first call.
         </h1>
+        <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground md:text-base">
+          Compare ratings, response time, and verification badges. Open a profile to see listings and client reviews.
+        </p>
       </div>
 
       <div className="mt-6 space-y-4">

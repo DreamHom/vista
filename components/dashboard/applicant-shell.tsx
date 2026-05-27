@@ -14,6 +14,7 @@ import {
   CalendarDays,
   HandCoins,
 } from "lucide-react";
+import { NotificationBell } from "@/components/layout/notification-bell";
 import { WorkspaceAccountMenu } from "@/components/layout/workspace-account-menu";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { LogoMark } from "@/components/logo";
@@ -114,17 +115,11 @@ export function ApplicantShell({ children }: { children: React.ReactNode }) {
               <div className="hidden min-w-0 flex-1 lg:block" aria-hidden />
               <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
                 {notifHref ? (
-                  <Link
+                  <NotificationBell
                     href={notifHref}
-                    aria-label="Notifications"
-                    className={cn(
-                      buttonVariants({ variant: "ghost", size: "icon" }),
-                      "h-8 w-8 sm:h-9 sm:w-9",
-                      pathname.startsWith(notifHref) && "bg-secondary text-foreground",
-                    )}
-                  >
-                    <Bell className="h-4 w-4" aria-hidden />
-                  </Link>
+                    size="small"
+                    className={cn(pathname.startsWith(notifHref) && "bg-secondary text-foreground")}
+                  />
                 ) : null}
                 <Button
                   type="button"

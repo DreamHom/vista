@@ -13,10 +13,11 @@ import {
 import {
   getNotificationHref,
   listNotifications,
+  type NotificationResponse,
   markAllNotificationsRead,
   markNotificationRead,
-  type NotificationResponse,
 } from "@/lib/applicant-dashboard";
+import { notificationDisplayCopy } from "@/lib/notification-display";
 import { notificationCategory, formatDateTime } from "@/components/dashboard/utils";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { useAuth } from "@/lib/use-auth";
@@ -62,6 +63,7 @@ export function ApplicantNotificationsPage() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["applicant-notifications", user?.id] });
       void queryClient.invalidateQueries({ queryKey: ["applicant-dashboard-overview", user?.id] });
+      void queryClient.invalidateQueries({ queryKey: ["unread-notification-count", user?.id] });
     },
     onError: (error) => {
       toast.error(error instanceof Error ? error.message : "We couldn't mark that notification as read.");
@@ -74,6 +76,7 @@ export function ApplicantNotificationsPage() {
       toast.success(`${result.marked} notification${result.marked === 1 ? "" : "s"} marked as read.`);
       void queryClient.invalidateQueries({ queryKey: ["applicant-notifications", user?.id] });
       void queryClient.invalidateQueries({ queryKey: ["applicant-dashboard-overview", user?.id] });
+      queryClient.setQueryData<number>(["unread-notification-count", user?.id], 0);
     },
     onError: (error) => {
       toast.error(error instanceof Error ? error.message : "We couldn't mark all notifications as read.");
@@ -139,6 +142,7 @@ export function ApplicantNotificationsPage() {
         <div className="space-y-3">
           {filteredNotifications.map((notification) => {
             const isUnread = !notification.readAt;
+            const copy = notificationDisplayCopy(notification);
 
             return (
               <div
@@ -153,7 +157,7 @@ export function ApplicantNotificationsPage() {
                     <div className="space-y-2">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="text-sm font-medium uppercase tracking-eyebrow text-muted-foreground">
-                          {notification.kind.replaceAll("_", " ")}
+                          {copy.title}
                         </p>
                         {isUnread ? (
                           <span className="rounded-full bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground">
@@ -162,8 +166,8 @@ export function ApplicantNotificationsPage() {
                         ) : null}
                       </div>
                       <p className="text-base leading-7 text-foreground">
-                        {notification.body?.trim()
-                          ? notification.body
+                        {copy.body.trim()
+                          ? copy.body
                           : "Open this update to jump back into the relevant activity."}
                       </p>
                       <p className="text-sm text-muted-foreground">{formatDateTime(notification.createdAt)}</p>
@@ -180,7 +184,7 @@ export function ApplicantNotificationsPage() {
                         Mark read
                       </Button>
                     ) : null}
-                    <Link href={getNotificationHref(notification)} className={buttonVariants({ size: "md" })}>
+                    <Link href={getNotificationHref(notification, "APPLICANT")} className={buttonVariants({ size: "md" })}>
                       Open
                     </Link>
                   </div>

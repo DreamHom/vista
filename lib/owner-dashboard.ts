@@ -25,6 +25,7 @@ import {
   type VerificationResponse,
 } from "@/lib/applicant-dashboard";
 import {
+  invalidatePublicListingCache,
   getListingById,
   searchAgents,
   type PublicListingDetail,
@@ -107,6 +108,7 @@ export interface AgentListingResponse {
   requestedByOwnerId: number;
   status: "REQUESTED" | "ACCEPTED" | "DECLINED" | "REVOKED";
   decisionReason?: string | null;
+  automatedChecks?: import("@/lib/verification-types").AutomatedCheckResultResponse[] | null;
   requestedAt: string;
   decidedAt?: string | null;
 }
@@ -443,7 +445,7 @@ export async function listOwnerComments(ownerUserId: number) {
 function pickInspectionIdFromPayload(payload: unknown): number | null {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
   const raw = payload as Record<string, unknown>;
-  for (const key of ["inspectionId", "inspection_id"]) {
+  for (const key of ["inspectionRequestId", "inspectionId", "inspection_id"]) {
     const v = raw[key];
     if (typeof v === "number" && Number.isFinite(v)) return v;
     if (typeof v === "string" && /^\d+$/.test(v)) return Number(v);
@@ -560,6 +562,14 @@ export async function listOwnerLeads(ownerUserId: number) {
     .sort((left, right) => new Date(right.lastActivityAt).getTime() - new Date(left.lastActivityAt).getTime());
 }
 
+export async function listOwnerWorkspaceInspections(userId: number) {
+  const ownerListings = await listOwnerListings(100);
+  const listingIds = new Set(ownerListings.items.map((item) => item.listing.id));
+  const { listWorkspaceInspections } = await import("@/lib/workspace-inspections");
+  return listWorkspaceInspections({ userId, listingIds });
+}
+
+/** @deprecated Use listOwnerWorkspaceInspections for Haven-backed status and actions. */
 export async function listOwnerInspectionItems(userId: number) {
   const notifications = await listNotifications({ size: 80, kind: "INSPECTION_REQUESTED" });
 
@@ -663,7 +673,7 @@ export async function getOwnerDashboardOverview(userId: number): Promise<OwnerDa
       title: notification.kind.replaceAll("_", " "),
       description: notification.body ?? "New platform activity on one of your listings.",
       occurredAt: notification.createdAt,
-      href: getNotificationHref(notification),
+      href: getNotificationHref(notification, "OWNER"),
     })),
     showVerificationBanner: !profileData.privateProfile.identityVerifiedAt,
     latestIdentityVerification: latestVerificationByType(profileData.verifications, "OWNER_IDENTITY"),
@@ -754,14 +764,25 @@ export async function updateOwnerListing(
   return api.patch<OwnerListingResponse>(`/listings/${listingId}`, body);
 }
 
+/**
+ * Upload a listing photo via haven's presigned R2 flow.
+ *
+ * The flow:
+ *   1. POST `/listings/{id}/photos/upload-url` to mint a presigned R2 PUT URL.
+ *   2. Browser PUTs the file directly to R2.
+ *   3. POST `/listings/{id}/photos/confirm` so haven records the photo row.
+ *
+ * If step 2 fails (almost always R2 CORS, sometimes a dropped connection),
+ * the error propagates as `PresignedR2UploadError`. We deliberately do NOT
+ * fall back to direct multipart upload here: that endpoint is gone in current
+ * haven builds, and the old fallback returned 413s that made it look like
+ * the user's file was too big when the real problem was R2 CORS.
+ */
 export async function uploadOwnerListingPhoto(listingId: number, file: File, caption?: string) {
-  const formData = new FormData();
-  formData.set("file", file);
-  if (caption?.trim()) {
-    formData.set("caption", caption.trim());
-  }
-
-  return api.post<PhotoResponse>(`/listings/${listingId}/photos`, formData);
+  const { uploadListingPhotoDirect } = await import("@/lib/listing-photo-upload");
+  const result = await uploadListingPhotoDirect(listingId, file, { caption });
+  invalidatePublicListingCache(String(listingId));
+  return result;
 }
 
 async function uploadVerificationFiles(files: File[]) {
@@ -778,11 +799,12 @@ async function uploadVerificationFiles(files: File[]) {
   return Object.fromEntries(uploads);
 }
 
-export async function submitOwnerIdentityVerification(files: File[]) {
+export async function submitOwnerIdentityVerification(files: File[], livenessCheckId?: number) {
   const documentRefs = await uploadVerificationFiles(files);
   return api.post<VerificationResponse>("/verifications", {
     type: "OWNER_IDENTITY",
     documentRefs,
+    ...(livenessCheckId != null ? { livenessCheckId } : {}),
   });
 }
 
@@ -800,10 +822,17 @@ export async function listListingSlots(listingId: number) {
 }
 
 export async function createInspectionSlot(listingId: number, payload: { startsAt: string; endsAt: string }) {
-  return api.post<SlotResponse>(`/listings/${listingId}/slots`, {
+  const result = await api.post<SlotResponse>(`/listings/${listingId}/slots`, {
     startsAt: datetimeLocalToInstantJson(payload.startsAt),
     endsAt: datetimeLocalToInstantJson(payload.endsAt),
   });
+  invalidatePublicListingCache(String(listingId));
+  return result;
+}
+
+export async function deleteOwnerListingPhoto(listingId: number, photoId: number) {
+  await api.delete<void>(`/listings/photos/${photoId}`);
+  invalidatePublicListingCache(String(listingId));
 }
 
 export async function inviteAgentToListing(listingId: number, agentId: number) {

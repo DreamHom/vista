@@ -6,7 +6,8 @@ import { buildQueryString, type QueryState } from "@/lib/query-string";
 import { searchListings, summarizeQuery, type ListingSearchInput } from "@/lib/seed/public-data";
 import { cn } from "@/lib/utils";
 import { ListingsExplorerPresets } from "@/components/listings/listings-explorer-presets";
-import { EmptyHint, ListingDiscoveryCard, PublicApiNotice } from "./public-components";
+import { ListingsResultsGrid } from "./listings-results-grid";
+import { EmptyHint, PublicApiNotice } from "./public-components";
 import { ListingsToolbar } from "./listings-toolbar";
 import { SortAutoSubmitForm } from "./sort-auto-submit";
 
@@ -28,6 +29,22 @@ export async function ListingsExplorer({
   const queryState = searchParams as QueryState;
   const summary = summarizeQuery(searchParams);
 
+  // Client-side filters (q, bathrooms, verified, availability) run AFTER
+  // pagination, so they can drop `listings` to 0 while haven's `total` stays
+  // high. Detect that mismatch so we can show an honest empty state instead
+  // of "N properties found" with nothing under it.
+  const clientFiltersActive = Boolean(
+    searchParams.q?.trim() ||
+    searchParams.bathrooms ||
+    searchParams.verified === "true" ||
+    searchParams.availability,
+  );
+  const visibleCount = listings.length;
+  const countLabel =
+    visibleCount === total
+      ? `${total} ${total === 1 ? "property" : "properties"} found`
+      : `${visibleCount} on this page · ${total} total ${total === 1 ? "match" : "matches"}`;
+
   return (
     <div className="container py-10 md:py-14">
       <ListingsToolbar mode={mode} searchParams={searchParams} sort={sort} />
@@ -41,9 +58,7 @@ export async function ListingsExplorer({
           ) : null}
           <div className="flex flex-col gap-4 border border-border bg-card p-4 sm:p-5 lg:flex-row lg:items-end lg:justify-between lg:gap-6">
             <div className="min-w-0 space-y-1">
-              <p className="text-lg font-semibold tracking-tight text-foreground">
-                {total} {total === 1 ? "property" : "properties"} found
-              </p>
+              <p className="text-lg font-semibold tracking-tight text-foreground">{countLabel}</p>
               <p className="text-sm text-muted-foreground">
                 {mode === "search"
                   ? `Matching: ${summary}.`
@@ -65,19 +80,24 @@ export async function ListingsExplorer({
           </div>
 
           {listings.length === 0 ? (
-            <EmptyHint
-              title="No listings match that exact brief yet."
-              body="Try widening the location, relaxing the bedroom count, or let Dream AI help you describe the feel and budget in plain English."
-              ctaHref="/dream-ai"
-              ctaLabel="Try Dream AI"
-            />
+            clientFiltersActive && total > 0 ? (
+              <EmptyHint
+                title={`${total} ${total === 1 ? "property matches" : "properties match"} your filters, but nothing on this page matches the text search.`}
+                body="Clear the text search or sort differently to see them. Text matching only runs over the current page of results."
+                ctaHref={`${mode === "search" ? "/search" : "/listings"}?${buildQueryString(queryState, { q: "" })}`}
+                ctaLabel="Clear text search"
+              />
+            ) : (
+              <EmptyHint
+                title="No listings match that exact brief yet."
+                body="Try widening the location, relaxing the bedroom count, or let Dream AI help you describe the feel and budget in plain English."
+                ctaHref="/dream-ai"
+                ctaLabel="Try Dream AI"
+              />
+            )
           ) : (
             <>
-              <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-                {listings.map((listing) => (
-                  <ListingDiscoveryCard key={listing.id} listing={listing} />
-                ))}
-              </div>
+              <ListingsResultsGrid listings={listings} />
 
               {mode === "search" && total < 4 ? (
                 <div className="border border-accent/20 bg-accent/5 p-5">

@@ -6,6 +6,7 @@ import {
   Bath,
   BedDouble,
   CalendarClock,
+  Eye,
   FileText,
   MapPin,
   Ruler,
@@ -13,15 +14,13 @@ import {
 } from "lucide-react";
 import { ListingGallery } from "@/components/public/listing-gallery";
 import { ListingDetailMap } from "@/components/public/listing-detail-map";
-import {
-  CompactListingTile,
-  MetricCard,
-  VerificationBadgeWithPopover,
-} from "@/components/public/public-components";
+import { CompactListingTile } from "@/components/public/public-components";
+import { ListingTrustChips } from "@/components/public/listing-trust-chips";
 import { ListingDetailViewerBar } from "@/components/public/listing-detail-viewer-bar";
 import { ListingQaSection } from "@/components/public/listing-qa-section";
 import { ListingReviewsSection } from "@/components/public/listing-reviews-section";
 import { AdjacentListingNav } from "@/components/public/widgets/adjacent-listing-nav";
+import { ListingOfferPanel } from "@/components/public/widgets/listing-offer-panel";
 import { ListingSlotPicker } from "@/components/public/widgets/listing-slot-picker";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -125,17 +124,15 @@ export default async function ListingDetailPage({
           <ListingGallery photos={galleryPhotos} title={listing.title} />
 
           <article className="border border-border bg-card p-6 md:p-8">
-            <div className="flex flex-wrap items-start justify-between gap-6">
+            <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_auto] md:items-start md:gap-6">
               <div className="min-w-0 space-y-4">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="secondary">{listing.term === "RENT" ? "For rent" : "For sale"}</Badge>
                   <Badge variant="outline">{formatListingTypeLabel(listing.type)}</Badge>
-                  {listing.verified ? (
-                    <VerificationBadgeWithPopover
-                      label={listing.verificationLabel?.trim() || "Verified"}
-                      align="start"
-                    />
-                  ) : null}
+                  <ListingTrustChips
+                    ownerIdentityVerifiedAt={listing.ownerIdentityVerifiedAt}
+                    documentsVerifiedAt={listing.documentsVerifiedAt}
+                  />
                 </div>
                 <div>
                   <h1 className="text-balance text-3xl font-semibold tracking-tight md:text-4xl lg:text-[2.35rem] lg:leading-tight">
@@ -148,7 +145,7 @@ export default async function ListingDetailPage({
                 </div>
               </div>
 
-              <div className="shrink-0 space-y-1 text-right">
+              <div className="space-y-1 md:pl-4 md:text-right">
                 <p className="text-3xl font-semibold tracking-tight text-foreground md:text-4xl">
                   {formatNaira(listing.priceNgn)}
                   {listing.term === "RENT" ? (
@@ -161,9 +158,17 @@ export default async function ListingDetailPage({
               </div>
             </div>
 
-            <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-              <Stat icon={<BedDouble className="h-4 w-4" aria-hidden />} label="Bedrooms" value={String(listing.bedrooms ?? "N/A")} />
-              <Stat icon={<Bath className="h-4 w-4" aria-hidden />} label="Bathrooms" value={String(listing.bathrooms ?? "N/A")} />
+            <div className="mt-5 flex flex-wrap gap-1.5">
+              <Stat
+                icon={<BedDouble className="h-4 w-4" aria-hidden />}
+                label="Bedrooms"
+                value={listing.bedrooms != null ? `${listing.bedrooms} bedrooms` : "Bedrooms not listed"}
+              />
+              <Stat
+                icon={<Bath className="h-4 w-4" aria-hidden />}
+                label="Bathrooms"
+                value={listing.bathrooms != null ? `${listing.bathrooms} bathrooms` : "Bathrooms not listed"}
+              />
               <Stat
                 icon={<Ruler className="h-4 w-4" aria-hidden />}
                 label="Size"
@@ -171,9 +176,10 @@ export default async function ListingDetailPage({
               />
               <Stat icon={<CalendarClock className="h-4 w-4" aria-hidden />} label="Handover" value={listing.availableFrom} />
               <Stat icon={<ShieldCheck className="h-4 w-4" aria-hidden />} label="Status" value={listing.status} />
+              <Stat icon={<Eye className="h-4 w-4" aria-hidden />} label="Views" value={String(listing.viewCount)} />
             </div>
 
-            <div className="mt-8 border-t border-border pt-6">
+            <div className="mt-8 grid gap-2 border-t border-border pt-6 md:grid-cols-[1fr_auto]">
               <Link
                 href="#schedule-inspection"
                 className={cn(
@@ -186,8 +192,19 @@ export default async function ListingDetailPage({
                   ? `Schedule a visit · ${listing.slots.length} open slot${listing.slots.length === 1 ? "" : "s"}`
                   : "Schedule a visit"}
               </Link>
-              <p className="mt-3 text-center text-xs leading-relaxed text-muted-foreground md:text-sm">
-                Pick a published time below, or request a custom slot if none of the existing ones work.
+              {listing.status === "LIVE" ? (
+                <Link
+                  href="#make-offer"
+                  className={cn(
+                    buttonVariants({ variant: "outline", size: "lg" }),
+                    "flex h-14 w-full items-center justify-center gap-2 text-base font-semibold tracking-tight md:w-auto md:px-6",
+                  )}
+                >
+                  Make an offer
+                </Link>
+              ) : null}
+              <p className="mt-1 text-center text-xs leading-relaxed text-muted-foreground md:col-span-2 md:text-sm">
+                Pick a published time below, or jump straight to making an offer.
               </p>
             </div>
           </article>
@@ -215,7 +232,6 @@ export default async function ListingDetailPage({
             <section className="border border-border bg-card p-6 md:p-7">
               <h2 className="text-xl font-semibold tracking-tight">About this property</h2>
               <p className="mt-4 text-sm leading-relaxed text-muted-foreground md:text-base">{listing.description}</p>
-              <MetricCard label="Views" value={String(listing.viewCount)} icon="eye" />
             </section>
           </div>
 
@@ -226,6 +242,21 @@ export default async function ListingDetailPage({
           <ListingSlotPicker
             listingId={listing.id}
             slots={listing.slots}
+            ownerId={listing.ownerId}
+            agentId={listing.agentId}
+          />
+
+          {/* Inline offer surface — applicants only. Owners/agents of this
+              listing get nothing here (the offer they care about lives in
+              their own workspace); other roles see a muted note; guests get
+              a sign-in CTA. The form posts to Haven's POST /offers and the
+              SSE notifications stream pushes status updates back in. */}
+          <ListingOfferPanel
+            listingId={listing.id}
+            listingTitle={listing.title}
+            listingStatus={listing.status}
+            askingPriceNgn={listing.priceNgn}
+            term={listing.term}
             ownerId={listing.ownerId}
             agentId={listing.agentId}
           />
@@ -358,9 +389,6 @@ export default async function ListingDetailPage({
 
           <div>
             <p className="text-xs font-semibold uppercase tracking-eyebrow text-muted-foreground">Map</p>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              OpenStreetMap tiles · drag to pan · tap the pin for details. Coordinates are approximate until Haven ships geometry.
-            </p>
             <div className="mt-3">
               <ListingDetailMap
                 latitude={listing.latitude}
@@ -402,16 +430,24 @@ function Stat({
   icon,
   label,
   value,
+  className,
 }: {
   icon: ReactNode;
   label: string;
   value: string;
+  className?: string;
 }) {
   return (
-    <div className="border border-border p-4">
-      <div className="mb-3 inline-flex h-9 w-9 items-center justify-center bg-secondary text-foreground">{icon}</div>
-      <p className="text-xs uppercase tracking-eyebrow text-muted-foreground">{label}</p>
-      <p className="mt-2 text-sm font-medium text-foreground">{value}</p>
+    <div
+      className={cn("flex items-center gap-2.5 border border-border px-2.5 py-1.5", className)}
+      aria-label={`${label}: ${value}`}
+      title={`${label}: ${value}`}
+    >
+      <div className="inline-flex h-7 w-7 shrink-0 items-center justify-center bg-secondary text-foreground">{icon}</div>
+      <p className="min-w-0 text-sm font-medium leading-tight text-foreground">
+        <span className="sr-only">{label}: </span>
+        {value}
+      </p>
     </div>
   );
 }

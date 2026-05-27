@@ -23,6 +23,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
+import { LivenessCheckStep } from "@/components/verification/liveness-check-step";
+import { RejectionReasonBanner } from "@/components/verification/rejection-reason-banner";
+import { ApiError } from "@/lib/api";
 import { nameAvatarPastelClassName } from "@/lib/name-avatar-seed";
 import { cn } from "@/lib/utils";
 import { formatDate, formatDateTime, firstName } from "@/components/dashboard/utils";
@@ -39,6 +42,8 @@ export function ApplicantProfilePage() {
   const [phone, setPhone] = useState("");
   const [bio, setBio] = useState("");
   const [verificationFile, setVerificationFile] = useState<File | null>(null);
+  const [identityStep, setIdentityStep] = useState<"liveness" | "documents">("liveness");
+  const [livenessCheckId, setLivenessCheckId] = useState<number | null>(null);
   const [initialized, setInitialized] = useState(false);
 
   const profileQuery = useQuery({
@@ -106,16 +111,24 @@ export function ApplicantProfilePage() {
       if (!verificationFile) {
         throw new Error("Choose an ID file before submitting for verification.");
       }
-      return submitApplicantVerification(verificationFile);
+      return submitApplicantVerification(verificationFile, livenessCheckId ?? undefined);
     },
     onSuccess: () => {
       toast.success("Verification submitted for review.");
       setVerificationFile(null);
+      setLivenessCheckId(null);
+      setIdentityStep("liveness");
       if (user?.id) {
         void queryClient.invalidateQueries({ queryKey: ["applicant-profile", user.id] });
       }
     },
     onError: (error) => {
+      if (error instanceof ApiError && (error.status === 403 || error.status === 409)) {
+        toast.error("Your liveness check expired or was already used. Run a fresh mocked check.");
+        setLivenessCheckId(null);
+        setIdentityStep("liveness");
+        return;
+      }
       toast.error(error instanceof Error ? error.message : "We couldn't submit your verification.");
     },
   });
@@ -325,22 +338,46 @@ export function ApplicantProfilePage() {
               </div>
             ) : (
               <>
-                <label className="space-y-2 text-sm text-muted-foreground">
-                  Upload ID
-                  <Input
-                    type="file"
-                    accept=".jpg,.jpeg,.png,.pdf"
-                    onChange={(event) => setVerificationFile(event.target.files?.[0] ?? null)}
-                  />
-                </label>
+                {data.latestIdentityVerification?.status === "REJECTED" &&
+                data.latestIdentityVerification.decisionReason ? (
+                  <RejectionReasonBanner reason={data.latestIdentityVerification.decisionReason} />
+                ) : null}
 
-                <Button
-                  onClick={() => verificationMutation.mutate()}
-                  disabled={verificationMutation.isPending || verificationStatus === "approved"}
-                >
-                  <ShieldCheck className="h-4 w-4" aria-hidden />
-                  Submit ID for verification
-                </Button>
+                {identityStep === "liveness" ? (
+                  <LivenessCheckStep
+                    livenessId={livenessCheckId}
+                    onLivenessId={setLivenessCheckId}
+                    onContinue={() => setIdentityStep("documents")}
+                  />
+                ) : (
+                  <>
+                    <label className="space-y-2 text-sm text-muted-foreground">
+                      Upload ID
+                      <Input
+                        type="file"
+                        accept=".jpg,.jpeg,.png,.pdf"
+                        onChange={(event) => setVerificationFile(event.target.files?.[0] ?? null)}
+                      />
+                    </label>
+
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="button" variant="outline" onClick={() => setIdentityStep("liveness")}>
+                        Back to liveness
+                      </Button>
+                      <Button
+                        onClick={() => verificationMutation.mutate()}
+                        disabled={
+                          verificationMutation.isPending ||
+                          verificationStatus === "approved" ||
+                          livenessCheckId == null
+                        }
+                      >
+                        <ShieldCheck className="h-4 w-4" aria-hidden />
+                        Submit ID for verification
+                      </Button>
+                    </div>
+                  </>
+                )}
               </>
             )}
 

@@ -37,7 +37,7 @@ import {
   type AgentPromotionRecord,
   type PipelineStage,
 } from "@/lib/agent-dashboard";
-import { markAllNotificationsRead, markNotificationRead } from "@/lib/applicant-dashboard";
+import { getNotificationHref, markAllNotificationsRead, markNotificationRead } from "@/lib/applicant-dashboard";
 import { useAuth } from "@/lib/use-auth";
 import { formatNaira } from "@/lib/format";
 import {
@@ -85,6 +85,7 @@ export function AgentNotificationsPage() {
     mutationFn: markNotificationRead,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["agent-notifications"] });
+      await queryClient.invalidateQueries({ queryKey: ["unread-notification-count", userId] });
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "We couldn't mark that notification as read."),
   });
@@ -94,6 +95,7 @@ export function AgentNotificationsPage() {
     onSuccess: async (result) => {
       toast.success(`${result.marked} notification${result.marked === 1 ? "" : "s"} marked as read.`);
       await queryClient.invalidateQueries({ queryKey: ["agent-notifications"] });
+      queryClient.setQueryData<number>(["unread-notification-count", userId], 0);
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "We couldn't mark everything as read."),
   });
@@ -149,6 +151,9 @@ export function AgentNotificationsPage() {
                       Mark read
                     </Button>
                   ) : null}
+                  <Link href={getNotificationHref(notification, "AGENT")}>
+                    <Button variant="outline" size="sm">Open</Button>
+                  </Link>
                 </div>
               </div>
               <p className="mt-3 text-xs uppercase tracking-eyebrow text-muted-foreground">{formatDateTime(notification.createdAt)}</p>

@@ -29,10 +29,10 @@ export function FaqView({ groups }: { groups: readonly FaqGroup[] }) {
       <section className="border border-border bg-card p-6 md:p-8">
         <p className="text-xs uppercase tracking-eyebrow text-muted-foreground">FAQ</p>
         <h1 className="mt-3 max-w-4xl text-balance text-3xl font-semibold leading-tight tracking-tight md:text-5xl">
-          Questions people ask before they trust a property platform.
+          Answers before you trust a listing or a profile.
         </h1>
         <p className="mt-4 max-w-2xl text-sm leading-relaxed text-muted-foreground md:text-base">
-          Search through common questions grouped for applicants, owners, and agents.
+          Search questions grouped for applicants, owners, and agents.
         </p>
 
         <div className="mt-6 flex max-w-xl items-center gap-3">

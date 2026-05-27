@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Star } from "lucide-react";
@@ -11,10 +10,10 @@ import { RatingRow } from "@/components/public/public-components";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
-import { listOffers } from "@/lib/applicant-dashboard";
 import { deleteReview, postListingReview } from "@/lib/engagement";
-import { engagementErrorMessage, evaluateReviewEligibility } from "@/lib/engagement-lifecycle";
+import { engagementErrorMessage } from "@/lib/engagement-lifecycle";
 import { fetchHavenListing } from "@/lib/haven-listing";
+import { fetchReviewEligibility } from "@/lib/review-eligibility-api";
 import { invalidatePublicListingCache, type PublicReview } from "@/lib/seed/public-data";
 import { useAuth } from "@/lib/use-auth";
 import { cn } from "@/lib/utils";
@@ -67,42 +66,32 @@ export function ListingReviewsSection({
   const [revieweeUserId, setRevieweeUserId] = useState<number | null>(null);
 
   const listingQuery = useQuery({
-    queryKey: ["listing-review-eligibility", listingId, user?.id],
+    queryKey: ["listing-status-review", listingId],
     queryFn: () => fetchHavenListing(listingId),
-    enabled: hydrated && isAuthenticated && Boolean(user?.id),
-    staleTime: 30_000,
-  });
-
-  const offersQuery = useQuery({
-    queryKey: ["applicant-offers-review", user?.id],
-    queryFn: () => listOffers(80),
-    enabled: hydrated && isAuthenticated && user?.role === "APPLICANT",
+    enabled: hydrated && isAuthenticated,
     staleTime: 60_000,
   });
 
-  const eligibility = useMemo(() => {
-    if (!user || !listingQuery.data) return null;
-    return evaluateReviewEligibility({
-      listingId: numericListingId,
-      listingStatus: listingQuery.data.status,
-      viewerUserId: user.id,
-      viewerRole: user.role,
-      ownerId: numericOwnerId,
-      agentId: numericAgentId,
-      offers: offersQuery.data?.items.map((row) => row.offer) ?? [],
-      existingReviews: initialReviews,
-    });
-  }, [
-    user,
-    listingQuery.data,
-    offersQuery.data?.items,
-    initialReviews,
-    numericListingId,
-    numericOwnerId,
-    numericAgentId,
-  ]);
+  const eligibilityQuery = useQuery({
+    queryKey: ["listing-review-eligibility-api", listingId, user?.id],
+    queryFn: () => fetchReviewEligibility(listingId),
+    enabled: hydrated && isAuthenticated && listingQuery.data?.status === "CLOSED",
+    staleTime: 60_000,
+  });
 
-  const reviewees = eligibility?.kind === "can_post" ? eligibility.reviewees : [];
+  const reviewees = useMemo(() => {
+    const row = eligibilityQuery.data;
+    if (!row) return [];
+    const options: Array<{ userId: number; label: string }> = [];
+    if (row.canReviewOwner) {
+      options.push({ userId: row.ownerUserId, label: "Review the owner" });
+    }
+    if (row.canReviewAgent && row.agentUserId != null) {
+      options.push({ userId: row.agentUserId, label: "Review the agent" });
+    }
+    return options;
+  }, [eligibilityQuery.data]);
+
   const activeReviewee = revieweeUserId ?? reviewees[0]?.userId ?? null;
 
   const refresh = () => {
@@ -136,7 +125,7 @@ export function ListingReviewsSection({
     onError: (error) => toast.error(engagementErrorMessage(error, "We couldn't remove that review.")),
   });
 
-  const showForm = hydrated && isAuthenticated && eligibility?.kind === "can_post";
+  const showForm = hydrated && isAuthenticated && reviewees.length > 0;
 
   return (
     <section id="reviews" className="scroll-mt-24 border border-border bg-card p-6 md:p-7">
@@ -205,13 +194,6 @@ export function ListingReviewsSection({
             {postMutation.isPending ? "Posting…" : "Post review"}
           </Button>
         </form>
-      ) : hydrated && isAuthenticated && eligibility?.kind === "blocked" ? (
-        <p className="mt-5 border border-border bg-secondary/20 px-4 py-3 text-sm text-muted-foreground">
-          {eligibility.message}{" "}
-          <Link href="/dashboard/offers" className="font-medium text-primary hover:text-primary/80">
-            View your offers
-          </Link>
-        </p>
       ) : null}
 
       <div className="mt-5 space-y-4">

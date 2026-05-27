@@ -41,9 +41,15 @@ export function apiErrorMessage(error: unknown, fallback = "Something went wrong
     }
 
     const detail = error.problem?.detail?.trim();
+    if (detail && /unauthenticated|unauthorized/i.test(detail)) {
+      return "Your session could not be verified. Please sign in again.";
+    }
     if (detail) return detail;
 
     const title = error.problem?.title?.trim();
+    if (title && /unauthenticated|unauthorized/i.test(title)) {
+      return "Your session could not be verified. Please sign in again.";
+    }
     if (title && title.toLowerCase() !== "forbidden") return title;
 
     if (error.status === 403) {

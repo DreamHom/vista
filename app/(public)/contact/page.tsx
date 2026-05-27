@@ -11,8 +11,8 @@ export default function ContactPage() {
   return (
     <FormShell
       eyebrow="Contact Us"
-      title="Talk to the DreamHomes team."
-      description="Reach out for general questions, support issues, partnerships, or press inquiries."
+      title="Contact DreamHomes"
+      description="Support, partnerships, press, or trust and safety. Tell us what you need and we will route your message."
       maxWidth="max-w-2xl"
       footer={
         <p>

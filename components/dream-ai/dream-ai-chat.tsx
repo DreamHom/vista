@@ -1,9 +1,8 @@
 "use client";
 
 /**
- * Dream AI chat shell — Haven v1.0.3 contract when signed in (SSE + JSON fallback),
- * local heuristics when logged out. See `haven/docs/dream-ai-capabilities.md` and
- * `docs/dream-ai-ui.md`.
+ * Dream AI chat shell — simple discovery flow:
+ * user prompt -> Haven turn API -> render assistant markdown + listing cards.
  */
 
 import * as React from "react";
@@ -151,7 +150,6 @@ export function DreamAiChat({
 
   const assistantSlotRef = React.useRef<string | null>(null);
   const hasConversation = messages.length > 0;
-  const userMessageCount = messages.filter((m) => m.role === "user").length;
 
   React.useEffect(() => {
     onConversationChange?.(hasConversation);
@@ -307,13 +305,38 @@ export function DreamAiChat({
   const runAssistant = React.useCallback(
     async (userText: string) => {
       setProviderIssue(false);
+      setThreadProblem(null);
       try {
-        await runHavenTurn({ prompt: userText });
-      } catch {
-        if (!signedIn) await runGuestAssistant(userText);
+        const response = await postDreamAiTurn(
+          {
+            prompt: userText,
+            chatId: chatId ?? undefined,
+          },
+          { skipAuth: !signedIn },
+        );
+        if (typeof response.chatId === "number") {
+          setChatId(response.chatId);
+        }
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: makeId(),
+            role: "assistant",
+            source: "haven",
+            turn: response.turn,
+            streamingMarkdown: "",
+            streaming: false,
+          },
+        ]);
+      } catch (error) {
+        const problem =
+          error instanceof ApiError
+            ? error.problem ?? { title: error.message, status: error.status }
+            : ({ title: "Network error", detail: String(error) } satisfies ProblemDetail);
+        handleProblem(null, problem);
       }
     },
-    [signedIn, runHavenTurn, runGuestAssistant],
+    [chatId, signedIn, handleProblem],
   );
 
   const submit = React.useCallback(
@@ -336,19 +359,6 @@ export function DreamAiChat({
     submit(trimmed);
   }, [initialPrompt, submit]);
 
-  const submitChip = React.useCallback(
-    (chip: ChipOption) => {
-      if (busy || !signedIn) return;
-      setBusy(true);
-      setMessages((prev) => [...prev, { id: makeId(), role: "user", content: chip.sendText }]);
-      void runHavenTurn({
-        prompt: null,
-        userChoice: { chipId: chip.id, sendText: chip.sendText },
-      }).finally(() => setBusy(false));
-    },
-    [busy, signedIn, runHavenTurn],
-  );
-
   const reset = () => {
     setMessages([]);
     setInput("");
@@ -365,38 +375,7 @@ export function DreamAiChat({
       ? ext.retryAfterSeconds
       : NaN;
 
-  const headerActions = signedIn ? (
-    <div className="flex items-center gap-1">
-      <DropdownMenu onOpenChange={(o) => o && void loadChatList()}>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="gap-1 pr-2" disabled={chatsLoading}>
-            <History className="h-4 w-4" aria-hidden />
-            <span className="hidden sm:inline">Chats</span>
-            <ChevronDown className="h-3.5 w-3.5 opacity-60" aria-hidden />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="max-h-72 w-72 overflow-y-auto">
-          <DropdownMenuLabel>Past conversations</DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          {chatSummaries.length === 0 ? (
-            <DropdownMenuItem disabled>No saved threads yet</DropdownMenuItem>
-          ) : (
-            chatSummaries.map((c) => (
-              <DropdownMenuItem key={c.id} onSelect={() => void openChat(c.id)}>
-                <span className="line-clamp-2 text-left">{c.preview || `Chat #${c.id}`}</span>
-              </DropdownMenuItem>
-            ))
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
-      {hasConversation ? (
-        <Button variant="ghost" size="sm" onClick={reset}>
-          <Plus className="h-4 w-4" aria-hidden />
-          New chat
-        </Button>
-      ) : null}
-    </div>
-  ) : hasConversation ? (
+  const headerActions = hasConversation ? (
     <Button variant="ghost" size="sm" onClick={reset}>
       <Plus className="h-4 w-4" aria-hidden />
       New chat
@@ -525,7 +504,6 @@ export function DreamAiChat({
                           listings={listings}
                           streamingMarkdown={m.streamingMarkdown}
                           streaming={m.streaming}
-                          onChip={signedIn ? submitChip : undefined}
                         />
                       </MessageContent>
                     </MessageStack>
@@ -538,23 +516,6 @@ export function DreamAiChat({
 
           <div className="shrink-0 border-t border-border bg-background/95 backdrop-blur">
             <div className="mx-auto w-full max-w-3xl px-4 py-4 md:px-6">
-              {userMessageCount >= 3 && !signedIn ? (
-                <div className="mb-4 border border-accent/20 bg-accent/5 p-4">
-                  <p className="text-sm font-medium text-foreground">Sign in for live Dream AI threads</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Create an account to save chats, clarify with chips, and sync with Haven&apos;s matcher.
-                  </p>
-                  <div className="mt-3">
-                    <Link href="/login?next=/dream-ai" className="text-sm font-medium text-accent hover:text-accent/80">
-                      Log in
-                    </Link>
-                    <span className="mx-2 text-muted-foreground">·</span>
-                    <Link href="/signup?next=/dream-ai" className="text-sm font-medium text-accent hover:text-accent/80">
-                      Sign up
-                    </Link>
-                  </div>
-                </div>
-              ) : null}
               <ChatPromptInput input={input} setInput={setInput} onSubmit={submit} busy={busy} />
               <p className="mt-2 text-center text-[11px] text-muted-foreground">
                 Dream AI ranks over a curated Lagos &amp; Abuja slice, suggestions, not exhaustive search. Verify with the

@@ -44,12 +44,12 @@ export function InspectionMoreMenu({
         <Button
           type="button"
           variant="outline"
-          size="icon"
+          size="sm"
           disabled={disabled}
           aria-label={triggerLabel}
-          className="shrink-0"
+          className="h-8 w-8 shrink-0 rounded-none p-0"
         >
-          <MoreHorizontal className="h-4 w-4" aria-hidden />
+          <MoreHorizontal className="h-3.5 w-3.5" aria-hidden />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-[15rem] rounded-none border-border p-1 shadow-none">

@@ -85,6 +85,7 @@ interface ListingResponse {
   viewCount: number | null;
   createdAt: string;
   updatedAt: string;
+  ownerIdentityVerifiedAt?: string | null;
   property: PropertySummary;
   assignedAgentId: number | null;
   pendingReportCount: number | null;
@@ -110,6 +111,7 @@ interface CommentResponse {
   listingId: number;
   authorUserId: number;
   body: string;
+  parentCommentId?: number | null;
   createdAt: string;
 }
 
@@ -179,7 +181,7 @@ export type PublicAgent = PublicPerson;
 export interface ListingCommentReply {
   id: string;
   authorName: string;
-  authorRole: "Owner" | "Agent";
+  authorRole: "Owner" | "Agent" | "Applicant";
   body: string;
   date: string;
 }
@@ -241,6 +243,8 @@ export interface PublicListing {
   updatedAt: string;
   verified: boolean;
   verificationLabel: string;
+  ownerIdentityVerifiedAt: string | null;
+  documentsVerifiedAt: string | null;
   photos: PublicPhoto[];
   owner: PublicOwner;
   agent: PublicAgent | null;
@@ -299,17 +303,32 @@ function makeUrl(path: string, query?: Record<string, string | number | boolean 
  * can attribute traffic and ops can contact us if anything's wrong.
  */
 const SERVER_UA = "dreamhomes-vista/1.0 (+https://www.dreamhomes.today)";
+const SERVER_PUBLIC_REVALIDATE_SECONDS = 5;
+
+function publicFetchOptions(): RequestInit & { next?: { revalidate: number } } {
+  if (typeof window === "undefined") {
+    // SSR: short cache window smooths repeated renders without making
+    // listing state feel stale for long.
+    return { next: { revalidate: SERVER_PUBLIC_REVALIDATE_SECONDS } };
+  }
+  // Browser: always fetch fresh when called client-side.
+  return { cache: "no-store" };
+}
 
 async function publicFetch<T>(
   path: string,
   query?: Record<string, string | number | boolean | undefined | null>,
 ): Promise<T> {
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+  };
+  if (typeof window === "undefined") {
+    headers["User-Agent"] = SERVER_UA;
+  }
+
   const response = await fetch(makeUrl(path, query), {
-    headers: {
-      Accept: "application/json",
-      "User-Agent": SERVER_UA,
-    },
-    cache: "no-store",
+    headers,
+    ...publicFetchOptions(),
   });
 
   if (!response.ok) {
@@ -509,6 +528,8 @@ async function enrichListing(
     updatedAt: listing.updatedAt,
     verified: Boolean(listing.property.documentsVerifiedAt),
     verificationLabel: listing.property.documentsVerifiedAt ? "Property Verified" : "Verification pending",
+    ownerIdentityVerifiedAt: listing.ownerIdentityVerifiedAt ?? null,
+    documentsVerifiedAt: listing.property.documentsVerifiedAt ?? null,
     photos: gallery,
     owner,
     agent,
@@ -700,19 +721,41 @@ export async function getListingById(id: string): Promise<PublicListingDetail | 
           ...reviewsPage.content.map((review) => review.reviewerUserId),
         ]);
 
-        const comments: ListingComment[] = commentsPage.content.map((comment) => {
+        const commentRows = commentsPage.content.map((comment) => {
           const profile = authorProfiles.get(String(comment.authorUserId));
           return {
             id: String(comment.id),
+            numericId: comment.id,
+            parentCommentId: comment.parentCommentId ?? null,
             authorUserId: comment.authorUserId,
             authorName: profile ? toPublicPerson(profile).name : `User ${comment.authorUserId}`,
             authorRole:
               profile?.role === "AGENT" ? "Agent" : profile?.role === "OWNER" ? "Owner" : "Applicant",
             body: comment.body,
             date: formatDate(comment.createdAt, { dateStyle: "medium" }),
-            replies: [],
+            replies: [] as ListingComment["replies"],
           };
         });
+
+        const comments: ListingComment[] = commentRows
+          .filter((row) => row.parentCommentId == null)
+          .map((parent) => ({
+            id: parent.id,
+            authorUserId: parent.authorUserId,
+            authorName: parent.authorName,
+            authorRole: parent.authorRole as ListingComment["authorRole"],
+            body: parent.body,
+            date: parent.date,
+            replies: commentRows
+              .filter((row) => row.parentCommentId === parent.numericId)
+              .map((reply) => ({
+                id: reply.id,
+                authorName: reply.authorName,
+                authorRole: reply.authorRole as ListingCommentReply["authorRole"],
+                body: reply.body,
+                date: reply.date,
+              })),
+          }));
 
         const reviews: PublicReview[] = reviewsPage.content.map((review) => {
           const profile = authorProfiles.get(String(review.reviewerUserId));
@@ -802,7 +845,7 @@ export async function searchAgents(input: AgentSearchInput) {
         Accept: "application/json",
         "User-Agent": SERVER_UA,
       },
-      cache: "no-store",
+      ...publicFetchOptions(),
     });
     if (!response.ok) {
       throw new Error(`Public API request failed: ${response.status} ${response.statusText}`);

@@ -34,8 +34,8 @@ export function DreamAiWelcomeBanner({
         <p className="max-w-lg text-balance text-sm leading-relaxed text-muted-foreground md:text-base">
           Describe the home you want.{" "}
           {signedIn
-            ? "We&apos;ll stream picks from Haven&apos;s live matcher."
-            : "We&apos;ll match locally; sign in for saved threads and the live engine."}
+            ? "We&apos;ll send your question to Haven and return matching listings."
+            : "We&apos;ll send your question and show what Haven returns."}
         </p>
       </div>
     </div>

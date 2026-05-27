@@ -30,7 +30,7 @@ export function PublicFooter() {
       <div className="container grid gap-10 py-12 md:grid-cols-[1.2fr_0.8fr] md:py-16">
         <div className="space-y-4">
           <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
-            DreamHomes is building a calmer, trust-first way to discover, verify, and move on property in Nigeria.
+            Discover, verify, and move on property in Nigeria with clearer fees and an on-platform trail for serious steps.
           </p>
           <div className="flex flex-wrap gap-2">
             {PUBLIC_PRIMARY_NAV.slice(0, 3).map((item) => (
@@ -61,7 +61,7 @@ export function PublicFooter() {
       <div className="container border-t border-border py-8">
         <Link
           href="/moniepoint-financing"
-          aria-label="Strong Partners with Moniepoint; read about DreamHomes financing"
+          aria-label="DreamHomes and Moniepoint partnership; read about financing"
           className="group relative isolate block w-full min-h-[11.5rem] overflow-hidden border-2 border-foreground/10 bg-muted/15 transition-colors hover:border-foreground/20 hover:bg-muted/25 md:min-h-[15rem]"
         >
           {/* Poster-style ground + shapes (banner graphic) */}

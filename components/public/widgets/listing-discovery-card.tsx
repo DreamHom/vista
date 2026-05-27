@@ -1,13 +1,17 @@
+"use client";
+
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Bath, BedDouble, MapPin } from "lucide-react";
 
+import { useCompareSelectionOptional } from "@/components/dream-ai/compare-selection-store";
 import { ListingCardMedia } from "@/components/listings/listing-card-media";
-import { buttonVariants } from "@/components/ui/button";
+import { ListingTrustChips } from "@/components/public/listing-trust-chips";
+import { toast } from "@/components/ui/toast";
 import { formatNaira } from "@/lib/format";
 import { fallbackListingPhoto } from "@/lib/seed/photos";
 import { type PublicListing, formatAvailability } from "@/lib/seed/public-data";
 import { cn } from "@/lib/utils";
-import { VerificationBadgeWithPopover } from "../verification-badge-popover";
 
 function formatPropertyTypeLabel(type: PublicListing["type"]): string {
   return type
@@ -17,25 +21,82 @@ function formatPropertyTypeLabel(type: PublicListing["type"]): string {
     .join(" ");
 }
 
-export function ListingDiscoveryCard({ listing }: { listing: PublicListing }) {
+export function ListingDiscoveryCard({
+  listing,
+  compareMode = false,
+}: {
+  listing: PublicListing;
+  compareMode?: boolean;
+}) {
+  const router = useRouter();
   const period = listing.term === "RENT" ? "/year" : "";
   const photo = listing.photos[0];
   const fallback = fallbackListingPhoto(`${listing.id}-${listing.title}`, { w: 800, ratio: "4:3" });
+  const compare = useCompareSelectionOptional();
+  const numericId = Number(listing.id);
+  const selected = compare?.isSelected(numericId) ?? false;
+
+  const listingHref = `/listings/${listing.id}`;
+
+  function shouldIgnoreCardNavigation(target: EventTarget | null): boolean {
+    if (!(target instanceof Element)) return false;
+    return Boolean(target.closest("a, button, input, textarea, select, label"));
+  }
 
   return (
-    <article className="group/card border border-border bg-card">
+    <article
+      className="group/card cursor-pointer border border-border bg-card"
+      role="link"
+      tabIndex={0}
+      aria-label={`Open listing ${listing.title}`}
+      onClick={(event) => {
+        if (shouldIgnoreCardNavigation(event.target)) return;
+        router.push(listingHref);
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        if (shouldIgnoreCardNavigation(event.target)) return;
+        event.preventDefault();
+        router.push(listingHref);
+      }}
+    >
       <div className="relative">
         <ListingCardMedia
           listingId={listing.id}
-          title={listing.title}
           photoUrl={photo?.url}
           fallbackUrl={fallback.url}
           alt={photo?.alt ?? fallback.alt ?? listing.title}
         />
-        {listing.verified ? (
-          <div className="pointer-events-auto absolute left-4 top-4 z-40 drop-shadow-md">
-            <VerificationBadgeWithPopover label="Verified" align="start" />
-          </div>
+        <div className="pointer-events-auto absolute left-4 top-4 z-40 flex flex-col items-start gap-2 drop-shadow-md">
+          <ListingTrustChips
+            ownerIdentityVerifiedAt={listing.ownerIdentityVerifiedAt}
+            documentsVerifiedAt={listing.documentsVerifiedAt}
+          />
+        </div>
+        {compareMode && compare ? (
+          <label
+            className={cn(
+              "absolute right-4 top-4 z-40 flex items-center gap-2 border border-border bg-card px-2 py-1.5 text-xs font-medium shadow-sm transition-opacity",
+              selected
+                ? "pointer-events-auto opacity-100"
+                : "pointer-events-none opacity-0 group-hover/card:pointer-events-auto group-hover/card:opacity-100 group-focus-within/card:pointer-events-auto group-focus-within/card:opacity-100",
+            )}
+          >
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-primary"
+              checked={selected}
+              aria-label="Add this listing to compare"
+              onChange={() => {
+                if (!selected && compare.atCap) {
+                  toast.message("Up to 5 listings can be compared at once. Uncheck one to swap.");
+                  return;
+                }
+                compare.toggle(numericId);
+              }}
+            />
+            Compare
+          </label>
         ) : null}
       </div>
 
@@ -44,7 +105,7 @@ export function ListingDiscoveryCard({ listing }: { listing: PublicListing }) {
           <div className="flex items-start justify-between gap-3">
             <div>
               <Link
-                href={`/listings/${listing.id}`}
+                href={listingHref}
                 className="text-lg font-semibold tracking-tight text-foreground transition-colors hover:text-accent"
               >
                 {listing.title}
@@ -83,15 +144,6 @@ export function ListingDiscoveryCard({ listing }: { listing: PublicListing }) {
             </span>
           ) : null}
           {listing.sizeSqm !== null ? <span className="border border-border px-3 py-1">{listing.sizeSqm} sqm</span> : null}
-        </div>
-
-        <div className="pt-1">
-          <Link
-            href={`/listings/${listing.id}`}
-            className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-full rounded-none sm:w-auto")}
-          >
-            View listing
-          </Link>
         </div>
       </div>
     </article>

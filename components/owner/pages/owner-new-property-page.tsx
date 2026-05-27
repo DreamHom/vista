@@ -69,6 +69,7 @@ import {
 } from "@/lib/owner-dashboard";
 import { useAuth } from "@/lib/use-auth";
 import { ApiError, NetworkError } from "@/lib/api";
+import { describePhotoUploadError } from "@/lib/photo-upload-errors";
 import { formatGroupedIntegerInput, formatNaira, formatStoredGroupedInteger, parseGroupedNumberInput } from "@/lib/format";
 import {
   DashboardPageIntro,
@@ -124,42 +125,8 @@ type SubmitResult = {
   docFailure: string | null;
 };
 
-/**
- * Map errors from `uploadOwnerListingPhoto` / `submitPropertyDocumentsVerification`
- * to per-file human messages. Different statuses are different stories: 413 is
- * "your file's too big", 415 is "wrong format", 5xx is "haven is having a bad
- * day". The generic "upload failed" is reserved for truly unknown errors.
- */
-function describeUploadError(err: unknown, fileName: string): string {
-  if (err instanceof ApiError) {
-    switch (err.status) {
-      case 401:
-        return `${fileName}: session expired, sign in again`;
-      case 403:
-        return `${fileName}: not permitted to attach photos here`;
-      case 413:
-        return `${fileName}: too large, try compressing below ~10 MB`;
-      case 415:
-        return `${fileName}: unsupported format (use JPG, PNG, or WEBP)`;
-      case 422:
-        return `${fileName}: ${err.problem?.detail ?? "rejected by haven"}`;
-      case 429:
-        return `${fileName}: too many uploads at once, try again in a moment`;
-      default:
-        if (err.status >= 500) {
-          return `${fileName}: haven couldn't store this one (status ${err.status})`;
-        }
-        return `${fileName}: ${err.problem?.detail ?? err.message}`;
-    }
-  }
-  if (err instanceof NetworkError) {
-    return `${fileName}: lost connection during upload`;
-  }
-  if (err instanceof Error) {
-    return `${fileName}: ${err.message}`;
-  }
-  return `${fileName}: upload failed`;
-}
+// Photo upload error mapping lives in `lib/photo-upload-errors.ts`; both the
+// create flow here and the detail-page re-upload flow use the same logic.
 
 function makePendingPhoto(file: File): PendingListingPhoto {
   return {
@@ -316,7 +283,7 @@ export function OwnerNewPropertyPage() {
         } catch (err) {
           photoFailures.push({
             fileName: item.file.name,
-            reason: describeUploadError(err, item.file.name),
+            reason: describePhotoUploadError(err, item.file.name),
           });
         }
       }
@@ -328,7 +295,7 @@ export function OwnerNewPropertyPage() {
         try {
           await submitPropertyDocumentsVerification(property.id, docFiles);
         } catch (err) {
-          docFailure = describeUploadError(err, "Property documents");
+          docFailure = describePhotoUploadError(err, "Property documents");
         }
       }
 

@@ -26,10 +26,10 @@ export function HowItWorksTabs({ tabs }: { tabs: readonly JourneyTab[] }) {
       <section className="border border-border bg-card p-6 md:p-8">
         <p className="text-xs uppercase tracking-eyebrow text-muted-foreground">How It Works</p>
         <h1 className="mt-3 max-w-4xl text-balance text-3xl font-semibold leading-tight tracking-tight md:text-5xl">
-          DreamHomes keeps discovery open and serious actions documented.
+          Open discovery. Documented next steps.
         </h1>
         <p className="mt-4 max-w-2xl text-sm leading-relaxed text-muted-foreground md:text-base">
-          Follow the flow that matches your role and see how DreamHomes turns housing chaos into a clearer on-platform journey.
+          Pick your role and see how browsing, verification, inspections, and offers stay on DreamHomes instead of scattered chat.
         </p>
 
         <div className="mt-6 flex flex-wrap gap-3">
@@ -66,7 +66,7 @@ export function HowItWorksTabs({ tabs }: { tabs: readonly JourneyTab[] }) {
 
           <div className="border border-border bg-secondary/40 p-5 lg:w-[260px]">
             <p className="text-sm leading-relaxed text-muted-foreground">
-              Ready to take the next step for this flow?
+              Ready to start this path?
             </p>
             <Link href={active.ctaHref} className={cn(buttonVariants({ variant: "primary", size: "md" }), "mt-4 w-full")}>
               {active.ctaLabel}

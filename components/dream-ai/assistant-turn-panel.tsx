@@ -1,41 +1,37 @@
 "use client";
 
+import { useState } from "react";
+import { ChevronDown, ChevronUp } from "lucide-react";
+
 import { MessageMarkdown } from "@/components/nexus-ui/message";
 import { TextShimmer } from "@/components/nexus-ui/text-shimmer";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import type { AssistantTurnV1, ChipOption, TurnBlock } from "@/lib/dream-ai/contracts";
+import type { AssistantTurnV1, TurnBlock } from "@/lib/dream-ai/contracts";
+import { useCompareListings } from "@/lib/dream-ai/use-compare-listings";
 import type { PublicListing } from "@/lib/seed/public-data";
 
-import { DreamAiCompareView } from "./dream-ai-compare-view";
 import { InlineListing } from "./inline-listing";
 
-function listingById(listings: PublicListing[], id: number): PublicListing | undefined {
-  return listings.find((l) => Number(l.id) === id);
-}
+/** Listings shown by default before the user opens the rest. */
+const DEFAULT_VISIBLE = 3;
 
 export function AssistantTurnPanel({
   turn,
   listings,
   streamingMarkdown,
   streaming,
-  onChip,
 }: {
   turn: AssistantTurnV1;
   listings: PublicListing[];
   /** Accumulated markdown during SSE `delta` before `final` overwrites. */
   streamingMarkdown: string;
   streaming: boolean;
-  onChip?: (chip: ChipOption) => void;
 }) {
-  const meta = turn.meta ?? undefined;
   const md = streaming
     ? streamingMarkdown || turn.markdown || ""
     : turn.markdown || streamingMarkdown || "";
 
-  const chipsBlock = turn.blocks?.find((b): b is TurnBlock & { type: "chips" } => b.type === "chips");
-  const listingsBlocks = turn.blocks?.filter((b): b is TurnBlock & { type: "listings" } => b.type === "listings") ?? [];
-  const compareBlock = turn.blocks?.find((b): b is TurnBlock & { type: "compare" } => b.type === "compare");
+  const listingsBlocks =
+    turn.blocks?.filter((b): b is TurnBlock & { type: "listings" } => b.type === "listings") ?? [];
 
   const listingIdsForRail: number[] = [];
   for (const b of listingsBlocks) {
@@ -44,79 +40,94 @@ export function AssistantTurnPanel({
     }
   }
 
-  const compareIds = (compareBlock?.compareListingIds ?? []).filter((x): x is number => x != null).map(Number);
-  const isCompare = turn.kind === "compare" && compareIds.length >= 2;
-  const showTopMarkdown = !isCompare || streaming;
+  // Resolve IDs against the props catalog first; for IDs not in the catalog
+  // (e.g. haven returned newer listings than the inventory snapshot we
+  // server-rendered with), fetch them on demand from /listings/{id}. Stops
+  // the "Listing #X isn't in the current browse snapshot" placeholders that
+  // made the response look broken when haven and the snapshot disagreed.
+  const { resolved, loading } = useCompareListings(listings, listingIdsForRail);
+
+  // Haven's `embeddings-only` provider mode (LLM unavailable) returns no
+  // markdown at all, just `listingIds`. Without a fallback heading the
+  // response reads as "the AI said nothing." Give it a one-line frame so
+  // the rail has context.
+  const finalMd = md.trim();
+  const showFallbackHeading =
+    !streaming && !finalMd && listingIdsForRail.length > 0 && turn.kind === "reply";
+
+  // Progressive disclosure: render the top 3 by default, hide the long tail
+  // behind a button so the chat doesn't drown the user in 8-10 cards every
+  // turn. Once expanded, stays expanded for this turn — collapse is one
+  // click, no animation since impeccable bans animating layout properties.
+  const [expanded, setExpanded] = useState(false);
+  const totalCount = listingIdsForRail.length;
+  const hasOverflow = totalCount > DEFAULT_VISIBLE;
+  const visibleCount = expanded || !hasOverflow ? totalCount : DEFAULT_VISIBLE;
+  const visibleIds = listingIdsForRail.slice(0, visibleCount);
+  const hiddenCount = totalCount - visibleCount;
 
   return (
     <div className="flex w-full flex-col gap-3">
-      {meta?.staleIdsFiltered ? (
-        <p className="text-[11px] text-muted-foreground">
-          Some results in this thread have changed — a few saved picks are no longer on the market.
-        </p>
-      ) : null}
-      {(meta?.inventoryEmpty || meta?.queryTooStrict) && !streaming && turn.kind === "no_results" ? (
-        <p className="text-xs text-muted-foreground">
-          {meta.inventoryEmpty
-            ? "Nothing in the live catalogue matched that yet."
-            : "Your filters may be tight; try widening budget or area."}
-        </p>
-      ) : null}
-      {meta?.degraded && !streaming && !isCompare ? (
-        <p className="text-[11px] text-muted-foreground">Ranking used a fallback path (live matcher degraded).</p>
-      ) : null}
-
-      {streaming && !md.trim() ? (
+      {streaming && !finalMd ? (
         <TextShimmer duration={1.4} className="text-sm text-muted-foreground">
           Thinking…
         </TextShimmer>
-      ) : showTopMarkdown && md.trim() ? (
-        <MessageMarkdown>{md}</MessageMarkdown>
+      ) : finalMd ? (
+        <MessageMarkdown>{finalMd}</MessageMarkdown>
+      ) : showFallbackHeading ? (
+        <p className="text-sm text-foreground">
+          {hasOverflow
+            ? `Top ${DEFAULT_VISIBLE} matches I could find. Expand to see ${totalCount - DEFAULT_VISIBLE} more.`
+            : "Closest matches I could find in the live catalogue:"}
+        </p>
       ) : null}
 
-      {chipsBlock?.options?.length && onChip ? (
-        <div className="flex flex-wrap gap-2">
-          {chipsBlock.options.map((chip) => (
-            <Button
-              key={chip.id}
-              type="button"
-              variant="outline"
-              size="sm"
-              className={cn("rounded-none text-left font-normal")}
-              disabled={streaming}
-              onClick={() => onChip(chip)}
-            >
-              {chip.label}
-            </Button>
-          ))}
-        </div>
-      ) : null}
-
-      {compareIds.length >= 2 ? (
-        <DreamAiCompareView
-          compareListingIds={compareIds}
-          compareReasoning={compareBlock?.compareReasoning}
-          markdown={md}
-          catalog={listings}
-          streaming={streaming}
-        />
-      ) : null}
-
-      {listingIdsForRail.length > 0 && !isCompare ? (
+      {totalCount > 0 ? (
         <div className="flex w-full flex-col gap-2">
-          {listingIdsForRail.map((id) => {
-            const listing = listingById(listings, id);
-            return listing ? (
-              <InlineListing key={id} listing={listing} />
-            ) : (
+          {visibleIds.map((id, index) => {
+            const listing = resolved[index] ?? null;
+            if (listing) {
+              return <InlineListing key={id} listing={listing} />;
+            }
+            if (loading) {
+              return (
+                <div
+                  key={id}
+                  className="h-20 w-full animate-pulse border border-border bg-muted/40"
+                  aria-label={`Loading listing ${id}`}
+                />
+              );
+            }
+            return (
               <div
                 key={id}
                 className="border border-dashed border-border bg-muted/40 px-4 py-6 text-center text-sm text-muted-foreground"
               >
-                Listing #{id} isn&apos;t in the current browse snapshot.
+                Listing #{id} is no longer available on the platform.
               </div>
             );
           })}
+
+          {hasOverflow ? (
+            <button
+              type="button"
+              onClick={() => setExpanded((prev) => !prev)}
+              aria-expanded={expanded}
+              className="mt-1 inline-flex items-center justify-center gap-1.5 border border-border bg-background px-3 py-2 text-xs font-medium uppercase tracking-eyebrow text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            >
+              {expanded ? (
+                <>
+                  Show top {DEFAULT_VISIBLE} only
+                  <ChevronUp className="h-3.5 w-3.5" aria-hidden />
+                </>
+              ) : (
+                <>
+                  Show {hiddenCount} more
+                  <ChevronDown className="h-3.5 w-3.5" aria-hidden />
+                </>
+              )}
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>

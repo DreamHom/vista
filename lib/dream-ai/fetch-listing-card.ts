@@ -19,6 +19,7 @@ type ListingResponse = {
   viewCount: number | null;
   createdAt: string;
   updatedAt: string;
+  ownerIdentityVerifiedAt?: string | null;
   property: {
     type: PublicListing["type"];
     address: string;
@@ -118,6 +119,8 @@ export async function fetchDreamAiListingCard(id: number | string): Promise<Publ
       updatedAt: listing.updatedAt,
       verified: Boolean(listing.property.documentsVerifiedAt),
       verificationLabel: listing.property.documentsVerifiedAt ? "Property Verified" : "Verification pending",
+      ownerIdentityVerifiedAt: listing.ownerIdentityVerifiedAt ?? null,
+      documentsVerifiedAt: listing.property.documentsVerifiedAt ?? null,
       photos: gallery,
       owner: placeholderOwner(listing.ownerId),
       agent: null,

@@ -29,10 +29,10 @@ export default function AboutPage() {
       <section className="border border-border bg-card p-6 md:p-8">
         <p className="text-xs uppercase tracking-eyebrow text-muted-foreground">About Us</p>
         <h1 className="mt-3 max-w-4xl text-balance text-3xl font-semibold leading-tight tracking-tight md:text-5xl">
-          DreamHomes exists to make dreams come true in a market that often feels confusing to trust.
+          A trust-first property platform for Nigeria.
         </h1>
         <p className="mt-4 max-w-3xl text-sm leading-relaxed text-muted-foreground md:text-base">
-          We are building a calmer, trust-first property platform for Nigeria, designed to reduce fraud, opacity, and friction across renting, buying, listing, and agent discovery.
+          DreamHomes reduces fraud, hidden fees, and off-platform chaos across renting, buying, listing, and agent discovery.
         </p>
       </section>
 
