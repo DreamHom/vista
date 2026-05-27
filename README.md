@@ -109,41 +109,17 @@ What's **not** here: no `features/`, no top-level `types/`, no `hooks/`. Hooks l
 
 ## Key Design Decisions
 
-These are the non-obvious choices a reviewer would want explained.
+**1. Editorial real-estate aesthetic, not generic SaaS.** Sharp corners (`--radius: 0`), hairline borders, one accent ≤10% of any view, SF Pro as the single sans family. The goal is for it to read like a real-estate magazine, not a dashboard template — and to fail the "AI made that" sniff test.
 
-### Editorial real-estate aesthetic over generic SaaS
+**2. Apollo-flat code layout.** Three top-level buckets: `app/` (URLs only), `components/{ui,layout,providers,…}` (anything that renders), `lib/` (flat — no nested `hooks/` or `features/`). Keeps the file tree shallow and makes things easy to find without inventing abstractions that aren't earned.
 
-Color strategy is **Restrained**: tinted neutrals across the surface, with brand blue used as accent ≤10% of any view. Sharp corners everywhere (`--radius: 0`), hairline `border-border` dividers, no shadows by default, no glassmorphism, no gradient text. SF Pro is the single sans family for everything (no display/body pairing). The slop test the design has to pass: a user fluent in real-estate listings should believe a magazine publisher built this, not that ChatGPT did.
+**3. Single proxy hop through Next, never direct to haven.** All `/api/*` calls go through `app/api/[...path]/route.ts` to haven with a forced `User-Agent` (Cloudflare's bot-fight 403s undici's default of no UA). Gives one place to add request shaping, cookie handling, retry policy without touching every call site.
 
-### Vista talks to haven via Next API proxy
+**4. JWT + refresh-token rotation with one retry.** Haven issues `token` (1h) + `refreshToken` (30d, rotated). On any 401 the API client transparently calls `/auth/refresh` and retries the original request once; concurrent 401s coalesce on one refresh promise. Tokens live in localStorage — known XSS exposure, accepted for capstone scope; production would move to httpOnly cookies (haven supports this server-side).
 
-The browser never calls `haven.dreamhomes.today` directly. All `/api/*` requests hit `app/api/[...path]/route.ts`, which proxies to haven with a forced `User-Agent` (Cloudflare's bot-fight in front of haven 403s undici's default of no UA). This also gives us one place to add request shaping, cookie handling, etc. without touching every call site.
+**5. Realtime notifications via SSE.** `/notifications/stream` is one persistent connection per tab. Each Kafka or sync event fires a top-right toast, invalidates the relevant TanStack Query keys, and bumps the bell-badge count — so opening two tabs (applicant + owner) shows the full Kafka pipeline working in seconds with no refresh. Uses `fetch` + `ReadableStream` because native `EventSource` can't carry our bearer header.
 
-### JWT + refresh-token rotation
-
-Haven issues `token` (1h JWT) + `refreshToken` (30d, rotated). On any 401, the API client transparently calls `/auth/refresh` and retries the original request once. Concurrent 401s coalesce on a single refresh promise so a burst of failed requests fires one refresh, not five. If refresh itself 401s (replay-detected, revoked, or account suspended), the session clears and a window event routes the user to `/login?next=<current>`.
-
-### Real-time notifications via SSE, not polling
-
-`/api/notifications/stream` is opened once per tab while authenticated. Every Kafka or sync notification arrives within milliseconds. Each event fires a top-right toast with a role-aware deep link, invalidates the relevant TanStack Query keys, and bumps the bell badge unread count optimistically. Native `EventSource` doesn't support headers, so the stream uses `fetch` + `ReadableStream` + manual SSE block parsing (mirrors the Dream AI stream pattern). Exponential backoff reconnect; stops permanently on 401 so the refresh flow can recover.
-
-### Two-step presigned R2 uploads for photos
-
-Photos don't pass through haven or vista. Vista calls `POST /listings/{id}/photos/upload-url` to mint a presigned R2 URL, the browser PUTs the file directly to R2, then vista confirms via `POST /listings/{id}/photos/confirm`. Errors are typed (`PresignedR2UploadError`) so CORS misconfiguration on R2 surfaces as a distinct, actionable message instead of a confusing fallback 413.
-
-### Role-aware deep links from one resolver
-
-`getNotificationHref(notification, role)` routes notifications to the right tree based on the recipient's role. Owners clicking an inspection notification land on `/owner/inspections`, applicants on `/dashboard/inspections`, agents on `/agent/inspections`. Without role awareness, the applicant-only `/dashboard/*` guard would bounce owners to the dashboard home, looking like the link did nothing.
-
-### Realtime UI without the orchestration
-
-When Kafka fires `INSPECTION_REQUESTED` or `OFFER_SUBMITTED`, the SSE stream pushes the notification, which invalidates not just the notifications query but the inspections / offers queries on whatever role-specific page might be open. Two tabs side-by-side (applicant in one, owner in the other) show the full Kafka pipeline in seconds without anyone refreshing.
-
-### Auth/session safety over feel-good UX
-
-- 401 handling is centralized (refresh-and-retry, then bounce to login); no per-component "session expired" toasts.
-- Mark-read mutations explicitly invalidate the unread-count cache so the bell never lies.
-- Form-draft state is preserved across photo / document upload failures so users don't lose their work to a network blip on step 3 of 4.
+**6. Two-step presigned R2 uploads for photos.** Vista mints a presigned PUT URL via haven, the browser uploads the file directly to R2, then confirms. Photos never round-trip through haven. Errors are typed (`PresignedR2UploadError`) so an R2 CORS misconfiguration surfaces as a real diagnostic instead of an unrelated 413 from a stale fallback endpoint.
 
 ## License
 
