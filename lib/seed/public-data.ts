@@ -283,6 +283,15 @@ export function invalidatePublicListingCache(listingId: string) {
   listingCache.delete(listingId);
 }
 
+/**
+ * Bust the cached public profile for a user after a profile / avatar update.
+ * Without this, the agent directory + listing detail keep rendering the
+ * stale name / bio / avatar until the Node process recycles.
+ */
+export function invalidatePublicProfileCache(userId: string | number) {
+  profileCache.delete(String(userId));
+}
+
 function makeUrl(path: string, query?: Record<string, string | number | boolean | undefined | null>) {
   const url = new URL(path.startsWith("http") ? path : `${DEFAULT_PUBLIC_API_BASE_URL}${path}`);
   if (query) {
@@ -435,10 +444,17 @@ function toPublicPerson(profile: PublicUserProfileApi): PublicPerson {
 async function getProfile(id: string | number): Promise<PublicUserProfileApi | null> {
   const key = String(id);
   if (!profileCache.has(key)) {
-    profileCache.set(
-      key,
-      publicFetch<PublicUserProfileApi>(`/users/${key}/profile`).catch(() => null),
-    );
+    // Same null-poisoning guard as listingCache — evict failed fetches so the
+    // next request actually retries instead of replaying the cached null.
+    const pending = publicFetch<PublicUserProfileApi>(`/users/${key}/profile`).catch(() => null);
+    profileCache.set(key, pending);
+    pending
+      .then((value) => {
+        if (value === null) profileCache.delete(key);
+      })
+      .catch(() => {
+        profileCache.delete(key);
+      });
   }
   return profileCache.get(key)!;
 }
@@ -690,19 +706,32 @@ export function normalizeListingRouteId(rawId: string): string {
 }
 
 export async function getListingById(id: string): Promise<PublicListingDetail | undefined> {
+  // Dynamic slices that change frequently between renders (someone else can
+  // book a slot, an owner can add a photo) live OUTSIDE the module cache so
+  // every call sees fresh data. The cache only keeps the static-ish slice
+  // (base listing, profiles, comments, reviews). This is what fixed the
+  // "I booked a slot but it still shows as available" bug — slots used to
+  // be embedded in the cached snapshot and never refreshed.
+  const [slots, photos] = await Promise.all([getSlots(id), getPhotos(id)]);
+
   if (!listingCache.has(id)) {
-    listingCache.set(
-      id,
-      (async () => {
-        const listing = await fetchHavenListing(id, { skipAuth: typeof window === "undefined" }).catch(() => null);
-        if (!listing) return null;
+    // Build the promise once, but if it resolves to null (haven 502 / network
+    // blip / listing genuinely missing on that attempt) evict it from the
+    // cache so the NEXT request retries the fetch instead of replaying the
+    // poisoned null forever. Real listings that resolve to non-null stay
+    // cached for the lifetime of the process (this is by design — see callers
+    // like getSimilarListings + getAdjacentListings that round-trip the same
+    // IDs multiple times per page render).
+    const pending = (async () => {
+      const listing = await fetchHavenListing(id, { skipAuth: typeof window === "undefined" }).catch(() => null);
+      if (!listing) return null;
 
         const profiles = await getProfiles([
           listing.ownerId,
           ...(listing.assignedAgentId ? [listing.assignedAgentId] : []),
         ]);
 
-        const [base, commentsPage, reviewsPage, slots, photos] = await Promise.all([
+        const [base, commentsPage, reviewsPage] = await Promise.all([
           enrichListing(listing, profiles),
           publicFetch<PagedModel<CommentResponse>>(`/listings/${id}/comments`, { page: 0, size: 20 }).catch(
             () => ({ content: [], page: { size: 20, number: 0, totalElements: 0, totalPages: 0 } }),
@@ -710,8 +739,6 @@ export async function getListingById(id: string): Promise<PublicListingDetail | 
           publicFetch<PagedModel<ReviewResponse>>(`/listings/${id}/reviews`, { page: 0, size: 20 }).catch(
             () => ({ content: [], page: { size: 20, number: 0, totalElements: 0, totalPages: 0 } }),
           ),
-          getSlots(id),
-          getPhotos(id),
         ]);
 
         if (!base) return null;
@@ -773,19 +800,38 @@ export async function getListingById(id: string): Promise<PublicListingDetail | 
           };
         });
 
+        // photos + slots are intentionally NOT included here — they're
+        // fetched fresh on every getListingById call (see top of function).
+        // We stamp empty arrays so the cached type still matches
+        // PublicListingDetail; callers always overlay the live values.
         return {
           ...base,
-          photos,
+          photos: [],
           comments,
-          slots,
+          slots: [],
           reviews,
         } satisfies PublicListingDetail;
-      })(),
-    );
+      })();
+    listingCache.set(id, pending);
+    // Evict the cache entry if the fetch resolved to null (transient backend
+    // failure) so a follow-up render gets a real retry instead of the
+    // poisoned null. We also evict on throw — defensive; the inner code
+    // catches its own fetch errors, but this guards against future paths
+    // that bypass the catch.
+    pending
+      .then((value) => {
+        if (value === null) listingCache.delete(id);
+      })
+      .catch(() => {
+        listingCache.delete(id);
+      });
   }
 
   const listing = await listingCache.get(id)!;
-  return listing ?? undefined;
+  if (!listing) return undefined;
+  // Overlay the fresh dynamic slices — slots especially, since haven filters
+  // booked ones out of `/listings/{id}/slots` on every call.
+  return { ...listing, photos, slots };
 }
 
 /**
@@ -795,10 +841,29 @@ export async function getListingById(id: string): Promise<PublicListingDetail | 
  * same shortlist the user landed from. Returns `null` for either end when
  * the current listing is at a boundary or absent from the inventory.
  */
+/**
+ * Both `getAdjacentListings` and `getSimilarListings` decorate the listing
+ * detail page — prev/next nav at the top, "similar listings" rail mid-page.
+ * If haven hiccups on `/listings`, we want the page to still render with
+ * those sections quietly empty, NOT to throw out of the Server Component
+ * and bounce the user to the global error boundary.
+ */
+async function listManyListingsResilient(limit: number): Promise<PublicListing[]> {
+  try {
+    return await listManyListings(limit);
+  } catch (error) {
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("[public-data] listManyListings failed; rendering empty:", error);
+    }
+    return [];
+  }
+}
+
 export async function getAdjacentListings(
   listingId: string,
 ): Promise<{ previous: PublicListing | null; next: PublicListing | null }> {
-  const listings = await listManyListings(60);
+  const listings = await listManyListingsResilient(60);
+  if (listings.length === 0) return { previous: null, next: null };
   const ordered = [...listings].sort(
     (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime(),
   );
@@ -813,7 +878,7 @@ export async function getAdjacentListings(
 export async function getSimilarListings(listingId: string, limit = 3) {
   const current = await getListingById(listingId);
   if (!current) return [];
-  const listings = await listManyListings(60);
+  const listings = await listManyListingsResilient(60);
   return listings
     .filter((listing) => listing.id !== listingId)
     .sort((a, b) => {

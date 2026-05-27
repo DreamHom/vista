@@ -96,7 +96,20 @@ export function ListingSlotPicker({ listingId, slots, ownerId, agentId }: Listin
     },
     onSuccess: () => {
       const label = selectedSlot ? formatSlotBookingLabel(selectedSlot) : null;
+      const claimedSlotId = selectedSlot?.id ?? null;
       void queryClient.invalidateQueries({ queryKey: ["applicant-inspections"] });
+      // Optimistically drop the slot we just claimed from this listing's
+      // picker cache so it disappears immediately, even before haven's next
+      // `/listings/{id}/slots` response confirms. Then queue a real refetch
+      // to reconcile with the server (catches the case where another
+      // applicant claimed a different slot between our renders).
+      if (claimedSlotId != null) {
+        queryClient.setQueryData<typeof liveSlots>(
+          ["listing-open-slots", listingId],
+          (prev) => (prev ?? liveSlots).filter((slot) => slot.id !== claimedSlotId),
+        );
+      }
+      void queryClient.invalidateQueries({ queryKey: ["listing-open-slots", listingId] });
       setBookedSlotLabel(label);
       setSelectedSlotId(null);
       setNotes("");
